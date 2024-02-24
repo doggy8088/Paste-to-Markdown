@@ -169,16 +169,28 @@
       }
     });
 
-    pastebin.addEventListener('paste', function () {
-      setTimeout(function () {
-        var html = pastebin.innerHTML;
-        var markdown = convert(html);
+    pastebin.addEventListener('paste', function (event) {
+      var html = event.clipboardData.getData('text/html');
+
+      var parser = new DOMParser()
+      var doc = parser.parseFromString(html, 'text/html')
+
+      var body = doc.querySelector('body').innerHTML;
+
+      // 清除所有註解
+      // body = body.replace(/<!--[\s\S]*?-->/g, '');
+
+      // 清除所有 inline style
+      // html = html.replace(/ style="[^"]*"/g, '');
+
+      var markdown = convert(body);
         // output.value = markdown;
         insert(output, markdown);
         wrapper.classList.remove('hidden');
         output.focus();
         output.select();
-      }, 200);
+
+      event.preventDefault();
     });
   });
 })();
