@@ -75,7 +75,9 @@
       replacement: function (content, node) {
         var url = node.getAttribute('href');
         var titlePart = node.title ? ' "' + node.title + '"' : '';
-        if (content === url) {
+        if (content === '') {
+          return '';
+        } else if (content === url) {
           return '<' + url + '>';
         } else if (url === ('mailto:' + content)) {
           return '<' + content + '>';
