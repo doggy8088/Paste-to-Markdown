@@ -496,7 +496,7 @@ module.exports = [
   {
     filter: 'img',
     replacement: function (content, node) {
-      var alt = node.alt || ''
+      var alt = node.alt || 'image'
       var src = node.getAttribute('src') || ''
       var title = node.title || ''
       var titlePart = title ? ' "' + title + '"' : ''
