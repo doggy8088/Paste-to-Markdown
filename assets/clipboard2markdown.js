@@ -124,7 +124,7 @@
       .replace(/\n\n\n*/g, '\n\n')
       .replace(/[ ]+$/gm, '')
       .replace(/^\s+|[\s\\]+$/g, '')
-      .replace(/\u00a0/g, ' ');
+      .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ' ');
   };
 
   var convert = function (str) {
