@@ -124,7 +124,9 @@
       .replace(/\n\n\n*/g, '\n\n')
       .replace(/[ ]+$/gm, '')
       .replace(/^\s+|[\s\\]+$/g, '')
-      .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ' ');
+      .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ' ')
+      // ZERO WIDTH SPACE: https://jkorpela.fi/chars/spaces.html
+      .replace(/[\u200B\uFEFF]/g, '');
   };
 
   var convert = function (str) {
