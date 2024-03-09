@@ -97,9 +97,6 @@
         if (/ol/i.test(parent.nodeName)) {
           var index = Array.prototype.indexOf.call(parent.children, node) + 1;
           prefix = index + '. ';
-          while (prefix.length < 4) {
-            prefix += ' ';
-          }
         }
 
         return prefix + content;
