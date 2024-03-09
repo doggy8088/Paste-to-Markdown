@@ -179,14 +179,8 @@
 
       var body = doc.querySelector('body').innerHTML;
 
-      // 清除所有註解
-      // body = body.replace(/<!--[\s\S]*?-->/g, '');
-
-      // 清除所有 inline style
-      // html = html.replace(/ style="[^"]*"/g, '');
-
       var markdown = convert(body);
-      // output.value = markdown;
+
       insert(output, markdown);
       wrapper.classList.remove('hidden');
       output.focus();

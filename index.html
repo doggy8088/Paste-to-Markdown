@@ -1,80 +1,90 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)https://euangoddard.github.io/clipboard2markdown/ -->
-<html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-        <title>Paste to Markdown</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
+<html>
 
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <title>Paste to Markdown</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
 
-        <link href="https://euangoddard.github.io/clipboard2markdown/favicon.ico" rel="icon" type="image/x-icon">
-        <link rel="stylesheet" href="./assets/bootstrap.css">
-        <script src="./assets/to-markdown.js"></script>
-        <script src="./assets/clipboard2markdown.js"></script>
-        <style>
-            h2 {
-                font-size: 22px;
-                font-style: italic;
-            }
+    <link href="https://euangoddard.github.io/clipboard2markdown/favicon.ico" rel="icon" type="image/x-icon">
+    <link rel="stylesheet" href="./assets/bootstrap.css">
+    <script src="./assets/to-markdown.js"></script>
+    <script src="./assets/clipboard2markdown.js"></script>
+    <style>
+        h2 {
+            font-size: 22px;
+            font-style: italic;
+        }
+
+        body {
+            background-attachment: fixed;
+            background-image: url('assets/background.svg');
+            background-position: right 10% bottom 20%;
+            background-repeat: no-repeat;
+            background-size: 20em;
+            margin-bottom: 10vh;
+            margin-top: 10vh;
+        }
+
+        #pastebin {
+            opacity: 0.01;
+            width: 100%;
+            height: 1px;
+            overflow: hidden;
+        }
+
+        #output {
+            border: none;
+            background: transparent;
+            font-family: Consolas, "Liberation Mono", Courier, monospace;
+            font-size: 13px;
+            line-height: 19px;
+            min-height: 78vh;
+            overflow: auto;
+            padding: 6px 10px;
+            resize: none;
+            width: 100%;
+        }
+
+        @media (prefers-color-scheme: dark) {
             body {
-                background-attachment: fixed;
-                background-image: url('assets/background.svg');
-                background-position: right 10% bottom 20%;
-                background-repeat: no-repeat;
-                background-size: 20em;
-                margin-bottom: 10vh;
-                margin-top: 10vh;
+                background-image: url('assets/background-dark.svg');
+                background-color: #222;
+                color: white;
             }
-            #pastebin {
-                opacity: 0.01;
-                width: 100%;
-                height: 1px;
-                overflow: hidden;
-            }
-            #output {
-                border: none;
-                background: transparent;
-                font-family: Consolas, "Liberation Mono", Courier, monospace;
-                font-size: 13px;
-                line-height: 19px;
-                min-height: 78vh;
-                overflow: auto;
-                padding: 6px 10px;
-                resize: none;
-                width: 100%;
-            }
-            @media (prefers-color-scheme: dark) {
-                body {
-                    background-image: url('assets/background-dark.svg');
-                    background-color: #222;
-                    color:white;
-                }
-                code {
-                    color: #ff7a9c;
-                    background-color: #0e0609;
-                }
-                a {
-                    color: #8fcbff;
-                }
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <section id="info">
-                <h1>Paste to Markdown</h1>
-                <h2>使用方式</h2>
-                <ol>
-                    <li>在任意網頁透過 <code>Ctrl+C</code> 或 <code>⌘+C</code> 複製內容下來</li>
-                    <li>在這個網頁按下 <code>Ctrl+V</code> 或 <code>⌘+V</code> 貼上剪貼簿內容</li>
-                    <li>接著你就會得到一份完整的 Markdown 文件，直接按下 <code>Ctrl+C</code> 或 <code>⌘+C</code> 就能複製回去用！</li>
-                </ol>
-                <p>本轉換器基於 <a href="https://github.com/domchristie/to-markdown">to-markdown</a> 進行轉換，所有資料都不會傳送到後端，請安心使用。</p>
-                <p>網頁樣式取自 <a href="https://euangoddard.github.io/clipboard2markdown/">Paste to Markdown</a> 網頁，並修正些許錯誤。</p>
-                <p>本網頁原始碼位於 <a href="https://github.com/doggy8088/Paste-to-Markdown">https://github.com/doggy8088/Paste-to-Markdown</a>，歡迎到 <a href="https://github.com/doggy8088/Paste-to-Markdown/issues">Issues</a> 討論或提供建議！</p>
-            </section>
-            <div contenteditable="true" id="pastebin"></div>
-            <section class="hidden" id="wrapper">
-                <textarea id="output"></textarea>
-            </section>
-        </div>
 
-</body></html>
+            code {
+                color: #ff7a9c;
+                background-color: #0e0609;
+            }
+
+            a {
+                color: #8fcbff;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <section id="info">
+            <h1>Paste to Markdown</h1>
+            <h2>使用方式</h2>
+            <ol>
+                <li>在任意網頁透過 <code>Ctrl+C</code> 或 <code>⌘+C</code> 複製內容下來</li>
+                <li>在這個網頁按下 <code>Ctrl+V</code> 或 <code>⌘+V</code> 貼上剪貼簿內容</li>
+                <li>接著你就會得到一份完整的 Markdown 文件，直接按下 <code>Ctrl+C</code> 或 <code>⌘+C</code> 就能複製回去用！</li>
+            </ol>
+            <p>本轉換器基於 <a href="https://github.com/domchristie/to-markdown">to-markdown</a> 進行轉換，所有資料都不會傳送到後端，請安心使用。</p>
+            <p>網頁樣式取自 <a href="https://euangoddard.github.io/clipboard2markdown/">Paste to Markdown</a> 網頁，並修正些許錯誤。</p>
+            <p>本網頁原始碼位於 <a href="https://github.com/doggy8088/Paste-to-Markdown">https://github.com/doggy8088/Paste-to-Markdown</a>，歡迎到 <a href="https://github.com/doggy8088/Paste-to-Markdown/issues">Issues</a> 討論或提供建議！</p>
+        </section>
+        <div contenteditable="true" id="pastebin"></div>
+        <section class="hidden" id="wrapper">
+            <textarea id="output"></textarea>
+        </section>
+    </div>
+
+</body>
+
+</html>
