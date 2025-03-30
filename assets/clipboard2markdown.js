@@ -1,6 +1,13 @@
 (function () {
   'use strict';
 
+  const turndownService = new TurndownService({
+    bulletListMarker: "-",
+    linkReferenceStyle: 'shortcut'
+  });
+
+  turndownService.remove('style');
+
   // http://pandoc.org/README.html#pandocs-markdown
   var pandoc = [
     {
@@ -172,7 +179,54 @@
     });
 
     pastebin.addEventListener('paste', function (event) {
-      var html = event.clipboardData.getData('text/html');
+
+      // list all clipboardData types
+      console.log('clipboardData types', event.clipboardData.types);
+
+      // Check if 'vscode-editor-data' is available in the clipboard
+      if (event.clipboardData.types.includes('vscode-editor-data') && event.clipboardData.types.includes('text/plain')) {
+        var text = event.clipboardData.getData('text/plain');
+        console.log('Both vscode-editor-data and text/plain:', text);
+        // 找到每一行中最少的前綴空白字元，然後將每一行的這幾個空白字元刪除
+        var lines = text.split('\n');
+        var minSpaces = lines.reduce((min, line) => {
+          if (line.trim() === '') return min;
+          const spaces = line.match(/^\s*/)[0].length;
+          return (spaces < min) ? spaces : min;
+        }, Infinity);
+        text = lines.map(line => line.slice(minSpaces)).join('\n');
+
+        console.log('Plain Text: ', text);
+
+        insert(output, text);
+        wrapper.classList.remove('hidden');
+        output.focus();
+        output.select();
+        event.preventDefault();
+        return;
+      }
+
+      // Word HTML '<w:WordDocument>'
+      if (event.clipboardData.types.includes('text/rtf') && event.clipboardData.types.includes('text/html')) {
+        var html = event.clipboardData.getData('text/html');
+        console.log('Both text/rtf and text/html:', html);
+        var markdown = turndownService.turndown(html).trim();
+        markdown = markdown.replace(/ü/g, '  - ');
+        markdown = markdown.replace(/\.[^\S\r\n]+/g, '. ');
+        markdown = markdown.replace(/-[^\S\r\n]+/g, '- ');
+        markdown = markdown.replace(/[^\S\r\n]/g, ' ');
+
+        console.log('Markdown: ', markdown);
+
+        insert(output, markdown);
+        wrapper.classList.remove('hidden');
+        output.focus();
+        output.select();
+        event.preventDefault();
+        return;
+      }
+
+      // Normal HTML
 
       var parser = new DOMParser()
       var doc = parser.parseFromString(html, 'text/html')
@@ -189,4 +243,13 @@
       event.preventDefault();
     });
   });
+
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') {
+      document.getElementById('output').value = '';
+      wrapper.classList.add('hidden');
+      info.classList.remove('hidden');
+    }
+  });
+
 })();
