@@ -227,6 +227,12 @@
       }
 
       // Normal HTML
+      var html = event.clipboardData.getData('text/html');
+
+      // delete p tag inside li tag, including any attributes defined in p tag and li tag
+      html = html.replace(/<li([^>]*)>\s*<p([^>]*)>(.*?)<\/p>\s*<\/li>/g, '<li>$3</li>');
+
+      console.log('HTML:', html);
 
       var parser = new DOMParser()
       var doc = parser.parseFromString(html, 'text/html')
