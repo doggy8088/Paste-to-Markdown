@@ -2,8 +2,17 @@
   'use strict';
 
   const turndownService = new TurndownService({
-    bulletListMarker: "-",
-    linkReferenceStyle: 'shortcut'
+    headingStyle: 'atx',
+    hr: '- - -',
+    bulletListMarker: '-',
+    codeBlockStyle: 'fenced',
+    fence: '```',
+    emDelimiter: '_',
+    strongDelimiter: '**',
+    linkStyle: 'inlined',
+    linkReferenceStyle: 'full',
+    br: '  ',
+    preformattedCode: false,
   });
 
   turndownService.remove('style');
