@@ -221,6 +221,25 @@ toMarkdown = function (input, options) {
   return output.replace(/^[\t\r\n]+|[\t\r\n\s]+$/g, '')
     .replace(/\n\s+\n/g, '\n\n')
     .replace(/\n{3,}/g, '\n\n')
+    .replace(/\[\s*([^\[\]\n]*?)\s*\n\s*((?:(?:-|\*|\d+\.)\s+[^\n]*\n?)+)\s*\]\((https?:\/\/[^\)]+)\)/g, function(match, preList, listContent, url) {
+      var result = preList.trim() ? '[' + preList.trim() + '](' + url + ')\n\n' : ''
+      var lines = listContent.split('\n')
+
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i]
+        var listMatch = line.match(/^(\s*)([-*]|\d+\.)\s+(.*)$/)
+        if (listMatch) {
+          var indent = listMatch[1]
+          var marker = listMatch[2]
+          var itemText = listMatch[3].trim()
+          if (itemText) {
+            result += indent + marker + ' [' + itemText + '](' + url + ')\n'
+          }
+        }
+      }
+
+      return result.replace(/\n+$/, '')
+    })
 }
 
 toMarkdown.isBlock = isBlock
@@ -506,7 +525,8 @@ module.exports = [
   {
     filter: ['strong', 'b'],
     replacement: function (content) {
-      return '**' + trimInlineContent(content) + '**'
+      var trimmed = trimInlineContent(content)
+      return trimmed ? ' **' + trimmed + '** ' : ''
     }
   },
 
@@ -529,7 +549,6 @@ module.exports = [
     },
     replacement: function (content, node) {
       content = normalizeLinkContent(content)
-      console.warn('CONTENT: ', content)
       var titlePart = node.title ? ' "' + node.title + '"' : ''
       return '[' + content + '](' + node.getAttribute('href') + titlePart + ')'
     }
