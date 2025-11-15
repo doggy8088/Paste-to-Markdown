@@ -422,6 +422,32 @@ module.exports = canParseHtmlNatively() ? _window.DOMParser : createHtmlParser()
 },{"jsdom":6}],4:[function(require,module,exports){
 'use strict'
 
+function trimInlineContent(content) {
+  return typeof content === 'string' ? content.trim() : content
+}
+
+function trimListContent(content) {
+  if (typeof content !== 'string') return content
+
+  var hasLeadingLineBreak = /^\s*\n/.test(content)
+  var hasTrailingLineBreak = /\n\s*$/.test(content)
+  var trimmed = content.trim()
+
+  if (!trimmed) {
+    return ''
+  }
+
+  if (hasLeadingLineBreak && trimmed.charAt(0) !== '\n') {
+    trimmed = '\n' + trimmed
+  }
+
+  if (hasTrailingLineBreak && trimmed.charAt(trimmed.length - 1) !== '\n') {
+    trimmed += '\n'
+  }
+
+  return trimmed
+}
+
 module.exports = [
   {
     filter: 'p',
@@ -466,7 +492,7 @@ module.exports = [
   {
     filter: ['strong', 'b'],
     replacement: function (content) {
-      return '**' + content + '**'
+      return '**' + trimInlineContent(content) + '**'
     }
   },
 
@@ -488,6 +514,7 @@ module.exports = [
       return node.nodeName === 'A' && node.getAttribute('href')
     },
     replacement: function (content, node) {
+      content = trimInlineContent(content)
       var titlePart = node.title ? ' "' + node.title + '"' : ''
       return '[' + content + '](' + node.getAttribute('href') + titlePart + ')'
     }
@@ -527,7 +554,7 @@ module.exports = [
   {
     filter: 'li',
     replacement: function (content, node) {
-      content = content.replace(/^\s+/, '').replace(/\n/gm, '\n    ')
+      content = trimListContent(content).replace(/\n/gm, '\n    ')
       var prefix = '*   '
       var parent = node.parentNode
       var index = Array.prototype.indexOf.call(parent.children, node) + 1
