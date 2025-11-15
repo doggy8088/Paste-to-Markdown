@@ -426,6 +426,20 @@ function trimInlineContent(content) {
   return typeof content === 'string' ? content.trim() : content
 }
 
+function normalizeLinkContent(content) {
+  if (typeof content !== 'string') return content
+
+  var trimmed = content.trim()
+  if (!trimmed) return ''
+
+  return trimmed
+    .split(/\r?\n+/)
+    .map(function (part) {
+      return part.trim()
+    })
+    .join('<br>')
+}
+
 function trimListContent(content) {
   if (typeof content !== 'string') return content
 
@@ -514,7 +528,8 @@ module.exports = [
       return node.nodeName === 'A' && node.getAttribute('href')
     },
     replacement: function (content, node) {
-      content = trimInlineContent(content)
+      content = normalizeLinkContent(content)
+      console.warn('CONTENT: ', content)
       var titlePart = node.title ? ' "' + node.title + '"' : ''
       return '[' + content + '](' + node.getAttribute('href') + titlePart + ')'
     }
