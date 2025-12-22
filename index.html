@@ -44,6 +44,50 @@
             width: 100%;
         }
 
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #ddd;
+            margin-bottom: 10px;
+        }
+
+        .tab-button {
+            background: transparent;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-size: 16px;
+            color: #666;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.3s;
+        }
+
+        .tab-button:hover {
+            color: #333;
+        }
+
+        .tab-button.active {
+            color: #007bff;
+            border-bottom: 2px solid #007bff;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        #preview {
+            border: 1px solid #ddd;
+            padding: 20px;
+            min-height: 78vh;
+            overflow: auto;
+            background: white;
+            border-radius: 4px;
+        }
+
         @media (prefers-color-scheme: dark) {
             body {
                 background-image: url('assets/background-dark.svg');
@@ -58,6 +102,71 @@
 
             a {
                 color: #8fcbff;
+            }
+
+            .tabs {
+                border-bottom: 2px solid #444;
+            }
+
+            .tab-button {
+                color: #aaa;
+            }
+
+            .tab-button:hover {
+                color: #ddd;
+            }
+
+            .tab-button.active {
+                color: #007bff;
+            }
+
+            #preview {
+                background: #2a2a2a;
+                border-color: #444;
+                color: #e0e0e0;
+            }
+
+            /* Dark mode table styles */
+            #preview table {
+                color: #e0e0e0;
+                border-color: #555;
+            }
+
+            #preview table thead th {
+                background-color: #1a1a1a;
+                border-color: #555;
+                color: #fff;
+            }
+
+            #preview table tbody tr {
+                background-color: #2a2a2a;
+            }
+
+            #preview table tbody tr:nth-child(odd) {
+                background-color: #333;
+            }
+
+            #preview table td,
+            #preview table th {
+                border-color: #555;
+            }
+
+            /* Dark mode blockquote styles */
+            #preview blockquote {
+                border-left-color: #555;
+                color: #ccc;
+            }
+
+            /* Dark mode code styles */
+            #preview .badge {
+                background-color: #444;
+                color: #ff7a9c;
+            }
+
+            #preview pre {
+                background-color: #1a1a1a;
+                border: 1px solid #444;
+                color: #e0e0e0;
             }
         }
     </style>
@@ -80,12 +189,22 @@
         </section>
         <div contenteditable="true" id="pastebin"></div>
         <section class="hidden" id="wrapper">
-            <textarea id="output"></textarea>
+            <div class="tabs">
+                <button class="tab-button active" data-tab="edit">編輯</button>
+                <button class="tab-button" data-tab="preview">預覽</button>
+            </div>
+            <div class="tab-content active" id="edit-tab">
+                <textarea id="output"></textarea>
+            </div>
+            <div class="tab-content" id="preview-tab">
+                <div id="preview"></div>
+            </div>
         </section>
     </div>
 
 
 <script src="vendor/turndown/dist/turndown.js"></script>
+<script src="vendor/marked/marked.min.js"></script>
 
 <script src="./assets/to-markdown.js"></script>
 <script src="./assets/clipboard2markdown.js"></script>

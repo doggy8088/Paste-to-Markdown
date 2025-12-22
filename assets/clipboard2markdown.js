@@ -175,6 +175,138 @@
     var pastebin = document.querySelector('#pastebin');
     var output = document.querySelector('#output');
     var wrapper = document.querySelector('#wrapper');
+    var preview = document.querySelector('#preview');
+
+    // Tab switching functionality
+    var tabButtons = document.querySelectorAll('.tab-button');
+    var tabContents = document.querySelectorAll('.tab-content');
+
+    tabButtons.forEach(function(button) {
+      button.addEventListener('click', function() {
+        var targetTab = this.getAttribute('data-tab');
+        
+        // Remove active class from all buttons and contents
+        tabButtons.forEach(function(btn) {
+          btn.classList.remove('active');
+        });
+        tabContents.forEach(function(content) {
+          content.classList.remove('active');
+        });
+        
+        // Add active class to clicked button and corresponding content
+        this.classList.add('active');
+        document.getElementById(targetTab + '-tab').classList.add('active');
+        
+        // Update preview when switching to preview tab
+        if (targetTab === 'preview') {
+          updatePreview();
+        }
+      });
+    });
+
+    // Function to update preview with rendered markdown
+    function updatePreview() {
+      var markdown = output.value;
+      if (markdown) {
+        // Configure marked for security
+        marked.setOptions({
+          breaks: true,
+          gfm: true,
+          headerIds: false,
+          mangle: false,
+          sanitize: false // We sanitize the output manually
+        });
+        
+        // Use marked to convert markdown to HTML
+        var html = marked.parse(markdown);
+        
+        // Sanitize the output to prevent XSS
+        html = sanitizeHtml(html);
+        
+        preview.innerHTML = html;
+      } else {
+        preview.innerHTML = '<p style="color: #999;">沒有內容可預覽</p>';
+      }
+    }
+    
+    // Sanitize HTML and add Bootstrap classes
+    function sanitizeHtml(html) {
+      // Use DOMParser for safer HTML parsing (doesn't execute scripts)
+      var parser = new DOMParser();
+      var doc = parser.parseFromString(html, 'text/html');
+      
+      // Remove any script tags (convert to array first to avoid mutation issues)
+      var scripts = Array.from(doc.querySelectorAll('script'));
+      for (var i = 0; i < scripts.length; i++) {
+        scripts[i].parentNode.removeChild(scripts[i]);
+      }
+      
+      // Add Bootstrap classes to tables
+      var tables = Array.from(doc.querySelectorAll('table'));
+      for (var i = 0; i < tables.length; i++) {
+        tables[i].className = 'table table-striped table-bordered';
+      }
+      
+      // Add Bootstrap classes to images
+      var images = Array.from(doc.querySelectorAll('img'));
+      for (var i = 0; i < images.length; i++) {
+        var src = images[i].getAttribute('src');
+        if (!isSafeUrl(src)) {
+          images[i].parentNode.removeChild(images[i]);
+        } else {
+          images[i].className = 'img-responsive';
+        }
+      }
+      
+      // Add Bootstrap classes to blockquotes
+      var blockquotes = Array.from(doc.querySelectorAll('blockquote'));
+      for (var i = 0; i < blockquotes.length; i++) {
+        blockquotes[i].className = 'blockquote';
+      }
+      
+      // Add Bootstrap classes to code blocks
+      var codeBlocks = Array.from(doc.querySelectorAll('pre'));
+      for (var i = 0; i < codeBlocks.length; i++) {
+        codeBlocks[i].className = 'pre-scrollable';
+      }
+      
+      // Style links with Bootstrap
+      var links = Array.from(doc.querySelectorAll('a'));
+      for (var i = 0; i < links.length; i++) {
+        var href = links[i].getAttribute('href');
+        if (!isSafeUrl(href)) {
+          links[i].removeAttribute('href');
+        } else {
+          links[i].setAttribute('target', '_blank');
+          links[i].setAttribute('rel', 'noopener noreferrer');
+        }
+      }
+      
+      // Add Bootstrap badge class to inline code
+      var inlineCodes = Array.from(doc.querySelectorAll('code'));
+      for (var i = 0; i < inlineCodes.length; i++) {
+        // Only add badge class to inline code, not code inside pre blocks
+        if (inlineCodes[i].parentNode.nodeName !== 'PRE') {
+          inlineCodes[i].className = 'badge';
+        }
+      }
+      
+      return doc.body.innerHTML;
+    }
+    
+    // Validate URL to prevent XSS attacks
+    function isSafeUrl(url) {
+      if (!url) return false;
+      var trimmedUrl = url.trim().toLowerCase();
+      // Only allow http, https, and relative URLs
+      // Block javascript:, data:, vbscript:, file:, etc.
+      return trimmedUrl.startsWith('http://') || 
+             trimmedUrl.startsWith('https://') || 
+             trimmedUrl.startsWith('/') ||
+             trimmedUrl.startsWith('./') ||
+             trimmedUrl.startsWith('../') ||
+             (!trimmedUrl.includes(':'));
+    }
 
     document.addEventListener('keydown', function (event) {
       if (event.ctrlKey || event.metaKey) {
