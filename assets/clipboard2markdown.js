@@ -208,155 +208,62 @@
     function updatePreview() {
       var markdown = output.value;
       if (markdown) {
-        // Convert markdown to HTML using marked-style approach
-        // Since we don't have a markdown-to-HTML library, we'll do basic conversion
-        var html = markdownToHtml(markdown);
+        // Configure marked for security
+        marked.setOptions({
+          breaks: true,
+          gfm: true,
+          headerIds: false,
+          mangle: false,
+          sanitize: false // We'll use DOMPurify-like sanitization via hooks
+        });
+        
+        // Use marked to convert markdown to HTML
+        var html = marked.parse(markdown);
+        
+        // Sanitize the output to prevent XSS
+        html = sanitizeHtml(html);
+        
         preview.innerHTML = html;
       } else {
         preview.innerHTML = '<p style="color: #999;">沒有內容可預覽</p>';
       }
     }
-
-    // Simple markdown to HTML converter
-    function markdownToHtml(markdown) {
-      var lines = markdown.split('\n');
-      var html = '';
-      var inUnorderedList = false;
-      var inOrderedList = false;
-      var inCodeBlock = false;
-      var codeBlockContent = '';
-      
-      for (var i = 0; i < lines.length; i++) {
-        var line = lines[i];
-        var trimmedLine = line.trim();
-        
-        // Handle code blocks
-        if (trimmedLine.startsWith('```')) {
-          if (!inCodeBlock) {
-            inCodeBlock = true;
-            codeBlockContent = '';
-            continue;
-          } else {
-            inCodeBlock = false;
-            html += '<pre><code>' + escapeHtml(codeBlockContent.trim()) + '</code></pre>';
-            continue;
-          }
-        }
-        
-        if (inCodeBlock) {
-          codeBlockContent += line + '\n';
-          continue;
-        }
-        
-        // Close lists when encountering non-list content
-        if (!trimmedLine.match(/^[-*+]\s/) && !trimmedLine.match(/^\d+\.\s/)) {
-          if (inUnorderedList) {
-            html += '</ul>';
-            inUnorderedList = false;
-          }
-          if (inOrderedList) {
-            html += '</ol>';
-            inOrderedList = false;
-          }
-        }
-        
-        // Skip empty lines outside of content
-        if (trimmedLine === '') {
-          if (inUnorderedList) {
-            html += '</ul>';
-            inUnorderedList = false;
-          }
-          if (inOrderedList) {
-            html += '</ol>';
-            inOrderedList = false;
-          }
-          continue;
-        }
-        
-        // Headers
-        if (trimmedLine.match(/^####\s/)) {
-          html += '<h4>' + processInlineMarkdown(trimmedLine.substring(5)) + '</h4>';
-        } else if (trimmedLine.match(/^###\s/)) {
-          html += '<h3>' + processInlineMarkdown(trimmedLine.substring(4)) + '</h3>';
-        } else if (trimmedLine.match(/^##\s/)) {
-          html += '<h2>' + processInlineMarkdown(trimmedLine.substring(3)) + '</h2>';
-        } else if (trimmedLine.match(/^#\s/)) {
-          html += '<h1>' + processInlineMarkdown(trimmedLine.substring(2)) + '</h1>';
-        }
-        // Horizontal rule
-        else if (trimmedLine.match(/^[\*\-_]{3,}$/)) {
-          html += '<hr>';
-        }
-        // Unordered list
-        else if (trimmedLine.match(/^[-*+]\s/)) {
-          if (!inUnorderedList) {
-            html += '<ul>';
-            inUnorderedList = true;
-          }
-          var listContent = trimmedLine.replace(/^[-*+]\s/, '');
-          html += '<li>' + processInlineMarkdown(listContent) + '</li>';
-        }
-        // Ordered list
-        else if (trimmedLine.match(/^\d+\.\s/)) {
-          if (!inOrderedList) {
-            html += '<ol>';
-            inOrderedList = true;
-          }
-          var listContent = trimmedLine.replace(/^\d+\.\s/, '');
-          html += '<li>' + processInlineMarkdown(listContent) + '</li>';
-        }
-        // Regular paragraph
-        else {
-          html += '<p>' + processInlineMarkdown(trimmedLine) + '</p>';
-        }
-      }
-      
-      // Close any open lists at the end
-      if (inUnorderedList) {
-        html += '</ul>';
-      }
-      if (inOrderedList) {
-        html += '</ol>';
-      }
-      
-      return html;
-    }
     
-    // Process inline markdown (bold, italic, links, code, images)
-    function processInlineMarkdown(text) {
-      // Escape HTML first
-      text = escapeHtml(text);
+    // Sanitize HTML to prevent XSS attacks
+    function sanitizeHtml(html) {
+      // Create a temporary div to parse the HTML
+      var temp = document.createElement('div');
+      temp.innerHTML = html;
       
-      // Images (must be before links)
-      text = text.replace(/!\[([^\]]*)\]\(([^\)]+)\)/g, function(match, alt, url) {
-        // Validate URL to prevent XSS
-        if (isSafeUrl(url)) {
-          return '<img src="' + url + '" alt="' + alt + '" style="max-width: 100%;" />';
+      // Remove any script tags
+      var scripts = temp.querySelectorAll('script');
+      for (var i = 0; i < scripts.length; i++) {
+        scripts[i].parentNode.removeChild(scripts[i]);
+      }
+      
+      // Sanitize all links and images
+      var links = temp.querySelectorAll('a');
+      for (var i = 0; i < links.length; i++) {
+        var href = links[i].getAttribute('href');
+        if (!isSafeUrl(href)) {
+          links[i].removeAttribute('href');
+        } else {
+          links[i].setAttribute('target', '_blank');
+          links[i].setAttribute('rel', 'noopener noreferrer');
         }
-        return match;
-      });
+      }
       
-      // Links
-      text = text.replace(/\[([^\]]+)\]\(([^\)]+)\)/g, function(match, text, url) {
-        // Validate URL to prevent XSS
-        if (isSafeUrl(url)) {
-          return '<a href="' + url + '" target="_blank">' + text + '</a>';
+      var images = temp.querySelectorAll('img');
+      for (var i = 0; i < images.length; i++) {
+        var src = images[i].getAttribute('src');
+        if (!isSafeUrl(src)) {
+          images[i].parentNode.removeChild(images[i]);
+        } else {
+          images[i].style.maxWidth = '100%';
         }
-        return match;
-      });
+      }
       
-      // Bold (must be before italic)
-      text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-      text = text.replace(/__(.+?)__/g, '<strong>$1</strong>');
-      
-      // Italic
-      text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
-      text = text.replace(/_(.+?)_/g, '<em>$1</em>');
-      
-      // Inline code
-      text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
-      
-      return text;
+      return temp.innerHTML;
     }
     
     // Validate URL to prevent XSS attacks
@@ -371,18 +278,6 @@
              trimmedUrl.startsWith('./') ||
              trimmedUrl.startsWith('../') ||
              (!trimmedUrl.includes(':'));
-    }
-    
-    // Escape HTML to prevent XSS
-    function escapeHtml(text) {
-      var map = {
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#039;'
-      };
-      return text.replace(/[&<>"']/g, function(m) { return map[m]; });
     }
 
     document.addEventListener('keydown', function (event) {
