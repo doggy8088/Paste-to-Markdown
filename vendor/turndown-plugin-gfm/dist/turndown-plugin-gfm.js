@@ -94,14 +94,15 @@ rules.tableSection = {
 // - the parent is a THEAD
 // - or if its the first child of the TABLE or the first TBODY (possibly
 //   following a blank THEAD)
-// - and every cell is a TH
-// - OR if it's the first row of a table (for Excel compatibility)
+//   - Excel compatibility: Always treat first row as header for Excel tables
+//     which use TD instead of TH for headers
 function isHeadingRow (tr) {
+  var NODE_ELEMENT_NODE = 1;
   var parentNode = tr.parentNode;
   
   // Find first element child (skip text nodes)
   var firstElementChild = parentNode.firstChild;
-  while (firstElementChild && firstElementChild.nodeType !== 1 /* Node.ELEMENT_NODE */) {
+  while (firstElementChild && firstElementChild.nodeType !== NODE_ELEMENT_NODE) {
     firstElementChild = firstElementChild.nextSibling;
   }
   
@@ -110,22 +111,20 @@ function isHeadingRow (tr) {
   
   return (
     parentNode.nodeName === 'THEAD' ||
-    (
-      isFirstRowInTableOrFirstTbody &&
-      every.call(tr.childNodes, function (n) { return n.nodeName === 'TH' })
-    ) ||
-    // Excel compatibility: treat first row as header even if it uses TD elements
+    // Treat first row as header for standard tables (with TH) and Excel tables (with TD)
     isFirstRowInTableOrFirstTbody
   )
 }
 
 function isFirstTbody (element) {
+  var NODE_TEXT_NODE = 3;
+  
   if (element.nodeName !== 'TBODY') return false;
   
   var previousSibling = element.previousSibling;
   
   // Skip text nodes and COLGROUP elements
-  while (previousSibling && (previousSibling.nodeType === 3 /* Node.TEXT_NODE */ || previousSibling.nodeName === 'COLGROUP' || previousSibling.nodeName === 'COL')) {
+  while (previousSibling && (previousSibling.nodeType === NODE_TEXT_NODE || previousSibling.nodeName === 'COLGROUP' || previousSibling.nodeName === 'COL')) {
     previousSibling = previousSibling.previousSibling;
   }
   
