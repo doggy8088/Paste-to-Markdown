@@ -221,41 +221,115 @@
     function markdownToHtml(markdown) {
       var html = markdown;
       
-      // Headers
+      // Escape HTML
+      html = html.replace(/&/g, '&amp;')
+                 .replace(/</g, '&lt;')
+                 .replace(/>/g, '&gt;');
+      
+      // Code blocks (must be before other replacements)
+      html = html.replace(/```([^`]+)```/g, function(match, code) {
+        return '<pre><code>' + code.trim() + '</code></pre>';
+      });
+      
+      // Headers (must be before paragraphs)
+      html = html.replace(/^#### (.*$)/gim, '<h4>$1</h4>');
       html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
       html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
       html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
       
-      // Bold
+      // Horizontal rules
+      html = html.replace(/^\s*[\*\-_]{3,}\s*$/gim, '<hr>');
+      
+      // Lists - unordered
+      html = html.replace(/^\s*[-*+]\s+(.+)$/gim, '<li>$1</li>');
+      html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+      
+      // Lists - ordered
+      html = html.replace(/^\s*\d+\.\s+(.+)$/gim, '<li>$1</li>');
+      
+      // Bold (must be before italic)
       html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      html = html.replace(/__(.+?)__/g, '<strong>$1</strong>');
       
       // Italic
       html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
       html = html.replace(/_(.+?)_/g, '<em>$1</em>');
       
+      // Images (must be before links)
+      html = html.replace(/!\[([^\]]*)\]\(([^\)]+)\)/g, '<img src="$2" alt="$1" style="max-width: 100%;" />');
+      
       // Links
-      html = html.replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2">$1</a>');
-      
-      // Images
-      html = html.replace(/!\[([^\]]*)\]\(([^\)]+)\)/g, '<img src="$2" alt="$1" />');
-      
-      // Code blocks
-      html = html.replace(/```([^`]+)```/g, '<pre><code>$1</code></pre>');
+      html = html.replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
       
       // Inline code
       html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
       
-      // Line breaks
-      html = html.replace(/\n\n/g, '</p><p>');
-      html = html.replace(/\n/g, '<br>');
+      // Line breaks and paragraphs
+      var lines = html.split('\n');
+      var result = '';
+      var inList = false;
+      var inCodeBlock = false;
       
-      // Wrap in paragraph
-      html = '<p>' + html + '</p>';
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i].trim();
+        
+        if (line.match(/<pre>/)) {
+          inCodeBlock = true;
+        }
+        if (line.match(/<\/pre>/)) {
+          inCodeBlock = false;
+        }
+        
+        if (!inCodeBlock) {
+          if (line.match(/^<[hH][1-6]>/) || line.match(/^<hr>/) || 
+              line.match(/^<pre>/) || line.match(/^<\/pre>/)) {
+            if (inList) {
+              result += '</ul>';
+              inList = false;
+            }
+            result += line + '\n';
+          } else if (line.match(/^<li>/)) {
+            if (!inList) {
+              result += '<ul>';
+              inList = true;
+            }
+            result += line + '\n';
+          } else if (line === '') {
+            if (inList) {
+              result += '</ul>';
+              inList = false;
+            }
+            result += '</p><p>';
+          } else {
+            if (inList) {
+              result += '</ul>';
+              inList = false;
+            }
+            result += line + '<br>\n';
+          }
+        } else {
+          result += line + '\n';
+        }
+      }
       
-      // Clean up empty paragraphs
-      html = html.replace(/<p><\/p>/g, '');
+      if (inList) {
+        result += '</ul>';
+      }
       
-      return html;
+      // Wrap in paragraph and clean up
+      result = '<p>' + result + '</p>';
+      result = result.replace(/<p><\/p>/g, '')
+                     .replace(/<p><br>/g, '<p>')
+                     .replace(/<br>\s*<\/p>/g, '</p>')
+                     .replace(/<\/h([1-6])><br>/g, '</h$1>')
+                     .replace(/<\/ul><br>/g, '</ul>')
+                     .replace(/<br>\s*<ul>/g, '<ul>')
+                     .replace(/<\/pre><br>/g, '</pre>')
+                     .replace(/<br>\s*<pre>/g, '<pre>')
+                     .replace(/<br>\s*<hr>/g, '<hr>')
+                     .replace(/<\/hr><br>/g, '</hr>');
+      
+      return result;
     }
 
     document.addEventListener('keydown', function (event) {
