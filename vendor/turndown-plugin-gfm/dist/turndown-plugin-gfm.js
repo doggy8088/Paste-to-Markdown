@@ -78,7 +78,7 @@ rules.table = {
 
   replacement: function (content) {
     // Ensure there are no blank lines
-    content = content.replace('\n\n', '\n');
+    content = content.replace(/\n\n/g, '\n');
     return '\n\n' + content + '\n\n'
   }
 };
