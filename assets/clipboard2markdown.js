@@ -229,7 +229,7 @@
       }
     }
     
-    // Sanitize HTML to prevent XSS attacks
+    // Sanitize HTML and add Bootstrap classes
     function sanitizeHtml(html) {
       // Use DOMParser for safer HTML parsing (doesn't execute scripts)
       var parser = new DOMParser();
@@ -241,7 +241,36 @@
         scripts[i].parentNode.removeChild(scripts[i]);
       }
       
-      // Sanitize all links
+      // Add Bootstrap classes to tables
+      var tables = Array.from(doc.querySelectorAll('table'));
+      for (var i = 0; i < tables.length; i++) {
+        tables[i].className = 'table table-striped table-bordered';
+      }
+      
+      // Add Bootstrap classes to images
+      var images = Array.from(doc.querySelectorAll('img'));
+      for (var i = 0; i < images.length; i++) {
+        var src = images[i].getAttribute('src');
+        if (!isSafeUrl(src)) {
+          images[i].parentNode.removeChild(images[i]);
+        } else {
+          images[i].className = 'img-responsive';
+        }
+      }
+      
+      // Add Bootstrap classes to blockquotes
+      var blockquotes = Array.from(doc.querySelectorAll('blockquote'));
+      for (var i = 0; i < blockquotes.length; i++) {
+        blockquotes[i].className = 'blockquote';
+      }
+      
+      // Add Bootstrap classes to code blocks
+      var codeBlocks = Array.from(doc.querySelectorAll('pre'));
+      for (var i = 0; i < codeBlocks.length; i++) {
+        codeBlocks[i].className = 'pre-scrollable';
+      }
+      
+      // Style links with Bootstrap
       var links = Array.from(doc.querySelectorAll('a'));
       for (var i = 0; i < links.length; i++) {
         var href = links[i].getAttribute('href');
@@ -253,14 +282,12 @@
         }
       }
       
-      // Sanitize all images
-      var images = Array.from(doc.querySelectorAll('img'));
-      for (var i = 0; i < images.length; i++) {
-        var src = images[i].getAttribute('src');
-        if (!isSafeUrl(src)) {
-          images[i].parentNode.removeChild(images[i]);
-        } else {
-          images[i].style.maxWidth = '100%';
+      // Add Bootstrap badge class to inline code
+      var inlineCodes = Array.from(doc.querySelectorAll('code'));
+      for (var i = 0; i < inlineCodes.length; i++) {
+        // Only add badge class to inline code, not code inside pre blocks
+        if (inlineCodes[i].parentNode.nodeName !== 'PRE') {
+          inlineCodes[i].className = 'badge';
         }
       }
       
