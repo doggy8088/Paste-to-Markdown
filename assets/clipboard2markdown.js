@@ -15,6 +15,9 @@
     preformattedCode: false,
   });
 
+  // Use the tables plugin from turndown-plugin-gfm for table support
+  turndownService.use(turndownPluginGfm.tables);
+
   turndownService.remove('style');
 
   // http://pandoc.org/README.html#pandocs-markdown
