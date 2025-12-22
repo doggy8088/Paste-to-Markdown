@@ -214,7 +214,7 @@
           gfm: true,
           headerIds: false,
           mangle: false,
-          sanitize: false // We'll use DOMPurify-like sanitization via hooks
+          sanitize: false // We sanitize the output manually
         });
         
         // Use marked to convert markdown to HTML
@@ -231,18 +231,18 @@
     
     // Sanitize HTML to prevent XSS attacks
     function sanitizeHtml(html) {
-      // Create a temporary div to parse the HTML
-      var temp = document.createElement('div');
-      temp.innerHTML = html;
+      // Use DOMParser for safer HTML parsing (doesn't execute scripts)
+      var parser = new DOMParser();
+      var doc = parser.parseFromString(html, 'text/html');
       
-      // Remove any script tags
-      var scripts = temp.querySelectorAll('script');
+      // Remove any script tags (convert to array first to avoid mutation issues)
+      var scripts = Array.from(doc.querySelectorAll('script'));
       for (var i = 0; i < scripts.length; i++) {
         scripts[i].parentNode.removeChild(scripts[i]);
       }
       
-      // Sanitize all links and images
-      var links = temp.querySelectorAll('a');
+      // Sanitize all links
+      var links = Array.from(doc.querySelectorAll('a'));
       for (var i = 0; i < links.length; i++) {
         var href = links[i].getAttribute('href');
         if (!isSafeUrl(href)) {
@@ -253,7 +253,8 @@
         }
       }
       
-      var images = temp.querySelectorAll('img');
+      // Sanitize all images
+      var images = Array.from(doc.querySelectorAll('img'));
       for (var i = 0; i < images.length; i++) {
         var src = images[i].getAttribute('src');
         if (!isSafeUrl(src)) {
@@ -263,7 +264,7 @@
         }
       }
       
-      return temp.innerHTML;
+      return doc.body.innerHTML;
     }
     
     // Validate URL to prevent XSS attacks
