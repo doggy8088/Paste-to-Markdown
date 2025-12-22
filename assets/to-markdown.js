@@ -296,7 +296,53 @@ module.exports = [
       var borderCells = ''
       var alignMap = { left: ':--', right: '--:', center: ':-:' }
 
+      // Check if this row should have a header separator
+      var isHeaderRow = false
+
       if (node.parentNode.nodeName === 'THEAD') {
+        // Traditional case: row is inside <thead>
+        isHeaderRow = true
+      } else {
+        // For tables without <thead>, treat the first row as the header
+        var parent = node.parentNode
+        if (parent.nodeName === 'TBODY' || parent.nodeName === 'TABLE') {
+          // Check if this is the first TR child of the parent
+          var isFirstRowInParent = true
+          var sibling = node.previousSibling
+          while (sibling) {
+            if (sibling.nodeName === 'TR') {
+              isFirstRowInParent = false
+              break
+            }
+            sibling = sibling.previousSibling
+          }
+
+          if (isFirstRowInParent) {
+            // Find the table element
+            var table = parent.nodeName === 'TABLE' ? parent : parent.parentNode
+            // Check if table has a thead
+            var thead = table.getElementsByTagName('thead')
+            if (thead.length === 0) {
+              // For TBODY, also check if there are previous sibling tbody/rows
+              if (parent.nodeName === 'TBODY') {
+                var prevTbody = parent.previousSibling
+                while (prevTbody) {
+                  if (prevTbody.nodeName === 'TBODY' || prevTbody.nodeName === 'TR') {
+                    isFirstRowInParent = false
+                    break
+                  }
+                  prevTbody = prevTbody.previousSibling
+                }
+              }
+              if (isFirstRowInParent) {
+                isHeaderRow = true
+              }
+            }
+          }
+        }
+      }
+
+      if (isHeaderRow) {
         for (var i = 0; i < node.childNodes.length; i++) {
           var align = node.childNodes[i].attributes.align
           var border = '---'
