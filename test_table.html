@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Test Table Conversion</title>
+    <script src="vendor/turndown/dist/turndown.js"></script>
+    <script src="./assets/to-markdown.js"></script>
+</head>
+<body>
+<h2>Test Results</h2>
+<div id="results"></div>
+<script>
+// This is a real HTML table without thead - simulating what PowerPoint might send
+const tableHtml = `
+<table>
+<tr>
+<td>要素</td>
+<td>功能</td>
+<td>範例</td>
+</tr>
+<tr>
+<td>任務 (Task)</td>
+<td>明確說明工作目標</td>
+<td>「建立一張產品海報」</td>
+</tr>
+<tr>
+<td>情境 (Context)</td>
+<td>提供相關事實與限制</td>
+<td>「產品：化妝品，風格：極簡，目標：年輕女性」</td>
+</tr>
+<tr>
+<td>指令 (Instructions)</td>
+<td>具體的規則與步驟</td>
+<td>「使用柔和光線，產品置於中央，背景純色」</td>
+</tr>
+<tr>
+<td>範例 (Examples)</td>
+<td>提供參考樣式</td>
+<td>「類似 Dior 廣告的質感」</td>
+</tr>
+<tr>
+<td>輸出格式 (Output Format)</td>
+<td>指定解析度與比例</td>
+<td>「4K 解析度，1:1 方形構圖」</td>
+</tr>
+</table>
+`;
+
+var pandoc = [
+    {
+      filter: 'h1',
+      replacement: function (content, node) {
+        return '# ' + content + '\n\n';
+      }
+    }
+];
+
+var escape = function (str) {
+    return str.replace(/[\u2018\u2019\u00b4]/g, "'")
+      .replace(/[\u201c\u201d\u2033]/g, '"')
+      .replace(/[\u2212\u2022\u00b7\u25aa]/g, '-')
+      .replace(/[\u2013\u2015]/g, '--')
+      .replace(/\u2014/g, '---')
+      .replace(/\u2026/g, '...')
+      .replace(/[ ]+\n/g, '\n')
+      .replace(/\s*\\\n/g, '\\\n')
+      .replace(/\s*\\\n\s*\\\n/g, '\n\n')
+      .replace(/\s*\\\n\n/g, '\n\n')
+      .replace(/\n-\n/g, '\n')
+      .replace(/\n\n\s*\\\n/g, '\n\n')
+      .replace(/\n\n\n*/g, '\n\n')
+      .replace(/[ ]+$/gm, '')
+      .replace(/^\s+|[\s\\]+$/g, '')
+      .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ' ')
+      .replace(/[\u200B\uFEFF]/g, '');
+};
+
+var convert = function (str) {
+    return escape(toMarkdown(str, { converters: pandoc, gfm: true }));
+};
+
+var result = convert(tableHtml);
+console.log("=== CONVERTED MARKDOWN (table without thead) ===");
+console.log(result);
+
+// Now test with a proper table that has thead
+const tableWithTheadHtml = `
+<table>
+<thead>
+<tr>
+<td>要素</td>
+<td>功能</td>
+<td>範例</td>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>任務 (Task)</td>
+<td>明確說明工作目標</td>
+<td>「建立一張產品海報」</td>
+</tr>
+<tr>
+<td>情境 (Context)</td>
+<td>提供相關事實與限制</td>
+<td>「產品：化妝品，風格：極簡，目標：年輕女性」</td>
+</tr>
+</tbody>
+</table>
+`;
+
+var result2 = convert(tableWithTheadHtml);
+console.log("=== CONVERTED MARKDOWN (table with thead) ===");
+console.log(result2);
+
+document.getElementById('results').innerHTML = 
+    "<h3>Table without thead:</h3><pre style='background:#f0f0f0;padding:10px;white-space:pre-wrap'>" + 
+    result + 
+    "</pre><h3>Table with thead:</h3><pre style='background:#f0f0f0;padding:10px;white-space:pre-wrap'>" + 
+    result2 + 
+    "</pre>";
+</script>
+</body>
+</html>
