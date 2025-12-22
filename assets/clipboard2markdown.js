@@ -328,10 +328,22 @@
       text = escapeHtml(text);
       
       // Images (must be before links)
-      text = text.replace(/!\[([^\]]*)\]\(([^\)]+)\)/g, '<img src="$2" alt="$1" style="max-width: 100%;" />');
+      text = text.replace(/!\[([^\]]*)\]\(([^\)]+)\)/g, function(match, alt, url) {
+        // Validate URL to prevent XSS
+        if (isSafeUrl(url)) {
+          return '<img src="' + url + '" alt="' + alt + '" style="max-width: 100%;" />';
+        }
+        return match;
+      });
       
       // Links
-      text = text.replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+      text = text.replace(/\[([^\]]+)\]\(([^\)]+)\)/g, function(match, text, url) {
+        // Validate URL to prevent XSS
+        if (isSafeUrl(url)) {
+          return '<a href="' + url + '" target="_blank">' + text + '</a>';
+        }
+        return match;
+      });
       
       // Bold (must be before italic)
       text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
@@ -345,6 +357,20 @@
       text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
       
       return text;
+    }
+    
+    // Validate URL to prevent XSS attacks
+    function isSafeUrl(url) {
+      if (!url) return false;
+      var trimmedUrl = url.trim().toLowerCase();
+      // Only allow http, https, and relative URLs
+      // Block javascript:, data:, vbscript:, file:, etc.
+      return trimmedUrl.startsWith('http://') || 
+             trimmedUrl.startsWith('https://') || 
+             trimmedUrl.startsWith('/') ||
+             trimmedUrl.startsWith('./') ||
+             trimmedUrl.startsWith('../') ||
+             (!trimmedUrl.includes(':'));
     }
     
     // Escape HTML to prevent XSS
