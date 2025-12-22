@@ -101,22 +101,21 @@ function isHeadingRow (tr) {
   
   // Find first element child (skip text nodes)
   var firstElementChild = parentNode.firstChild;
-  while (firstElementChild && firstElementChild.nodeType !== 1) {
+  while (firstElementChild && firstElementChild.nodeType !== 1 /* Node.ELEMENT_NODE */) {
     firstElementChild = firstElementChild.nextSibling;
   }
+  
+  var isFirstRowInTableOrFirstTbody = firstElementChild === tr &&
+    (parentNode.nodeName === 'TABLE' || isFirstTbody(parentNode));
   
   return (
     parentNode.nodeName === 'THEAD' ||
     (
-      firstElementChild === tr &&
-      (parentNode.nodeName === 'TABLE' || isFirstTbody(parentNode)) &&
+      isFirstRowInTableOrFirstTbody &&
       every.call(tr.childNodes, function (n) { return n.nodeName === 'TH' })
     ) ||
     // Excel compatibility: treat first row as header even if it uses TD elements
-    (
-      firstElementChild === tr &&
-      (parentNode.nodeName === 'TABLE' || isFirstTbody(parentNode))
-    )
+    isFirstRowInTableOrFirstTbody
   )
 }
 
@@ -126,7 +125,7 @@ function isFirstTbody (element) {
   var previousSibling = element.previousSibling;
   
   // Skip text nodes and COLGROUP elements
-  while (previousSibling && (previousSibling.nodeType === 3 || previousSibling.nodeName === 'COLGROUP' || previousSibling.nodeName === 'COL')) {
+  while (previousSibling && (previousSibling.nodeType === 3 /* Node.TEXT_NODE */ || previousSibling.nodeName === 'COLGROUP' || previousSibling.nodeName === 'COL')) {
     previousSibling = previousSibling.previousSibling;
   }
   
