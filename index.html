@@ -44,6 +44,50 @@
             width: 100%;
         }
 
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #ddd;
+            margin-bottom: 10px;
+        }
+
+        .tab-button {
+            background: transparent;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-size: 16px;
+            color: #666;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.3s;
+        }
+
+        .tab-button:hover {
+            color: #333;
+        }
+
+        .tab-button.active {
+            color: #007bff;
+            border-bottom: 2px solid #007bff;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        #preview {
+            border: 1px solid #ddd;
+            padding: 20px;
+            min-height: 78vh;
+            overflow: auto;
+            background: white;
+            border-radius: 4px;
+        }
+
         @media (prefers-color-scheme: dark) {
             body {
                 background-image: url('assets/background-dark.svg');
@@ -58,6 +102,27 @@
 
             a {
                 color: #8fcbff;
+            }
+
+            .tabs {
+                border-bottom: 2px solid #444;
+            }
+
+            .tab-button {
+                color: #aaa;
+            }
+
+            .tab-button:hover {
+                color: #ddd;
+            }
+
+            .tab-button.active {
+                color: #007bff;
+            }
+
+            #preview {
+                background: #2a2a2a;
+                border-color: #444;
             }
         }
     </style>
@@ -80,7 +145,16 @@
         </section>
         <div contenteditable="true" id="pastebin"></div>
         <section class="hidden" id="wrapper">
-            <textarea id="output"></textarea>
+            <div class="tabs">
+                <button class="tab-button active" data-tab="edit">編輯</button>
+                <button class="tab-button" data-tab="preview">預覽</button>
+            </div>
+            <div class="tab-content active" id="edit-tab">
+                <textarea id="output"></textarea>
+            </div>
+            <div class="tab-content" id="preview-tab">
+                <div id="preview"></div>
+            </div>
         </section>
     </div>
 

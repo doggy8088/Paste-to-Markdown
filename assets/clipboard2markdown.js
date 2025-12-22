@@ -175,6 +175,88 @@
     var pastebin = document.querySelector('#pastebin');
     var output = document.querySelector('#output');
     var wrapper = document.querySelector('#wrapper');
+    var preview = document.querySelector('#preview');
+
+    // Tab switching functionality
+    var tabButtons = document.querySelectorAll('.tab-button');
+    var tabContents = document.querySelectorAll('.tab-content');
+
+    tabButtons.forEach(function(button) {
+      button.addEventListener('click', function() {
+        var targetTab = this.getAttribute('data-tab');
+        
+        // Remove active class from all buttons and contents
+        tabButtons.forEach(function(btn) {
+          btn.classList.remove('active');
+        });
+        tabContents.forEach(function(content) {
+          content.classList.remove('active');
+        });
+        
+        // Add active class to clicked button and corresponding content
+        this.classList.add('active');
+        document.getElementById(targetTab + '-tab').classList.add('active');
+        
+        // Update preview when switching to preview tab
+        if (targetTab === 'preview') {
+          updatePreview();
+        }
+      });
+    });
+
+    // Function to update preview with rendered markdown
+    function updatePreview() {
+      var markdown = output.value;
+      if (markdown) {
+        // Convert markdown to HTML using marked-style approach
+        // Since we don't have a markdown-to-HTML library, we'll do basic conversion
+        var html = markdownToHtml(markdown);
+        preview.innerHTML = html;
+      } else {
+        preview.innerHTML = '<p>沒有內容可預覽</p>';
+      }
+    }
+
+    // Simple markdown to HTML converter
+    function markdownToHtml(markdown) {
+      var html = markdown;
+      
+      // Headers
+      html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+      html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+      html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+      
+      // Bold
+      html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      
+      // Italic
+      html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+      html = html.replace(/_(.+?)_/g, '<em>$1</em>');
+      
+      // Links
+      html = html.replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2">$1</a>');
+      
+      // Images
+      html = html.replace(/!\[([^\]]*)\]\(([^\)]+)\)/g, '<img src="$2" alt="$1" />');
+      
+      // Code blocks
+      html = html.replace(/```([^`]+)```/g, '<pre><code>$1</code></pre>');
+      
+      // Inline code
+      html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+      
+      // Line breaks
+      html = html.replace(/\n\n/g, '</p><p>');
+      html = html.replace(/\n/g, '<br>');
+      
+      // Wrap in paragraph
+      html = '<p>' + html + '</p>';
+      
+      // Clean up empty paragraphs
+      html = html.replace(/<p><\/p>/g, '');
+      
+      return html;
+    }
 
     document.addEventListener('keydown', function (event) {
       if (event.ctrlKey || event.metaKey) {
