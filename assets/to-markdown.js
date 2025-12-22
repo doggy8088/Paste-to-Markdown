@@ -255,6 +255,9 @@ function cell (content, node) {
   var index = Array.prototype.indexOf.call(node.parentNode.childNodes, node)
   var prefix = ' '
   if (index === 0) prefix = '| '
+  // Trim leading/trailing whitespace and replace internal newlines with space
+  // This handles cases where block elements like <p> are inside table cells
+  content = content.trim().replace(/\s*\n\s*/g, ' ')
   return prefix + content + ' |'
 }
 
