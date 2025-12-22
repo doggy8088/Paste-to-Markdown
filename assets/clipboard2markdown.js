@@ -213,123 +213,150 @@
         var html = markdownToHtml(markdown);
         preview.innerHTML = html;
       } else {
-        preview.innerHTML = '<p>沒有內容可預覽</p>';
+        preview.innerHTML = '<p style="color: #999;">沒有內容可預覽</p>';
       }
     }
 
     // Simple markdown to HTML converter
     function markdownToHtml(markdown) {
-      var html = markdown;
-      
-      // Escape HTML
-      html = html.replace(/&/g, '&amp;')
-                 .replace(/</g, '&lt;')
-                 .replace(/>/g, '&gt;');
-      
-      // Code blocks (must be before other replacements)
-      html = html.replace(/```([^`]+)```/g, function(match, code) {
-        return '<pre><code>' + code.trim() + '</code></pre>';
-      });
-      
-      // Headers (must be before paragraphs)
-      html = html.replace(/^#### (.*$)/gim, '<h4>$1</h4>');
-      html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
-      html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
-      html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
-      
-      // Horizontal rules
-      html = html.replace(/^\s*[\*\-_]{3,}\s*$/gim, '<hr>');
-      
-      // Lists - unordered
-      html = html.replace(/^\s*[-*+]\s+(.+)$/gim, '<li>$1</li>');
-      html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
-      
-      // Lists - ordered
-      html = html.replace(/^\s*\d+\.\s+(.+)$/gim, '<li>$1</li>');
-      
-      // Bold (must be before italic)
-      html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-      html = html.replace(/__(.+?)__/g, '<strong>$1</strong>');
-      
-      // Italic
-      html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-      html = html.replace(/_(.+?)_/g, '<em>$1</em>');
-      
-      // Images (must be before links)
-      html = html.replace(/!\[([^\]]*)\]\(([^\)]+)\)/g, '<img src="$2" alt="$1" style="max-width: 100%;" />');
-      
-      // Links
-      html = html.replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
-      
-      // Inline code
-      html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-      
-      // Line breaks and paragraphs
-      var lines = html.split('\n');
-      var result = '';
-      var inList = false;
+      var lines = markdown.split('\n');
+      var html = '';
+      var inUnorderedList = false;
+      var inOrderedList = false;
       var inCodeBlock = false;
+      var codeBlockContent = '';
       
       for (var i = 0; i < lines.length; i++) {
-        var line = lines[i].trim();
+        var line = lines[i];
+        var trimmedLine = line.trim();
         
-        if (line.match(/<pre>/)) {
-          inCodeBlock = true;
-        }
-        if (line.match(/<\/pre>/)) {
-          inCodeBlock = false;
-        }
-        
-        if (!inCodeBlock) {
-          if (line.match(/^<[hH][1-6]>/) || line.match(/^<hr>/) || 
-              line.match(/^<pre>/) || line.match(/^<\/pre>/)) {
-            if (inList) {
-              result += '</ul>';
-              inList = false;
-            }
-            result += line + '\n';
-          } else if (line.match(/^<li>/)) {
-            if (!inList) {
-              result += '<ul>';
-              inList = true;
-            }
-            result += line + '\n';
-          } else if (line === '') {
-            if (inList) {
-              result += '</ul>';
-              inList = false;
-            }
-            result += '</p><p>';
+        // Handle code blocks
+        if (trimmedLine.startsWith('```')) {
+          if (!inCodeBlock) {
+            inCodeBlock = true;
+            codeBlockContent = '';
+            continue;
           } else {
-            if (inList) {
-              result += '</ul>';
-              inList = false;
-            }
-            result += line + '<br>\n';
+            inCodeBlock = false;
+            html += '<pre><code>' + escapeHtml(codeBlockContent.trim()) + '</code></pre>';
+            continue;
           }
-        } else {
-          result += line + '\n';
+        }
+        
+        if (inCodeBlock) {
+          codeBlockContent += line + '\n';
+          continue;
+        }
+        
+        // Close lists when encountering non-list content
+        if (!trimmedLine.match(/^[-*+]\s/) && !trimmedLine.match(/^\d+\.\s/)) {
+          if (inUnorderedList) {
+            html += '</ul>';
+            inUnorderedList = false;
+          }
+          if (inOrderedList) {
+            html += '</ol>';
+            inOrderedList = false;
+          }
+        }
+        
+        // Skip empty lines outside of content
+        if (trimmedLine === '') {
+          if (inUnorderedList) {
+            html += '</ul>';
+            inUnorderedList = false;
+          }
+          if (inOrderedList) {
+            html += '</ol>';
+            inOrderedList = false;
+          }
+          continue;
+        }
+        
+        // Headers
+        if (trimmedLine.match(/^####\s/)) {
+          html += '<h4>' + processInlineMarkdown(trimmedLine.substring(5)) + '</h4>';
+        } else if (trimmedLine.match(/^###\s/)) {
+          html += '<h3>' + processInlineMarkdown(trimmedLine.substring(4)) + '</h3>';
+        } else if (trimmedLine.match(/^##\s/)) {
+          html += '<h2>' + processInlineMarkdown(trimmedLine.substring(3)) + '</h2>';
+        } else if (trimmedLine.match(/^#\s/)) {
+          html += '<h1>' + processInlineMarkdown(trimmedLine.substring(2)) + '</h1>';
+        }
+        // Horizontal rule
+        else if (trimmedLine.match(/^[\*\-_]{3,}$/)) {
+          html += '<hr>';
+        }
+        // Unordered list
+        else if (trimmedLine.match(/^[-*+]\s/)) {
+          if (!inUnorderedList) {
+            html += '<ul>';
+            inUnorderedList = true;
+          }
+          var listContent = trimmedLine.replace(/^[-*+]\s/, '');
+          html += '<li>' + processInlineMarkdown(listContent) + '</li>';
+        }
+        // Ordered list
+        else if (trimmedLine.match(/^\d+\.\s/)) {
+          if (!inOrderedList) {
+            html += '<ol>';
+            inOrderedList = true;
+          }
+          var listContent = trimmedLine.replace(/^\d+\.\s/, '');
+          html += '<li>' + processInlineMarkdown(listContent) + '</li>';
+        }
+        // Regular paragraph
+        else {
+          html += '<p>' + processInlineMarkdown(trimmedLine) + '</p>';
         }
       }
       
-      if (inList) {
-        result += '</ul>';
+      // Close any open lists at the end
+      if (inUnorderedList) {
+        html += '</ul>';
+      }
+      if (inOrderedList) {
+        html += '</ol>';
       }
       
-      // Wrap in paragraph and clean up
-      result = '<p>' + result + '</p>';
-      result = result.replace(/<p><\/p>/g, '')
-                     .replace(/<p><br>/g, '<p>')
-                     .replace(/<br>\s*<\/p>/g, '</p>')
-                     .replace(/<\/h([1-6])><br>/g, '</h$1>')
-                     .replace(/<\/ul><br>/g, '</ul>')
-                     .replace(/<br>\s*<ul>/g, '<ul>')
-                     .replace(/<\/pre><br>/g, '</pre>')
-                     .replace(/<br>\s*<pre>/g, '<pre>')
-                     .replace(/<br>\s*<hr>/g, '<hr>')
-                     .replace(/<\/hr><br>/g, '</hr>');
+      return html;
+    }
+    
+    // Process inline markdown (bold, italic, links, code, images)
+    function processInlineMarkdown(text) {
+      // Escape HTML first
+      text = escapeHtml(text);
       
-      return result;
+      // Images (must be before links)
+      text = text.replace(/!\[([^\]]*)\]\(([^\)]+)\)/g, '<img src="$2" alt="$1" style="max-width: 100%;" />');
+      
+      // Links
+      text = text.replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+      
+      // Bold (must be before italic)
+      text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      text = text.replace(/__(.+?)__/g, '<strong>$1</strong>');
+      
+      // Italic
+      text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
+      text = text.replace(/_(.+?)_/g, '<em>$1</em>');
+      
+      // Inline code
+      text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+      
+      return text;
+    }
+    
+    // Escape HTML to prevent XSS
+    function escapeHtml(text) {
+      var map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+      };
+      return text.replace(/[&<>"']/g, function(m) { return map[m]; });
     }
 
     document.addEventListener('keydown', function (event) {
