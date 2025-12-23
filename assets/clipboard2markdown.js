@@ -18,6 +18,28 @@
   // Use the tables plugin from turndown-plugin-gfm for table support
   turndownService.use(turndownPluginGfm.tables);
 
+  // Custom rule: preserve <br> as <br> inside table cells
+  turndownService.addRule('brInTableCell', {
+    filter: function (node) {
+      if (node.nodeName !== 'BR') return false;
+      // Check if br is inside a table cell (td or th)
+      var parent = node.parentNode;
+      while (parent) {
+        if (parent.nodeName === 'TD' || parent.nodeName === 'TH') {
+          return true;
+        }
+        if (parent.nodeName === 'TABLE' || parent.nodeName === 'BODY') {
+          break;
+        }
+        parent = parent.parentNode;
+      }
+      return false;
+    },
+    replacement: function () {
+      return '<br>';
+    }
+  });
+
   turndownService.remove('style');
 
   // http://pandoc.org/README.html#pandocs-markdown
@@ -385,6 +407,10 @@
 
       // delete p tag inside li tag, including any attributes defined in p tag and li tag
       html = html.replace(/<li([^>]*)>\s*<p([^>]*)>(.*?)<\/p>\s*<\/li>/g, '<li>$3</li>');
+      
+      // Normalize br tags from Excel (may have whitespace or newlines)
+      // This ensures <br> tags are properly formatted for HTML parsing
+      html = html.replace(/<br\s*\/>/gi, '<br>');
 
       console.log('HTML:', html);
 
