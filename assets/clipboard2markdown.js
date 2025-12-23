@@ -411,6 +411,24 @@
       wrapper.classList.add('hidden');
       info.classList.remove('hidden');
     }
+    
+    // Alt+1: Switch to Edit mode
+    if (event.altKey && event.key === '1') {
+      event.preventDefault();
+      var editButton = document.querySelector('.tab-button[data-tab="edit"]');
+      if (editButton && !editButton.classList.contains('active')) {
+        editButton.click();
+      }
+    }
+    
+    // Alt+2: Switch to Preview mode
+    if (event.altKey && event.key === '2') {
+      event.preventDefault();
+      var previewButton = document.querySelector('.tab-button[data-tab="preview"]');
+      if (previewButton && !previewButton.classList.contains('active')) {
+        previewButton.click();
+      }
+    }
   });
 
 })();
