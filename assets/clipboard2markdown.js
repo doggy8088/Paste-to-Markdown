@@ -171,6 +171,82 @@
     return escape(toMarkdown(str, { converters: pandoc, gfm: true }));
   }
 
+  // Plain text processing rules
+  var plainTextRules = {
+    // Copilot CLI format: first line starts with ' ● ', remaining lines start with '   ' (3 spaces)
+    copilotCli: function (text) {
+      var lines = text.split('\n');
+      if (lines.length === 0 || (!lines[0].startsWith(' ● ') && !lines[0].startsWith(' > '))) {
+        return null; // Pattern not matched
+      }
+
+      // Check if all non-empty remaining lines start with '   ' (3 spaces)
+      var isMatched = true;
+      for (var i = 1; i < lines.length; i++) {
+        if (lines[i].trim() !== '' && !lines[i].startsWith('   ')) {
+          isMatched = false;
+          break;
+        }
+      }
+
+      if (!isMatched) {
+        return null; // Pattern not matched
+      }
+
+      console.log('Matched: Copilot CLI format');
+      // Remove ' ● ' from first line
+      lines[0] = lines[0].substring(3);
+      // Remove '   ' (3 spaces) from remaining lines
+      for (var i = 1; i < lines.length; i++) {
+        if (lines[i].startsWith('   ')) {
+          lines[i] = lines[i].substring(3);
+        }
+      }
+      return lines.join('\n');
+    },
+
+    // Generic plain text: remove common leading spaces from all lines
+    genericPlainText: function (text) {
+      var lines = text.split('\n');
+      if (lines.length === 0) {
+        return text;
+      }
+
+      // Find the minimum number of leading spaces (excluding empty lines)
+      var minSpaces = Infinity;
+      for (var i = 0; i < lines.length; i++) {
+        if (lines[i].trim() !== '') {
+          var spaces = lines[i].match(/^\s*/)[0].length;
+          minSpaces = Math.min(minSpaces, spaces);
+        }
+      }
+
+      // If no leading spaces found or infinite spaces, return original text
+      if (minSpaces === Infinity || minSpaces === 0) {
+        return text;
+      }
+
+      console.log('Matched: Generic plain text with ' + minSpaces + ' leading spaces');
+      // Remove common leading spaces from all lines
+      return lines.map(function (line) {
+        return line.slice(minSpaces);
+      }).join('\n');
+    }
+  };
+
+  // Apply plain text rules in order
+  var applyPlainTextRules = function (text) {
+    // Try each rule in order
+    for (var ruleName in plainTextRules) {
+      var result = plainTextRules[ruleName](text);
+      if (result !== null) {
+        return result;
+      }
+    }
+    // If no rule matched, return original text
+    return text;
+  }
+
   var insert = function (myField, myValue) {
     if (document.selection) {
       myField.focus();
@@ -209,7 +285,7 @@
     tabButtons.forEach(function(button) {
       button.addEventListener('click', function() {
         var targetTab = this.getAttribute('data-tab');
-        
+
         // Remove active class from all buttons and contents
         tabButtons.forEach(function(btn) {
           btn.classList.remove('active');
@@ -217,11 +293,11 @@
         tabContents.forEach(function(content) {
           content.classList.remove('active');
         });
-        
+
         // Add active class to clicked button and corresponding content
         this.classList.add('active');
         document.getElementById(targetTab + '-tab').classList.add('active');
-        
+
         // Update preview when switching to preview tab
         if (targetTab === 'preview') {
           updatePreview();
@@ -241,13 +317,13 @@
           mangle: false,
           sanitize: false // We sanitize the output manually
         });
-        
+
         // Use marked to convert markdown to HTML
         var html = marked.parse(markdown);
-        
+
         // Sanitize the output to prevent XSS
         html = sanitizeHtml(html);
-        
+
         preview.innerHTML = html;
       } else {
         preview.innerHTML = '<p style="color: #999;">沒有內容可預覽</p>';
@@ -261,25 +337,25 @@
         updatePreview();
       }
     });
-    
+
     // Sanitize HTML and add Bootstrap classes
     function sanitizeHtml(html) {
       // Use DOMParser for safer HTML parsing (doesn't execute scripts)
       var parser = new DOMParser();
       var doc = parser.parseFromString(html, 'text/html');
-      
+
       // Remove any script tags (convert to array first to avoid mutation issues)
       var scripts = Array.from(doc.querySelectorAll('script'));
       for (var i = 0; i < scripts.length; i++) {
         scripts[i].parentNode.removeChild(scripts[i]);
       }
-      
+
       // Add Bootstrap classes to tables
       var tables = Array.from(doc.querySelectorAll('table'));
       for (var i = 0; i < tables.length; i++) {
         tables[i].className = 'table table-striped table-bordered';
       }
-      
+
       // Add Bootstrap classes to images
       var images = Array.from(doc.querySelectorAll('img'));
       for (var i = 0; i < images.length; i++) {
@@ -290,19 +366,19 @@
           images[i].className = 'img-responsive';
         }
       }
-      
+
       // Add Bootstrap classes to blockquotes
       var blockquotes = Array.from(doc.querySelectorAll('blockquote'));
       for (var i = 0; i < blockquotes.length; i++) {
         blockquotes[i].className = 'blockquote';
       }
-      
+
       // Add Bootstrap classes to code blocks
       var codeBlocks = Array.from(doc.querySelectorAll('pre'));
       for (var i = 0; i < codeBlocks.length; i++) {
         codeBlocks[i].className = 'pre-scrollable';
       }
-      
+
       // Style links with Bootstrap
       var links = Array.from(doc.querySelectorAll('a'));
       for (var i = 0; i < links.length; i++) {
@@ -314,7 +390,7 @@
           links[i].setAttribute('rel', 'noopener noreferrer');
         }
       }
-      
+
       // Add Bootstrap badge class to inline code
       var inlineCodes = Array.from(doc.querySelectorAll('code'));
       for (var i = 0; i < inlineCodes.length; i++) {
@@ -323,18 +399,18 @@
           inlineCodes[i].className = 'badge';
         }
       }
-      
+
       return doc.body.innerHTML;
     }
-    
+
     // Validate URL to prevent XSS attacks
     function isSafeUrl(url) {
       if (!url) return false;
       var trimmedUrl = url.trim().toLowerCase();
       // Only allow http, https, and relative URLs
       // Block javascript:, data:, vbscript:, file:, etc.
-      return trimmedUrl.startsWith('http://') || 
-             trimmedUrl.startsWith('https://') || 
+      return trimmedUrl.startsWith('http://') ||
+             trimmedUrl.startsWith('https://') ||
              trimmedUrl.startsWith('/') ||
              trimmedUrl.startsWith('./') ||
              trimmedUrl.startsWith('../') ||
@@ -402,12 +478,30 @@
         return;
       }
 
+      // Check if only text/plain is available
+      if (event.clipboardData.types.includes('text/plain') && !event.clipboardData.types.includes('text/html')) {
+        var plainText = event.clipboardData.getData('text/plain');
+        console.log('Plain text only:', plainText);
+
+        // Apply plain text processing rules
+        plainText = applyPlainTextRules(plainText);
+        console.log('After processing:', plainText);
+
+        insert(output, plainText);
+        wrapper.classList.remove('hidden');
+        output.focus();
+        output.select();
+        updatePreview();
+        event.preventDefault();
+        return;
+      }
+
       // Normal HTML
       var html = event.clipboardData.getData('text/html');
 
       // delete p tag inside li tag, including any attributes defined in p tag and li tag
       html = html.replace(/<li([^>]*)>\s*<p([^>]*)>(.*?)<\/p>\s*<\/li>/g, '<li>$3</li>');
-      
+
       // Normalize br tags from Excel (may have whitespace or newlines)
       // This ensures <br> tags are properly formatted for HTML parsing
       html = html.replace(/<br\s*\/>/gi, '<br>');
@@ -437,7 +531,7 @@
       wrapper.classList.add('hidden');
       info.classList.remove('hidden');
     }
-    
+
     // Alt+1: Switch to Edit mode
     if (event.altKey && event.key === '1') {
       event.preventDefault();
@@ -446,7 +540,7 @@
         editButton.click();
       }
     }
-    
+
     // Alt+2: Switch to Preview mode
     if (event.altKey && event.key === '2') {
       event.preventDefault();
