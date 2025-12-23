@@ -231,6 +231,14 @@
         preview.innerHTML = '<p style="color: #999;">沒有內容可預覽</p>';
       }
     }
+
+    // Monitor output changes and update preview if preview tab is active
+    output.addEventListener('input', function() {
+      var previewTab = document.getElementById('preview-tab');
+      if (previewTab.classList.contains('active')) {
+        updatePreview();
+      }
+    });
     
     // Sanitize HTML and add Bootstrap classes
     function sanitizeHtml(html) {
@@ -346,6 +354,7 @@
         wrapper.classList.remove('hidden');
         output.focus();
         output.select();
+        updatePreview();
         event.preventDefault();
         return;
       }
@@ -366,6 +375,7 @@
         wrapper.classList.remove('hidden');
         output.focus();
         output.select();
+        updatePreview();
         event.preventDefault();
         return;
       }
@@ -389,6 +399,7 @@
       wrapper.classList.remove('hidden');
       output.focus();
       output.select();
+      updatePreview();
 
       event.preventDefault();
     });
