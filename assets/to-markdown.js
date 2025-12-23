@@ -255,9 +255,12 @@ function cell (content, node) {
   var index = Array.prototype.indexOf.call(node.parentNode.childNodes, node)
   var prefix = ' '
   if (index === 0) prefix = '| '
-  // Trim leading/trailing whitespace and replace internal newlines with space
-  // This handles cases where block elements like <p> are inside table cells
-  content = content.trim().replace(/\s*\n\s*/g, ' ')
+  // Trim leading/trailing whitespace
+  content = content.trim()
+  // Replace any remaining newlines with <br>
+  content = content.replace(/\s*\n\s*/g, '<br>')
+  // Clean up whitespace around <br> tags
+  content = content.replace(/\s*<br>\s*/g, '<br>')
   return prefix + content + ' |'
 }
 
@@ -266,7 +269,18 @@ var highlightRegEx = /highlight highlight-(\S+)/
 module.exports = [
   {
     filter: 'br',
-    replacement: function () {
+    replacement: function (content, node) {
+      // Check if br is inside a table cell (td or th)
+      var parent = node.parentNode
+      while (parent) {
+        if (parent.nodeName === 'TD' || parent.nodeName === 'TH') {
+          return '<br>'
+        }
+        if (parent.nodeName === 'TABLE') {
+          break
+        }
+        parent = parent.parentNode
+      }
       return '\n'
     }
   },
