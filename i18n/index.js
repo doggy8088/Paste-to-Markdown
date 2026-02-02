@@ -1,7 +1,7 @@
 'use strict';
 
 (function() {
-  var i18n = window.i18n || {};
+  const i18n = window.i18n || {};
   window.i18n = i18n;
 
   i18n.currentLang = function() {
