@@ -23,6 +23,7 @@
     if (!window.i18nLocales || !window.i18nLocales[lang]) lang = 'en';
     localStorage.setItem('preferred-lang', lang);
     document.documentElement.lang = lang;
+    i18n.updatePage();
     document.dispatchEvent(new CustomEvent('languageChange', { detail: { lang: lang } }));
   };
 
