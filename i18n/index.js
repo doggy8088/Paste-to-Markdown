@@ -35,7 +35,7 @@
 
   i18n.updatePage = function() {
     document.querySelectorAll('[data-i18n]').forEach(function(el) {
-      el.textContent = i18n.t(el.getAttribute('data-i18n'));
+      el.innerHTML = i18n.t(el.getAttribute('data-i18n'));
     });
     document.querySelectorAll('[data-i18n-placeholder]').forEach(function(el) {
       el.setAttribute('placeholder', i18n.t(el.getAttribute('data-i18n-placeholder')));
