@@ -2,7 +2,6 @@
 
 window.i18nLocales = window.i18nLocales || {};
 window.i18nLocales.tr = {
-  title: 'Markdown\'e Yapıştır',
   subtitle: 'Kullanım şekli',
   step1: 'Herhangi bir web sayfasından <code>Ctrl+C</code> veya <code>⌘+C</code> ile içerik kopyalayın',
   step2: 'Bu sayfada <code>Ctrl+V</code> veya <code>⌘+V</code> tuşlarına basarak yapıştırın',
