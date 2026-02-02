@@ -88,6 +88,33 @@
             border-radius: 4px;
         }
 
+        .language-selector {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+        }
+
+        #lang-select {
+            padding: 5px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            background: white;
+            color: #333;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        #lang-select:hover {
+            border-color: #007bff;
+        }
+
+        #lang-select:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+        }
+
         @media (prefers-color-scheme: dark) {
             body {
                 background-image: url('assets/background-dark.svg');
@@ -168,6 +195,27 @@
                 border: 1px solid #444;
                 color: #e0e0e0;
             }
+
+            /* Dark mode language selector styles */
+            #lang-select {
+                background: #2a2a2a;
+                color: #e0e0e0;
+                border-color: #555;
+            }
+
+            #lang-select:hover {
+                border-color: #007bff;
+            }
+
+            #lang-select:focus {
+                border-color: #007bff;
+                box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.2);
+            }
+
+            #lang-select option {
+                background: #2a2a2a;
+                color: #e0e0e0;
+            }
         }
     </style>
 </head>
@@ -203,8 +251,8 @@
         </section>
     </div>
 
-    <div class="language-selector" style="position: fixed; top: 10px; right: 10px; z-index: 1000;">
-        <select id="lang-select" style="padding: 5px; border-radius: 4px;">
+    <div class="language-selector">
+        <select id="lang-select">
             <option value="en">English</option>
             <option value="tr">Türkçe</option>
             <option value="zh">中文</option>
