@@ -8,11 +8,14 @@
     var saved = localStorage.getItem('preferred-lang');
     if (saved && window.i18nLocales && window.i18nLocales[saved]) return saved;
 
-    var browserLang = navigator.language || navigator.userLanguage;
-    var shortLang = browserLang ? browserLang.split('-')[0] : 'en';
+    var browserLang = (navigator.language || navigator.userLanguage || 'en').toLowerCase();
+    var shortLang = browserLang.split('-')[0];
+
+    if (window.i18nLocales && window.i18nLocales[browserLang]) {
+      return browserLang;
+    }
 
     if (window.i18nLocales && window.i18nLocales[shortLang]) {
-      localStorage.setItem('preferred-lang', shortLang);
       return shortLang;
     }
 
@@ -44,8 +47,12 @@
 
   i18n.init = function() {
     var langSelect = document.getElementById('lang-select');
+    var currentLang = i18n.currentLang();
+    
+    document.documentElement.lang = currentLang;
+
     if (langSelect) {
-      langSelect.value = i18n.currentLang();
+      langSelect.value = currentLang;
       langSelect.addEventListener('change', function() {
         i18n.setLanguage(this.value);
       });
