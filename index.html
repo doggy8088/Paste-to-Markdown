@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
@@ -88,6 +88,33 @@
             border-radius: 4px;
         }
 
+        .language-selector {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+        }
+
+        #lang-select {
+            padding: 5px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            background: white;
+            color: #333;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        #lang-select:hover {
+            border-color: #007bff;
+        }
+
+        #lang-select:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+        }
+
         @media (prefers-color-scheme: dark) {
             body {
                 background-image: url('assets/background-dark.svg');
@@ -168,6 +195,27 @@
                 border: 1px solid #444;
                 color: #e0e0e0;
             }
+
+            /* Dark mode language selector styles */
+            #lang-select {
+                background: #2a2a2a;
+                color: #e0e0e0;
+                border-color: #555;
+            }
+
+            #lang-select:hover {
+                border-color: #007bff;
+            }
+
+            #lang-select:focus {
+                border-color: #007bff;
+                box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.2);
+            }
+
+            #lang-select option {
+                background: #2a2a2a;
+                color: #e0e0e0;
+            }
         }
     </style>
 </head>
@@ -176,26 +224,26 @@
     <div class="container">
         <section id="info">
             <h1>Paste to Markdown</h1>
-            <h2>使用方式</h2>
+            <h2 data-i18n="subtitle">How to use</h2>
             <ol>
-                <li>在任意網頁透過 <code>Ctrl+C</code> 或 <code>⌘+C</code> 複製內容下來</li>
-                <li>在這個網頁按下 <code>Ctrl+V</code> 或 <code>⌘+V</code> 貼上剪貼簿內容</li>
-                <li>接著你就會得到一份完整的 Markdown 文件，直接按下 <code>Ctrl+C</code> 或 <code>⌘+C</code> 就能複製回去用！</li>
-                <li>按下 <code>Escape</code> 可以重設狀態</li>
-                <li>按下 <code>Alt+1</code> 切換到編輯模式，<code>Alt+2</code> 切換到預覽模式</li>
+                <li data-i18n="step1">Copy content from any webpage using <code>Ctrl+C</code> or <code>⌘+C</code></li>
+                <li data-i18n="step2">Press <code>Ctrl+V</code> or <code>⌘+V</code> on this page to paste clipboard content</li>
+                <li data-i18n="step3">You will get a complete Markdown document, press <code>Ctrl+C</code> or <code>⌘+C</code> to copy it back</li>
+                <li data-i18n="step4">Press <code>Escape</code> to reset</li>
+                <li data-i18n="step5">Press <code>Alt+1</code> to switch to edit mode, <code>Alt+2</code> to switch to preview mode</li>
             </ol>
-            <p>本轉換器基於 <a href="https://github.com/domchristie/to-markdown">to-markdown</a> 進行轉換，所有資料都不會傳送到後端，請安心使用。</p>
-            <p>網頁樣式取自 <a href="https://euangoddard.github.io/clipboard2markdown/">Paste to Markdown</a> 網頁，並修正些許錯誤。</p>
-            <p>本網頁原始碼位於 <a href="https://github.com/doggy8088/Paste-to-Markdown">https://github.com/doggy8088/Paste-to-Markdown</a>，歡迎到 <a href="https://github.com/doggy8088/Paste-to-Markdown/issues">Issues</a> 討論或提供建議！</p>
+            <p><span data-i18n="basedOn">This converter is based on</span> <a href="https://github.com/domchristie/to-markdown">to-markdown</a><span data-i18n="basedOnAfter">. All data is processed locally, nothing is sent to any server.</span></p>
+            <p><span data-i18n="styleFrom">Style adapted from</span> <a href="https://euangoddard.github.io/clipboard2markdown/">Paste to Markdown</a><span data-i18n="styleFromAfter">.</span></p>
+            <p><span data-i18n="sourceCode">Source code available at</span> <a href="https://github.com/doggy8088/Paste-to-Markdown">https://github.com/doggy8088/Paste-to-Markdown</a><span data-i18n="feedbackPre">, </span><a href="https://github.com/doggy8088/Paste-to-Markdown/issues" data-i18n="issues">Issues</a><span data-i18n="feedbackPost">.</span></p>
         </section>
         <div contenteditable="true" id="pastebin"></div>
         <section class="hidden" id="wrapper">
             <div class="tabs">
-                <button class="tab-button active" data-tab="edit">編輯</button>
-                <button class="tab-button" data-tab="preview">預覽</button>
+                <button class="tab-button active" data-tab="edit" data-i18n="tabEdit">Edit</button>
+                <button class="tab-button" data-tab="preview" data-i18n="tabPreview">Preview</button>
             </div>
             <div class="tab-content active" id="edit-tab">
-                <textarea id="output"></textarea>
+                <textarea id="output" data-i18n-placeholder="placeholder"></textarea>
             </div>
             <div class="tab-content" id="preview-tab">
                 <div id="preview"></div>
@@ -203,10 +251,28 @@
         </section>
     </div>
 
+    <div class="language-selector">
+        <select id="lang-select">
+            <option value="en">English</option>
+            <option value="tr">Türkçe</option>
+            <option value="zh">中文</option>
+        </select>
+    </div>
+
 
 <script src="vendor/turndown/dist/turndown.js"></script>
 <script src="vendor/turndown-plugin-gfm/dist/turndown-plugin-gfm.js"></script>
 <script src="vendor/marked/marked.min.js"></script>
+
+<script src="./i18n/en.js"></script>
+<script src="./i18n/tr.js"></script>
+<script src="./i18n/zh.js"></script>
+<script src="./i18n/index.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    if (window.i18n) window.i18n.init();
+  });
+</script>
 
 <script src="./assets/to-markdown.js"></script>
 <script src="./assets/clipboard2markdown.js"></script>
