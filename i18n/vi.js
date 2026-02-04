@@ -18,5 +18,6 @@ window.i18nLocales.vi = {
   feedbackPost: '.',
   tabEdit: 'Chỉnh sửa',
   tabPreview: 'Xem trước',
-  placeholder: 'Dán nội dung vào đây...'
+  placeholder: 'Dán nội dung vào đây...',
+  noPreview: 'Không có nội dung để xem trước'
 };

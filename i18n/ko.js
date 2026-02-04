@@ -18,5 +18,6 @@ window.i18nLocales.ko = {
   feedbackPost: '.',
   tabEdit: '편집',
   tabPreview: '미리보기',
-  placeholder: '여기에 내용을 붙여넣으세요...'
+  placeholder: '여기에 내용을 붙여넣으세요...',
+  noPreview: '미리 볼 내용이 없습니다'
 };

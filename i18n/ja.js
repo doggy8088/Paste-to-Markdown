@@ -18,5 +18,6 @@ window.i18nLocales.ja = {
   feedbackPost: '。',
   tabEdit: '編集',
   tabPreview: 'プレビュー',
-  placeholder: 'ここにコンテンツを貼り付け...'
+  placeholder: 'ここにコンテンツを貼り付け...',
+  noPreview: 'プレビューする内容がありません'
 };

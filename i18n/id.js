@@ -18,5 +18,6 @@ window.i18nLocales.id = {
   feedbackPost: '.',
   tabEdit: 'Edit',
   tabPreview: 'Pratinjau',
-  placeholder: 'Tempel konten di sini...'
+  placeholder: 'Tempel konten di sini...',
+  noPreview: 'Tidak ada konten untuk pratinjau'
 };

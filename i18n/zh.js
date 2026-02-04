@@ -18,5 +18,6 @@ window.i18nLocales.zh = {
   feedbackPost: ' 討論或提供建議！',
   tabEdit: '編輯',
   tabPreview: '預覽',
-  placeholder: '貼上內容...'
+  placeholder: '貼上內容...',
+  noPreview: '沒有內容可預覽'
 };

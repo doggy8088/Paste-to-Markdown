@@ -18,5 +18,6 @@ window.i18nLocales.hi = {
   feedbackPost: '.',
   tabEdit: 'संपादित करें',
   tabPreview: 'पूर्वावलोकन',
-  placeholder: 'सामग्री यहाँ पेस्ट करें...'
+  placeholder: 'सामग्री यहाँ पेस्ट करें...',
+  noPreview: 'पूर्वावलोकन के लिए कोई सामग्री नहीं है'
 };

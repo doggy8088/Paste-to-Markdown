@@ -18,5 +18,6 @@ window.i18nLocales['zh-cn'] = {
   feedbackPost: ' 讨论或提供建议！',
   tabEdit: '编辑',
   tabPreview: '预览',
-  placeholder: '粘贴内容...'
+  placeholder: '粘贴内容...',
+  noPreview: '没有内容可预览'
 };

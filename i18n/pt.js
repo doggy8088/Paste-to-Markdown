@@ -18,5 +18,6 @@ window.i18nLocales.pt = {
   feedbackPost: '.',
   tabEdit: 'Editar',
   tabPreview: 'Visualizar',
-  placeholder: 'Cole o conteúdo aqui...'
+  placeholder: 'Cole o conteúdo aqui...',
+  noPreview: 'Nenhum conteúdo para visualizar'
 };

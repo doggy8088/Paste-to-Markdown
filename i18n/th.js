@@ -18,5 +18,6 @@ window.i18nLocales.th = {
   feedbackPost: '.',
   tabEdit: 'แก้ไข',
   tabPreview: 'ตัวอย่าง',
-  placeholder: 'วางเนื้อหาที่นี่...'
+  placeholder: 'วางเนื้อหาที่นี่...',
+  noPreview: 'ไม่มีเนื้อหาที่จะแสดงตัวอย่าง'
 };

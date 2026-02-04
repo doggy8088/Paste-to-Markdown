@@ -18,5 +18,6 @@ window.i18nLocales.ru = {
   feedbackPost: '.',
   tabEdit: 'Редактировать',
   tabPreview: 'Просмотр',
-  placeholder: 'Вставьте содержимое сюда...'
+  placeholder: 'Вставьте содержимое сюда...',
+  noPreview: 'Нет контента для предпросмотра'
 };

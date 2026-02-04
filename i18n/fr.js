@@ -18,6 +18,7 @@ window.i18nLocales.fr = {
   feedbackPost: '.',
   tabEdit: 'Éditer',
   tabPreview: 'Aperçu',
-  placeholder: 'Collez le contenu ici...'
+  placeholder: 'Collez le contenu ici...',
+  noPreview: 'Pas de contenu à prévisualiser'
 };
 
