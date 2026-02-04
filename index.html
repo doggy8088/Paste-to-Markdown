@@ -212,10 +212,19 @@
                 box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.2);
             }
 
-            #lang-select option {
+        #lang-select option {
                 background: #2a2a2a;
                 color: #e0e0e0;
             }
+        }
+
+        [dir="rtl"] body {
+            background-position: left 10% bottom 20%;
+        }
+
+        [dir="rtl"] .language-selector {
+            right: auto;
+            left: 10px;
         }
     </style>
 </head>
@@ -253,6 +262,7 @@
 
     <div class="language-selector">
         <select id="lang-select">
+            <option value="ar">العربية</option>
             <option value="id">Bahasa Indonesia</option>
             <option value="en">English</option>
             <option value="es">Español</option>
@@ -276,6 +286,7 @@
 <script src="vendor/marked/marked.min.js"></script>
 
 <script src="./i18n/en.js"></script>
+<script src="./i18n/ar.js"></script>
 <script src="./i18n/tr.js"></script>
 <script src="./i18n/zh.js"></script>
 <script src="./i18n/zh-cn.js"></script>

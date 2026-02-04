@@ -26,6 +26,7 @@
     if (!window.i18nLocales || !window.i18nLocales[lang]) lang = 'en';
     localStorage.setItem('preferred-lang', lang);
     document.documentElement.lang = lang;
+    document.documentElement.dir = (lang === 'ar' ? 'rtl' : 'ltr');
     i18n.updatePage();
     document.dispatchEvent(new CustomEvent('languageChange', { detail: { lang: lang } }));
   };
@@ -50,6 +51,7 @@
     var currentLang = i18n.currentLang();
     
     document.documentElement.lang = currentLang;
+    document.documentElement.dir = (currentLang === 'ar' ? 'rtl' : 'ltr');
 
     if (langSelect) {
       langSelect.value = currentLang;

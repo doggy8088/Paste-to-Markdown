@@ -18,5 +18,6 @@ window.i18nLocales.en = {
   feedbackPost: '.',
   tabEdit: 'Edit',
   tabPreview: 'Preview',
-  placeholder: 'Paste content here...'
+  placeholder: 'Paste content here...',
+  noPreview: 'No content to preview'
 };

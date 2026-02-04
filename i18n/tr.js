@@ -18,5 +18,6 @@ window.i18nLocales.tr = {
   feedbackPost: '.',
   tabEdit: 'Düzenle',
   tabPreview: 'Önizleme',
-  placeholder: 'İçeriği buraya yapıştırın...'
+  placeholder: 'İçeriği buraya yapıştırın...',
+  noPreview: 'Önizlenecek içerik yok'
 };
