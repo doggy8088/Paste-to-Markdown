@@ -2,6 +2,7 @@
 
 window.i18nLocales = window.i18nLocales || {};
 window.i18nLocales.ko = {
+  localeName: '한국어',
   subtitle: '사용 방법',
   step1: '웹페이지의 내용을 <code>Ctrl+C</code> 또는 <code>⌘+C</code>로 복사하세요',
   step2: '이 페이지에서 <code>Ctrl+V</code> 또는 <code>⌘+V</code>를 눌러 내용을 붙여넣으세요',

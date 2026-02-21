@@ -2,6 +2,7 @@
 
 window.i18nLocales = window.i18nLocales || {};
 window.i18nLocales.th = {
+  localeName: 'ไทย',
   subtitle: 'วิธีใช้งาน',
   step1: 'คัดลอกเนื้อหาจากหน้าเว็บใดก็ได้โดยใช้ <code>Ctrl+C</code> หรือ <code>⌘+C</code>',
   step2: 'กด <code>Ctrl+V</code> หรือ <code>⌘+V</code> ในหน้านี้เพื่อวางเนื้อหา',

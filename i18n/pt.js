@@ -2,6 +2,7 @@
 
 window.i18nLocales = window.i18nLocales || {};
 window.i18nLocales.pt = {
+  localeName: 'Português',
   subtitle: 'Como usar',
   step1: 'Copie o conteúdo de qualquer página web usando <code>Ctrl+C</code> ou <code>⌘+C</code>',
   step2: 'Pressione <code>Ctrl+V</code> ou <code>⌘+V</code> nesta página para colar o conteúdo',

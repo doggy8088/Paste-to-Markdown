@@ -2,6 +2,7 @@
 
 window.i18nLocales = window.i18nLocales || {};
 window.i18nLocales.ar = {
+  localeName: 'العربية',
   subtitle: 'كيفية الاستخدام',
   step1: 'انسخ المحتوى من أي صفحة ويب باستخدام <code>Ctrl+C</code> أو <code>⌘+C</code>',
   step2: 'اضغط على <code>Ctrl+V</code> أو <code>⌘+V</code> في هذه الصفحة للصق محتوى الحافظة',

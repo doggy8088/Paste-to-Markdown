@@ -2,6 +2,7 @@
 
 window.i18nLocales = window.i18nLocales || {};
 window.i18nLocales['zh-cn'] = {
+  localeName: '简体中文',
   subtitle: '使用方式',
   step1: '在任意网页通过 <code>Ctrl+C</code> 或 <code>⌘+C</code> 复制内容下来',
   step2: '在这个网页按下 <code>Ctrl+V</code> 或 <code>⌘+V</code> 粘贴剪贴板内容',

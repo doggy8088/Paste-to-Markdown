@@ -2,6 +2,7 @@
 
 window.i18nLocales = window.i18nLocales || {};
 window.i18nLocales.id = {
+  localeName: 'Bahasa Indonesia',
   subtitle: 'Cara penggunaan',
   step1: 'Salin konten dari halaman web mana pun menggunakan <code>Ctrl+C</code> atau <code>⌘+C</code>',
   step2: 'Tekan <code>Ctrl+V</code> atau <code>⌘+V</code> di halaman ini untuk menempelkan konten',

@@ -2,6 +2,7 @@
 
 window.i18nLocales = window.i18nLocales || {};
 window.i18nLocales.vi = {
+  localeName: 'Tiếng Việt',
   subtitle: 'Cách sử dụng',
   step1: 'Sao chép nội dung từ bất kỳ trang web nào bằng <code>Ctrl+C</code> hoặc <code>⌘+C</code>',
   step2: 'Nhấn <code>Ctrl+V</code> hoặc <code>⌘+V</code> trên trang này để dán nội dung',

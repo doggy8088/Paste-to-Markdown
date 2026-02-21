@@ -2,6 +2,7 @@
 
 window.i18nLocales = window.i18nLocales || {};
 window.i18nLocales.ru = {
+  localeName: 'Русский',
   subtitle: 'Как использовать',
   step1: 'Скопируйте содержимое с любой веб-страницы используя <code>Ctrl+C</code> или <code>⌘+C</code>',
   step2: 'Нажмите <code>Ctrl+V</code> или <code>⌘+V</code> на этой странице, чтобы вставить содержимое',

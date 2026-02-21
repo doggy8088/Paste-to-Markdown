@@ -2,6 +2,7 @@
 
 window.i18nLocales = window.i18nLocales || {};
 window.i18nLocales.zh = {
+  localeName: '繁體中文',
   subtitle: '使用方式',
   step1: '在任意網頁透過 <code>Ctrl+C</code> 或 <code>⌘+C</code> 複製內容下來',
   step2: '在這個網頁按下 <code>Ctrl+V</code> 或 <code>⌘+V</code> 貼上剪貼簿內容',
