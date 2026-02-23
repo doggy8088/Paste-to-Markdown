@@ -26,6 +26,7 @@
     if (!window.i18nLocales || !window.i18nLocales[lang]) lang = 'en';
     localStorage.setItem('preferred-lang', lang);
     document.documentElement.lang = lang;
+    document.documentElement.dir = (lang === 'ar' ? 'rtl' : 'ltr');
     i18n.updatePage();
     document.dispatchEvent(new CustomEvent('languageChange', { detail: { lang: lang } }));
   };
@@ -48,16 +49,41 @@
   i18n.init = function() {
     var langSelect = document.getElementById('lang-select');
     var currentLang = i18n.currentLang();
-    
+
     document.documentElement.lang = currentLang;
+    document.documentElement.dir = (currentLang === 'ar' ? 'rtl' : 'ltr');
 
     if (langSelect) {
-      langSelect.value = currentLang;
+      // Dynamically generate and sort language options
+      i18n.populateLanguageSelector(langSelect, currentLang);
       langSelect.addEventListener('change', function() {
         i18n.setLanguage(this.value);
       });
     }
     i18n.updatePage();
+  };
+
+  i18n.populateLanguageSelector = function(selectElement, currentLang) {
+    selectElement.innerHTML = '';
+    var locales = window.i18nLocales || {};
+    var langCodes = Object.keys(locales);
+
+    // Sort by localeName (case-insensitive)
+    langCodes.sort(function(a, b) {
+      var nameA = (locales[a] && locales[a].localeName) || '';
+      var nameB = (locales[b] && locales[b].localeName) || '';
+      return nameA.localeCompare(nameB, 'en', { sensitivity: 'base' });
+    });
+
+    langCodes.forEach(function(code) {
+      var option = document.createElement('option');
+      option.value = code;
+      option.textContent = locales[code].localeName || code;
+      if (code === currentLang) {
+        option.selected = true;
+      }
+      selectElement.appendChild(option);
+    });
   };
 
   document.addEventListener('DOMContentLoaded', function() {

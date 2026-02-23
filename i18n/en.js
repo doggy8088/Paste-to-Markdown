@@ -2,6 +2,7 @@
 
 window.i18nLocales = window.i18nLocales || {};
 window.i18nLocales.en = {
+  localeName: 'English',
   subtitle: 'How to use',
   step1: 'Copy content from any webpage using <code>Ctrl+C</code> or <code>⌘+C</code>',
   step2: 'Press <code>Ctrl+V</code> or <code>⌘+V</code> on this page to paste clipboard content',
@@ -18,5 +19,6 @@ window.i18nLocales.en = {
   feedbackPost: '.',
   tabEdit: 'Edit',
   tabPreview: 'Preview',
-  placeholder: 'Paste content here...'
+  placeholder: 'Paste content here...',
+  noPreview: 'No content to preview'
 };

@@ -2,6 +2,7 @@
 
 window.i18nLocales = window.i18nLocales || {};
 window.i18nLocales.tr = {
+  localeName: 'Türkçe',
   subtitle: 'Kullanım şekli',
   step1: 'Herhangi bir web sayfasından <code>Ctrl+C</code> veya <code>⌘+C</code> ile içerik kopyalayın',
   step2: 'Bu sayfada <code>Ctrl+V</code> veya <code>⌘+V</code> tuşlarına basarak yapıştırın',
@@ -18,5 +19,6 @@ window.i18nLocales.tr = {
   feedbackPost: '.',
   tabEdit: 'Düzenle',
   tabPreview: 'Önizleme',
-  placeholder: 'İçeriği buraya yapıştırın...'
+  placeholder: 'İçeriği buraya yapıştırın...',
+  noPreview: 'Önizlenecek içerik yok'
 };

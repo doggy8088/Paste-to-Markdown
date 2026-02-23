@@ -2,6 +2,7 @@
 
 window.i18nLocales = window.i18nLocales || {};
 window.i18nLocales.fr = {
+  localeName: 'Français',
   subtitle: 'Comment utiliser',
   step1: 'Copiez le contenu de n\'importe quelle page Web à l\'aide de <code>Ctrl+C</code> ou <code>⌘+C</code>',
   step2: 'Appuyez sur <code>Ctrl+V</code> ou <code>⌘+V</code> sur cette page pour coller le contenu',
@@ -18,6 +19,7 @@ window.i18nLocales.fr = {
   feedbackPost: '.',
   tabEdit: 'Éditer',
   tabPreview: 'Aperçu',
-  placeholder: 'Collez le contenu ici...'
+  placeholder: 'Collez le contenu ici...',
+  noPreview: 'Pas de contenu à prévisualiser'
 };
 

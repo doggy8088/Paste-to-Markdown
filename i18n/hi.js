@@ -2,6 +2,7 @@
 
 window.i18nLocales = window.i18nLocales || {};
 window.i18nLocales.hi = {
+  localeName: 'हिन्दी',
   subtitle: 'उपयोग कैसे करें',
   step1: 'किसी भी वेबपेज से सामग्री कॉपी करने के लिए <code>Ctrl+C</code> या <code>⌘+C</code> का उपयोग करें',
   step2: 'क्लिपबोर्ड सामग्री पेस्ट करने के लिए इस पृष्ठ पर <code>Ctrl+V</code> या <code>⌘+V</code> दबाएं',
@@ -18,5 +19,6 @@ window.i18nLocales.hi = {
   feedbackPost: '.',
   tabEdit: 'संपादित करें',
   tabPreview: 'पूर्वावलोकन',
-  placeholder: 'सामग्री यहाँ पेस्ट करें...'
+  placeholder: 'सामग्री यहाँ पेस्ट करें...',
+  noPreview: 'पूर्वावलोकन के लिए कोई सामग्री नहीं है'
 };

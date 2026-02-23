@@ -2,6 +2,7 @@
 
 window.i18nLocales = window.i18nLocales || {};
 window.i18nLocales.id = {
+  localeName: 'Bahasa Indonesia',
   subtitle: 'Cara penggunaan',
   step1: 'Salin konten dari halaman web mana pun menggunakan <code>Ctrl+C</code> atau <code>⌘+C</code>',
   step2: 'Tekan <code>Ctrl+V</code> atau <code>⌘+V</code> di halaman ini untuk menempelkan konten',
@@ -18,5 +19,6 @@ window.i18nLocales.id = {
   feedbackPost: '.',
   tabEdit: 'Edit',
   tabPreview: 'Pratinjau',
-  placeholder: 'Tempel konten di sini...'
+  placeholder: 'Tempel konten di sini...',
+  noPreview: 'Tidak ada konten untuk pratinjau'
 };

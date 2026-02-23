@@ -2,6 +2,7 @@
 
 window.i18nLocales = window.i18nLocales || {};
 window.i18nLocales.ja = {
+  localeName: '日本語',
   subtitle: '使い方',
   step1: '任意のWebページから <code>Ctrl+C</code> または <code>⌘+C</code> でコンテンツをコピーします',
   step2: 'このページで <code>Ctrl+V</code> または <code>⌘+V</code> を押して貼り付けます',
@@ -18,5 +19,6 @@ window.i18nLocales.ja = {
   feedbackPost: '。',
   tabEdit: '編集',
   tabPreview: 'プレビュー',
-  placeholder: 'ここにコンテンツを貼り付け...'
+  placeholder: 'ここにコンテンツを貼り付け...',
+  noPreview: 'プレビューする内容がありません'
 };

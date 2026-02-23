@@ -326,9 +326,17 @@
 
         preview.innerHTML = html;
       } else {
-        preview.innerHTML = '<p style="color: #999;">沒有內容可預覽</p>';
+        preview.innerHTML = '<p style="color: #999;">' + (window.i18n ? i18n.t('noPreview') : 'No content to preview') + '</p>';
       }
     }
+
+    // Update preview when language changes
+    document.addEventListener('languageChange', function() {
+      var previewTab = document.getElementById('preview-tab');
+      if (previewTab.classList.contains('active')) {
+        updatePreview();
+      }
+    });
 
     // Monitor output changes and update preview if preview tab is active
     output.addEventListener('input', function() {
