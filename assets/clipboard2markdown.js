@@ -172,6 +172,7 @@
   }
 
   var convertWordUnorderedListPlainText = function (text) {
+    // Word copies Symbol-font bullets as private-use characters in text/plain.
     var bulletLevels = {
       '\uf06c': 0,
       '\uf06e': 1
@@ -180,19 +181,20 @@
     var convertedLines = [];
     var matched = false;
 
-    for (var i = 0; i < lines.length; i++) {
-      if (lines[i].trim() === '') {
+    for (var lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+      if (lines[lineIndex].trim() === '') {
         convertedLines.push('');
         continue;
       }
 
-      var match = lines[i].match(/^\s*([\uf06c\uf06e])[\t ]+(.+?)\s*$/);
+      var match = lines[lineIndex].match(/^\s*([\uf06c\uf06e])[\t ]+(.+?)\s*$/);
       if (!match) {
         return null;
       }
 
       matched = true;
-      convertedLines.push(Array((bulletLevels[match[1]] * 2) + 1).join(' ') + '- ' + match[2]);
+      var indentation = ' '.repeat(bulletLevels[match[1]] * 2);
+      convertedLines.push(indentation + '- ' + match[2]);
     }
 
     return matched ? convertedLines.join('\n') : null;
