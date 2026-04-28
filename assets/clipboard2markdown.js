@@ -171,6 +171,8 @@
     return escape(toMarkdown(str, { converters: pandoc, gfm: true }));
   }
 
+  var WORD_LIST_INDENT_SPACES = 2;
+
   var convertWordUnorderedListPlainText = function (text) {
     // Word copies Symbol-font bullets as private-use characters in text/plain.
     var bulletLevels = {
@@ -193,7 +195,7 @@
       }
 
       matched = true;
-      var indentation = ' '.repeat(bulletLevels[match[1]] * 2);
+      var indentation = ' '.repeat(bulletLevels[match[1]] * WORD_LIST_INDENT_SPACES);
       convertedLines.push(indentation + '- ' + match[2]);
     }
 
@@ -507,8 +509,12 @@
       // Word HTML '<w:WordDocument>'
       if (event.clipboardData.types.includes('text/rtf') && event.clipboardData.types.includes('text/html')) {
         var html = event.clipboardData.getData('text/html');
-        var plainTextList = event.clipboardData.types.includes('text/plain') ?
-          convertWordUnorderedListPlainText(event.clipboardData.getData('text/plain')) : null;
+        var plainTextList = null;
+        if (event.clipboardData.types.includes('text/plain')) {
+          var wordPlainText = event.clipboardData.getData('text/plain');
+          plainTextList = /[\uf06c\uf06e]/.test(wordPlainText) ?
+            convertWordUnorderedListPlainText(wordPlainText) : null;
+        }
         console.log('Both text/rtf and text/html:', html);
         var markdown = plainTextList !== null ? plainTextList : turndownService.turndown(html).trim();
         if (plainTextList === null) {
