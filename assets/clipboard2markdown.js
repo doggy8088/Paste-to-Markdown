@@ -172,6 +172,7 @@
   }
 
   var WORD_LIST_INDENT_SPACES = 2;
+  var WORD_LIST_INDENT_PT_PER_LEVEL = 24;
 
   var convertWordUnorderedListPlainText = function (text) {
     // Word copies Symbol-font bullets as private-use characters in text/plain.
@@ -207,7 +208,7 @@
     var style = styleMatch ? (styleMatch[1] || styleMatch[2]) : '';
     var marginMatch = style.match(/margin-left:\s*([0-9.]+)pt/i);
     if (marginMatch) {
-      return Math.max(0, Math.round(parseFloat(marginMatch[1]) / 24) - 1);
+      return Math.max(0, Math.round(parseFloat(marginMatch[1]) / WORD_LIST_INDENT_PT_PER_LEVEL) - 1);
     }
 
     var levelMatch = style.match(/mso-list:[^;'"]*\blevel(\d+)/i);
@@ -232,7 +233,6 @@
       }
       output += '</li></ul>';
       hasOpenListItem = false;
-      currentLevel = 0;
     };
 
     var appendListItem = function (level, content) {
@@ -244,6 +244,7 @@
       }
 
       if (level > currentLevel + 1) {
+        // Normalize skipped Word levels so the generated HTML remains a valid nested list.
         level = currentLevel + 1;
       }
 
@@ -270,7 +271,9 @@
       output += html.slice(lastIndex, offset);
       lastIndex = offset + match.length;
 
-      if (!/mso-list:/i.test(openingTag) || !/mso-list:Ignore/i.test(content)) {
+      var isListParagraph = /mso-list:/i.test(openingTag);
+      var hasWordBulletMarker = /mso-list:Ignore/i.test(content);
+      if (!isListParagraph || !hasWordBulletMarker) {
         closeLists();
         output += match;
         return match;
