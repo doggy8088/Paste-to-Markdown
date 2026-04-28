@@ -202,8 +202,9 @@
     return matched ? convertedLines.join('\n') : null;
   };
 
-  var getWordHtmlListLevel = function (node) {
-    var style = node.getAttribute('style') || '';
+  var getWordHtmlListLevel = function (tag) {
+    var styleMatch = tag.match(/\sstyle=(?:"([^"]*)"|'([^']*)')/i);
+    var style = styleMatch ? (styleMatch[1] || styleMatch[2]) : '';
     var marginMatch = style.match(/margin-left:\s*([0-9.]+)pt/i);
     if (marginMatch) {
       return Math.max(0, Math.round(parseFloat(marginMatch[1]) / 24) - 1);
@@ -214,68 +215,77 @@
   };
 
   var normalizeWordHtmlLists = function (html) {
-    var parser = new DOMParser();
-    var doc = parser.parseFromString(html, 'text/html');
-    var body = doc.querySelector('body');
-    if (!body) {
-      return html;
-    }
-    var listStack = [];
-    var lastItems = [];
+    var paragraphPattern = /(<p\b[^>]*>)([\s\S]*?)(<\/p>)/gi;
+    var output = '';
+    var lastIndex = 0;
+    var currentLevel = 0;
+    var hasOpenListItem = false;
 
-    Array.from(body.children).forEach(function (node) {
-      var style = node.getAttribute('style') || '';
-      var ignoredMarkers = Array.from(node.querySelectorAll('[style*="mso-list:Ignore"]'));
-      if (!/mso-list:/i.test(style) || ignoredMarkers.length === 0) {
-        listStack = [];
-        lastItems = [];
+    var closeLists = function () {
+      if (!hasOpenListItem) {
         return;
       }
 
-      var level = getWordHtmlListLevel(node);
-      if (listStack.length === 0) {
-        listStack[0] = doc.createElement('ul');
-        node.parentNode.insertBefore(listStack[0], node);
+      while (currentLevel > 0) {
+        output += '</li></ul>';
+        currentLevel--;
       }
-      if (level > listStack.length) {
-        level = listStack.length;
+      output += '</li></ul>';
+      hasOpenListItem = false;
+      currentLevel = 0;
+    };
+
+    var appendListItem = function (level, content) {
+      if (!hasOpenListItem) {
+        output += '<ul><li>' + content;
+        hasOpenListItem = true;
+        currentLevel = 0;
+        return;
       }
 
-      while (listStack.length > level + 1) {
-        listStack.pop();
-        lastItems.pop();
+      if (level > currentLevel + 1) {
+        level = currentLevel + 1;
       }
 
-      while (listStack.length <= level) {
-        var parentItem = lastItems[listStack.length - 1];
-        if (!parentItem) {
-          level = listStack.length - 1;
-          break;
-        }
-        var nestedList = doc.createElement('ul');
-        parentItem.appendChild(nestedList);
-        listStack.push(nestedList);
+      var descended = false;
+      while (level > currentLevel) {
+        output += '<ul><li>';
+        currentLevel++;
+        descended = true;
+      }
+      if (descended) {
+        output += content;
+        return;
       }
 
-      ignoredMarkers.forEach(function (marker) {
-        marker.parentNode.removeChild(marker);
-      });
-      Array.from(node.getElementsByTagName('*')).forEach(function (marker) {
-        if (marker.nodeName.toLowerCase() === 'o:p') {
-          marker.parentNode.removeChild(marker);
-        }
-      });
-
-      var listItem = doc.createElement('li');
-      while (node.firstChild) {
-        listItem.appendChild(node.firstChild);
+      while (level < currentLevel) {
+        output += '</li></ul>';
+        currentLevel--;
       }
-      listStack[level].appendChild(listItem);
-      lastItems[level] = listItem;
-      node.parentNode.removeChild(node);
+
+      output += '</li><li>' + content;
+    };
+
+    html.replace(paragraphPattern, function (match, openingTag, content, closingTag, offset) {
+      output += html.slice(lastIndex, offset);
+      lastIndex = offset + match.length;
+
+      if (!/mso-list:/i.test(openingTag) || !/mso-list:Ignore/i.test(content)) {
+        closeLists();
+        output += match;
+        return match;
+      }
+
+      var listContent = content
+        .replace(/<!\[if !supportLists\]>[\s\S]*?<!\[endif\]>/gi, '')
+        .replace(/<o:p>[\s\S]*?<\/o:p>/gi, '');
+      appendListItem(getWordHtmlListLevel(openingTag), listContent);
+      return match;
     });
 
-    return body.innerHTML;
+    closeLists();
+    output += html.slice(lastIndex);
+    return output;
   };
 
   // Plain text processing rules
