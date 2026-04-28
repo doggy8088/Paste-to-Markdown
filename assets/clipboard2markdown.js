@@ -171,8 +171,138 @@
     return escape(toMarkdown(str, { converters: pandoc, gfm: true }));
   }
 
+  var WORD_LIST_INDENT_SPACES = 2;
+  var WORD_LIST_INDENT_PT_PER_LEVEL = 24;
+
+  var convertWordUnorderedListPlainText = function (text) {
+    // Word copies Symbol-font bullets as private-use characters in text/plain.
+    var bulletLevels = {
+      '\uf06c': 0,
+      '\uf06e': 1
+    };
+    var lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+    var convertedLines = [];
+    var matched = false;
+
+    for (var lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+      if (lines[lineIndex].trim() === '') {
+        convertedLines.push('');
+        continue;
+      }
+
+      var match = lines[lineIndex].match(/^\s*([\uf06c\uf06e])[\t ]+(.+?)\s*$/);
+      if (!match) {
+        return null;
+      }
+
+      matched = true;
+      var indentation = ' '.repeat(bulletLevels[match[1]] * WORD_LIST_INDENT_SPACES);
+      convertedLines.push(indentation + '- ' + match[2]);
+    }
+
+    return matched ? convertedLines.join('\n') : null;
+  };
+
+  var getWordHtmlListLevel = function (tag) {
+    var styleMatch = tag.match(/\sstyle=(?:"([^"]*)"|'([^']*)')/i);
+    var style = styleMatch ? (styleMatch[1] || styleMatch[2]) : '';
+    var marginMatch = style.match(/margin-left:\s*([0-9.]+)pt/i);
+    if (marginMatch) {
+      return Math.max(0, Math.round(parseFloat(marginMatch[1]) / WORD_LIST_INDENT_PT_PER_LEVEL) - 1);
+    }
+
+    var levelMatch = style.match(/mso-list:[^;'"]*\blevel(\d+)/i);
+    return levelMatch ? parseInt(levelMatch[1], 10) - 1 : 0;
+  };
+
+  var normalizeWordHtmlLists = function (html) {
+    var paragraphPattern = /(<p\b[^>]*>)([\s\S]*?)(<\/p>)/gi;
+    var output = '';
+    var lastIndex = 0;
+    var currentLevel = 0;
+    var hasOpenListItem = false;
+
+    var closeLists = function () {
+      if (!hasOpenListItem) {
+        return;
+      }
+
+      while (currentLevel > 0) {
+        output += '</li></ul>';
+        currentLevel--;
+      }
+      output += '</li></ul>';
+      hasOpenListItem = false;
+    };
+
+    var appendListItem = function (level, content) {
+      if (!hasOpenListItem) {
+        output += '<ul><li>' + content;
+        hasOpenListItem = true;
+        currentLevel = 0;
+        return;
+      }
+
+      if (level > currentLevel + 1) {
+        // Normalize skipped Word levels so the generated HTML remains a valid nested list.
+        level = currentLevel + 1;
+      }
+
+      var descended = false;
+      while (level > currentLevel) {
+        output += '<ul><li>';
+        currentLevel++;
+        descended = true;
+      }
+      if (descended) {
+        output += content;
+        return;
+      }
+
+      while (level < currentLevel) {
+        output += '</li></ul>';
+        currentLevel--;
+      }
+
+      output += '</li><li>' + content;
+    };
+
+    html.replace(paragraphPattern, function (match, openingTag, content, closingTag, offset) {
+      output += html.slice(lastIndex, offset);
+      lastIndex = offset + match.length;
+
+      var isListParagraph = /mso-list:/i.test(openingTag);
+      var hasWordBulletMarker = /mso-list:Ignore/i.test(content);
+      if (!isListParagraph || !hasWordBulletMarker) {
+        closeLists();
+        output += match;
+        return match;
+      }
+
+      var listContent = content
+        .replace(/<!\[if !supportLists\]>[\s\S]*?<!\[endif\]>/gi, '')
+        .replace(/<o:p>[\s\S]*?<\/o:p>/gi, '');
+      appendListItem(getWordHtmlListLevel(openingTag), listContent);
+      return match;
+    });
+
+    closeLists();
+    output += html.slice(lastIndex);
+    return output;
+  };
+
   // Plain text processing rules
   var plainTextRules = {
+    wordUnorderedList: function (text) {
+      var markdown = convertWordUnorderedListPlainText(text);
+      if (markdown === null) {
+        return null;
+      }
+
+      console.log('Matched: Word unordered list plain text');
+      return markdown;
+    },
+
     // Copilot CLI format: first line starts with ' ● ', remaining lines start with '   ' (3 spaces)
     copilotCli: function (text) {
       var lines = text.split('\n');
@@ -468,12 +598,20 @@
       // Word HTML '<w:WordDocument>'
       if (event.clipboardData.types.includes('text/rtf') && event.clipboardData.types.includes('text/html')) {
         var html = event.clipboardData.getData('text/html');
+        var plainTextList = null;
+        if (event.clipboardData.types.includes('text/plain')) {
+          var wordPlainText = event.clipboardData.getData('text/plain');
+          plainTextList = /[\uf06c\uf06e]/.test(wordPlainText) ?
+            convertWordUnorderedListPlainText(wordPlainText) : null;
+        }
         console.log('Both text/rtf and text/html:', html);
-        var markdown = turndownService.turndown(html).trim();
-        markdown = markdown.replace(/ü/g, '  - ');
-        markdown = markdown.replace(/\.[^\S\r\n]+/g, '. ');
-        markdown = markdown.replace(/-[^\S\r\n]+/g, '- ');
-        markdown = markdown.replace(/[^\S\r\n]/g, ' ');
+        var markdown = plainTextList !== null ? plainTextList : turndownService.turndown(normalizeWordHtmlLists(html)).trim();
+        if (plainTextList === null) {
+          markdown = markdown.replace(/ü/g, '  - ');
+          markdown = markdown.replace(/\.[^\S\r\n]+/g, '. ');
+          markdown = markdown.replace(/-[^\S\r\n]+/g, '- ');
+          markdown = markdown.replace(/[^\S\r\n]/g, ' ');
+        }
 
         console.log('Markdown: ', markdown);
 
