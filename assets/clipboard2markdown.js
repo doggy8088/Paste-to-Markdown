@@ -217,6 +217,9 @@
     var parser = new DOMParser();
     var doc = parser.parseFromString(html, 'text/html');
     var body = doc.querySelector('body');
+    if (!body) {
+      return html;
+    }
     var listStack = [];
     var lastItems = [];
 
@@ -230,13 +233,12 @@
       }
 
       var level = getWordHtmlListLevel(node);
-      if (level > listStack.length) {
-        level = listStack.length;
-      }
-
       if (listStack.length === 0) {
         listStack[0] = doc.createElement('ul');
         node.parentNode.insertBefore(listStack[0], node);
+      }
+      if (level > listStack.length) {
+        level = listStack.length;
       }
 
       while (listStack.length > level + 1) {
@@ -258,12 +260,16 @@
       ignoredMarkers.forEach(function (marker) {
         marker.parentNode.removeChild(marker);
       });
-      Array.from(node.querySelectorAll('o\\:p')).forEach(function (marker) {
-        marker.parentNode.removeChild(marker);
+      Array.from(node.getElementsByTagName('*')).forEach(function (marker) {
+        if (marker.nodeName.toLowerCase() === 'o:p') {
+          marker.parentNode.removeChild(marker);
+        }
       });
 
       var listItem = doc.createElement('li');
-      listItem.innerHTML = node.innerHTML;
+      while (node.firstChild) {
+        listItem.appendChild(node.firstChild);
+      }
       listStack[level].appendChild(listItem);
       lastItems[level] = listItem;
       node.parentNode.removeChild(node);
