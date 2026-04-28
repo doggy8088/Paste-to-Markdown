@@ -171,8 +171,45 @@
     return escape(toMarkdown(str, { converters: pandoc, gfm: true }));
   }
 
+  var convertWordUnorderedListPlainText = function (text) {
+    var bulletLevels = {
+      '\uf06c': 0,
+      '\uf06e': 1
+    };
+    var lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+    var convertedLines = [];
+    var matched = false;
+
+    for (var i = 0; i < lines.length; i++) {
+      if (lines[i].trim() === '') {
+        convertedLines.push('');
+        continue;
+      }
+
+      var match = lines[i].match(/^\s*([\uf06c\uf06e])[\t ]+(.+?)\s*$/);
+      if (!match) {
+        return null;
+      }
+
+      matched = true;
+      convertedLines.push(Array((bulletLevels[match[1]] * 2) + 1).join(' ') + '- ' + match[2]);
+    }
+
+    return matched ? convertedLines.join('\n') : null;
+  };
+
   // Plain text processing rules
   var plainTextRules = {
+    wordUnorderedList: function (text) {
+      var markdown = convertWordUnorderedListPlainText(text);
+      if (markdown === null) {
+        return null;
+      }
+
+      console.log('Matched: Word unordered list plain text');
+      return markdown;
+    },
+
     // Copilot CLI format: first line starts with ' ● ', remaining lines start with '   ' (3 spaces)
     copilotCli: function (text) {
       var lines = text.split('\n');
@@ -468,12 +505,16 @@
       // Word HTML '<w:WordDocument>'
       if (event.clipboardData.types.includes('text/rtf') && event.clipboardData.types.includes('text/html')) {
         var html = event.clipboardData.getData('text/html');
+        var plainTextList = event.clipboardData.types.includes('text/plain') ?
+          convertWordUnorderedListPlainText(event.clipboardData.getData('text/plain')) : null;
         console.log('Both text/rtf and text/html:', html);
-        var markdown = turndownService.turndown(html).trim();
-        markdown = markdown.replace(/ü/g, '  - ');
-        markdown = markdown.replace(/\.[^\S\r\n]+/g, '. ');
-        markdown = markdown.replace(/-[^\S\r\n]+/g, '- ');
-        markdown = markdown.replace(/[^\S\r\n]/g, ' ');
+        var markdown = plainTextList !== null ? plainTextList : turndownService.turndown(html).trim();
+        if (plainTextList === null) {
+          markdown = markdown.replace(/ü/g, '  - ');
+          markdown = markdown.replace(/\.[^\S\r\n]+/g, '. ');
+          markdown = markdown.replace(/-[^\S\r\n]+/g, '- ');
+          markdown = markdown.replace(/[^\S\r\n]/g, ' ');
+        }
 
         console.log('Markdown: ', markdown);
 
