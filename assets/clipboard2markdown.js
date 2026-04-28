@@ -202,6 +202,76 @@
     return matched ? convertedLines.join('\n') : null;
   };
 
+  var getWordHtmlListLevel = function (node) {
+    var style = node.getAttribute('style') || '';
+    var marginMatch = style.match(/margin-left:\s*([0-9.]+)pt/i);
+    if (marginMatch) {
+      return Math.max(0, Math.round(parseFloat(marginMatch[1]) / 24) - 1);
+    }
+
+    var levelMatch = style.match(/mso-list:[^;'"]*\blevel(\d+)/i);
+    return levelMatch ? parseInt(levelMatch[1], 10) - 1 : 0;
+  };
+
+  var normalizeWordHtmlLists = function (html) {
+    var parser = new DOMParser();
+    var doc = parser.parseFromString(html, 'text/html');
+    var body = doc.querySelector('body');
+    var listStack = [];
+    var lastItems = [];
+
+    Array.from(body.children).forEach(function (node) {
+      var style = node.getAttribute('style') || '';
+      var ignoredMarkers = Array.from(node.querySelectorAll('[style*="mso-list:Ignore"]'));
+      if (!/mso-list:/i.test(style) || ignoredMarkers.length === 0) {
+        listStack = [];
+        lastItems = [];
+        return;
+      }
+
+      var level = getWordHtmlListLevel(node);
+      if (level > listStack.length) {
+        level = listStack.length;
+      }
+
+      if (listStack.length === 0) {
+        listStack[0] = doc.createElement('ul');
+        node.parentNode.insertBefore(listStack[0], node);
+      }
+
+      while (listStack.length > level + 1) {
+        listStack.pop();
+        lastItems.pop();
+      }
+
+      while (listStack.length <= level) {
+        var parentItem = lastItems[listStack.length - 1];
+        if (!parentItem) {
+          level = listStack.length - 1;
+          break;
+        }
+        var nestedList = doc.createElement('ul');
+        parentItem.appendChild(nestedList);
+        listStack.push(nestedList);
+      }
+
+      ignoredMarkers.forEach(function (marker) {
+        marker.parentNode.removeChild(marker);
+      });
+      Array.from(node.querySelectorAll('o\\:p')).forEach(function (marker) {
+        marker.parentNode.removeChild(marker);
+      });
+
+      var listItem = doc.createElement('li');
+      listItem.innerHTML = node.innerHTML;
+      listStack[level].appendChild(listItem);
+      lastItems[level] = listItem;
+      node.parentNode.removeChild(node);
+    });
+
+    return body.innerHTML;
+  };
+
   // Plain text processing rules
   var plainTextRules = {
     wordUnorderedList: function (text) {
@@ -516,7 +586,7 @@
             convertWordUnorderedListPlainText(wordPlainText) : null;
         }
         console.log('Both text/rtf and text/html:', html);
-        var markdown = plainTextList !== null ? plainTextList : turndownService.turndown(html).trim();
+        var markdown = plainTextList !== null ? plainTextList : turndownService.turndown(normalizeWordHtmlLists(html)).trim();
         if (plainTextList === null) {
           markdown = markdown.replace(/ü/g, '  - ');
           markdown = markdown.replace(/\.[^\S\r\n]+/g, '. ');
