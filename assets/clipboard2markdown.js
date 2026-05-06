@@ -407,10 +407,66 @@
     var output = document.querySelector('#output');
     var wrapper = document.querySelector('#wrapper');
     var preview = document.querySelector('#preview');
+    var tabsContainer = document.querySelector('.tabs');
 
     // Tab switching functionality
     var tabButtons = document.querySelectorAll('.tab-button');
     var tabContents = document.querySelectorAll('.tab-content');
+    // Prefer userAgentData when available (it may be unavailable outside secure
+    // contexts), but keep older navigator properties as fallbacks so shortcut
+    // hints still work in browsers without that API.
+    var platform = (
+      (navigator.userAgentData && navigator.userAgentData.platform) ||
+      navigator.platform ||
+      navigator.userAgent ||
+      ''
+    ).toLowerCase();
+    var isMacPlatform = /mac|iphone|ipad|ipod/.test(platform);
+
+    function getShortcutModifierLabel() {
+      return isMacPlatform ? 'Option' : 'Alt';
+    }
+
+    function updateTabShortcutHints() {
+      var modifier = getShortcutModifierLabel();
+      var shortcuts = [];
+
+      tabButtons.forEach(function(button, index) {
+        var shortcut = modifier + '+' + String(index + 1);
+        var label = button.textContent.trim();
+        button.title = label + ' (' + shortcut + ')';
+        shortcuts.push(label + ' (' + shortcut + ')');
+      });
+
+      if (tabsContainer) {
+        // Also set the container title so hovering the gap around the buttons
+        // still shows the shortcut hint for the whole tab area.
+        tabsContainer.title = shortcuts.join(' • ');
+      }
+    }
+
+    function matchesTabShortcut(event, digit) {
+      // macOS Option+number can change event.key to a symbol, so we match the
+      // physical digit key via event.code and keep event.key as a fallback.
+      return event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.shiftKey &&
+        (event.code === 'Digit' + digit || event.key === String(digit));
+    }
+
+    function prepareForPaste() {
+      pastebin.innerHTML = '';
+      pastebin.focus();
+      info.classList.add('hidden');
+      wrapper.classList.add('hidden');
+    }
+
+    function resetOutputView() {
+      output.value = '';
+      wrapper.classList.add('hidden');
+      info.classList.remove('hidden');
+    }
 
     tabButtons.forEach(function(button) {
       button.addEventListener('click', function() {
@@ -434,6 +490,8 @@
         }
       });
     });
+
+    updateTabShortcutHints();
 
     // Function to update preview with rendered markdown
     function updatePreview() {
@@ -466,6 +524,8 @@
       if (previewTab.classList.contains('active')) {
         updatePreview();
       }
+      // i18n rewrites the tab button labels, so refresh the tooltip text too.
+      updateTabShortcutHints();
     });
 
     // Monitor output changes and update preview if preview tab is active
@@ -558,10 +618,26 @@
     document.addEventListener('keydown', function (event) {
       if (event.ctrlKey || event.metaKey) {
         if (String.fromCharCode(event.which).toLowerCase() === 'v') {
-          pastebin.innerHTML = '';
-          pastebin.focus();
-          info.classList.add('hidden');
-          wrapper.classList.add('hidden');
+          prepareForPaste();
+        }
+      }
+      if (event.key === 'Escape') {
+        resetOutputView();
+      }
+
+      if (matchesTabShortcut(event, 1)) {
+        event.preventDefault();
+        var editButton = document.querySelector('.tab-button[data-tab="edit"]');
+        if (editButton && !editButton.classList.contains('active')) {
+          editButton.click();
+        }
+      }
+
+      if (matchesTabShortcut(event, 2)) {
+        event.preventDefault();
+        var previewButton = document.querySelector('.tab-button[data-tab="preview"]');
+        if (previewButton && !previewButton.classList.contains('active')) {
+          previewButton.click();
         }
       }
     });
@@ -669,32 +745,6 @@
 
       event.preventDefault();
     });
-  });
-
-  document.addEventListener('keydown', function (event) {
-    if (event.key === 'Escape') {
-      document.getElementById('output').value = '';
-      wrapper.classList.add('hidden');
-      info.classList.remove('hidden');
-    }
-
-    // Alt+1: Switch to Edit mode
-    if (event.altKey && event.key === '1') {
-      event.preventDefault();
-      var editButton = document.querySelector('.tab-button[data-tab="edit"]');
-      if (editButton && !editButton.classList.contains('active')) {
-        editButton.click();
-      }
-    }
-
-    // Alt+2: Switch to Preview mode
-    if (event.altKey && event.key === '2') {
-      event.preventDefault();
-      var previewButton = document.querySelector('.tab-button[data-tab="preview"]');
-      if (previewButton && !previewButton.classList.contains('active')) {
-        previewButton.click();
-      }
-    }
   });
 
 })();

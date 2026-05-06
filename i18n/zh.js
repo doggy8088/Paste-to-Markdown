@@ -8,7 +8,7 @@ window.i18nLocales.zh = {
   step2: '在這個網頁按下 <code>Ctrl+V</code> 或 <code>⌘+V</code> 貼上剪貼簿內容',
   step3: '接著你就會得到一份完整的 Markdown 文件，直接按下 <code>Ctrl+C</code> 或 <code>⌘+C</code> 就能複製回去用！',
   step4: '按下 <code>Escape</code> 可以重設狀態',
-  step5: '按下 <code>Alt+1</code> 切換到編輯模式，<code>Alt+2</code> 切換到預覽模式',
+  step5: '按下 <code>Alt+1</code> / <code>Option+1</code> 切換到編輯模式，<code>Alt+2</code> / <code>Option+2</code> 切換到預覽模式',
   basedOn: '本轉換器基於',
   basedOnAfter: ' 進行轉換，所有資料都不會傳送到後端，請安心使用。',
   styleFrom: '網頁樣式取自',

@@ -8,7 +8,7 @@ window.i18nLocales.es = {
   step2: 'Presiona <code>Ctrl+V</code> o <code>⌘+V</code> en esta página para pegar el contenido',
   step3: 'Obtendrás un documento Markdown completo, presiona <code>Ctrl+C</code> o <code>⌘+C</code> para copiarlo',
   step4: 'Presiona <code>Escape</code> para reiniciar',
-  step5: 'Presiona <code>Alt+1</code> para modo edición, <code>Alt+2</code> para modo vista previa',
+  step5: 'Presiona <code>Alt+1</code> / <code>Option+1</code> para modo edición, <code>Alt+2</code> / <code>Option+2</code> para modo vista previa',
   basedOn: 'Este conversor está basado en',
   basedOnAfter: '. Todos los datos se procesan localmente, no se envía nada a ningún servidor.',
   styleFrom: 'Estilo adaptado de',
