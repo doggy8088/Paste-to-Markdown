@@ -451,6 +451,19 @@
         (event.code === 'Digit' + digit || event.key === String(digit));
     }
 
+    function prepareForPaste() {
+      pastebin.innerHTML = '';
+      pastebin.focus();
+      info.classList.add('hidden');
+      wrapper.classList.add('hidden');
+    }
+
+    function resetOutputView() {
+      output.value = '';
+      wrapper.classList.add('hidden');
+      info.classList.remove('hidden');
+    }
+
     tabButtons.forEach(function(button) {
       button.addEventListener('click', function() {
         var targetTab = this.getAttribute('data-tab');
@@ -600,19 +613,14 @@
     document.addEventListener('keydown', function (event) {
       if (event.ctrlKey || event.metaKey) {
         if (String.fromCharCode(event.which).toLowerCase() === 'v') {
-          pastebin.innerHTML = '';
-          pastebin.focus();
-          info.classList.add('hidden');
-          wrapper.classList.add('hidden');
+          prepareForPaste();
         }
       }
       if (event.key === 'Escape') {
-        output.value = '';
-        wrapper.classList.add('hidden');
-        info.classList.remove('hidden');
+        resetOutputView();
       }
 
-      if (matchesTabShortcut(event, '1')) {
+      if (matchesTabShortcut(event, 1)) {
         event.preventDefault();
         var editButton = document.querySelector('.tab-button[data-tab="edit"]');
         if (editButton && !editButton.classList.contains('active')) {
@@ -620,7 +628,7 @@
         }
       }
 
-      if (matchesTabShortcut(event, '2')) {
+      if (matchesTabShortcut(event, 2)) {
         event.preventDefault();
         var previewButton = document.querySelector('.tab-button[data-tab="preview"]');
         if (previewButton && !previewButton.classList.contains('active')) {
