@@ -451,6 +451,7 @@
       return event.altKey &&
         !event.ctrlKey &&
         !event.metaKey &&
+        !event.shiftKey &&
         (event.code === 'Digit' + digit || event.key === String(digit));
     }
 
