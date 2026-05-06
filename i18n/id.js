@@ -8,7 +8,7 @@ window.i18nLocales.id = {
   step2: 'Tekan <code>Ctrl+V</code> atau <code>⌘+V</code> di halaman ini untuk menempelkan konten',
   step3: 'Anda akan mendapatkan dokumen Markdown lengkap, tekan <code>Ctrl+C</code> atau <code>⌘+C</code> untuk menyalinnya kembali',
   step4: 'Tekan <code>Escape</code> untuk mengatur ulang',
-  step5: 'Tekan <code>Alt+1</code> untuk beralih ke mode edit, <code>Alt+2</code> untuk beralih ke mode pratinjau',
+  step5: 'Tekan <code>Alt+1</code> / <code>Option+1</code> untuk beralih ke mode edit, <code>Alt+2</code> / <code>Option+2</code> untuk beralih ke mode pratinjau',
   basedOn: 'Konverter ini didasarkan pada',
   basedOnAfter: '. Semua data diproses secara lokal, tidak ada yang dikirim ke server mana pun.',
   styleFrom: 'Gaya diadaptasi dari',

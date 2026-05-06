@@ -8,7 +8,7 @@ window.i18nLocales.th = {
   step2: 'กด <code>Ctrl+V</code> หรือ <code>⌘+V</code> ในหน้านี้เพื่อวางเนื้อหา',
   step3: 'คุณจะได้เอกสาร Markdown ที่สมบูรณ์ กด <code>Ctrl+C</code> หรือ <code>⌘+C</code> เพื่อคัดลอกกลับไป',
   step4: 'กด <code>Escape</code> เพื่อรีเซ็ต',
-  step5: 'กด <code>Alt+1</code> เพื่อเปลี่ยนเป็นโหมดแก้ไข, <code>Alt+2</code> เพื่อเปลี่ยนเป็นโหมดแสดงตัวอย่าง',
+  step5: 'กด <code>Alt+1</code> / <code>Option+1</code> เพื่อเปลี่ยนเป็นโหมดแก้ไข, <code>Alt+2</code> / <code>Option+2</code> เพื่อเปลี่ยนเป็นโหมดแสดงตัวอย่าง',
   basedOn: 'ตัวแปลงนี้อิงตาม',
   basedOnAfter: ' ข้อมูลทั้งหมดจะถูกประมวลผลในเครื่อง ไม่มีข้อมูลใดถูกส่งไปยังเซิร์ฟเวอร์',
   styleFrom: 'รูปแบบดัดแปลงมาจาก',

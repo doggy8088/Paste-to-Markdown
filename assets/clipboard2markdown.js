@@ -407,10 +407,45 @@
     var output = document.querySelector('#output');
     var wrapper = document.querySelector('#wrapper');
     var preview = document.querySelector('#preview');
+    var tabs = document.querySelector('.tabs');
 
     // Tab switching functionality
     var tabButtons = document.querySelectorAll('.tab-button');
     var tabContents = document.querySelectorAll('.tab-content');
+    var platform = (
+      (navigator.userAgentData && navigator.userAgentData.platform) ||
+      navigator.platform ||
+      navigator.userAgent ||
+      ''
+    ).toLowerCase();
+    var isMacPlatform = /mac|iphone|ipad|ipod/.test(platform);
+
+    function getShortcutModifierLabel() {
+      return isMacPlatform ? 'Option' : 'Alt';
+    }
+
+    function updateTabShortcutHints() {
+      var modifier = getShortcutModifierLabel();
+      var shortcuts = [];
+
+      tabButtons.forEach(function(button, index) {
+        var shortcut = modifier + '+' + String(index + 1);
+        var label = button.textContent.trim();
+        button.title = label + ' (' + shortcut + ')';
+        shortcuts.push(label + ' (' + shortcut + ')');
+      });
+
+      if (tabs) {
+        tabs.title = shortcuts.join(' • ');
+      }
+    }
+
+    function matchesTabShortcut(event, digit) {
+      return event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        (event.code === 'Digit' + digit || event.key === String(digit));
+    }
 
     tabButtons.forEach(function(button) {
       button.addEventListener('click', function() {
@@ -434,6 +469,8 @@
         }
       });
     });
+
+    updateTabShortcutHints();
 
     // Function to update preview with rendered markdown
     function updatePreview() {
@@ -466,6 +503,7 @@
       if (previewTab.classList.contains('active')) {
         updatePreview();
       }
+      updateTabShortcutHints();
     });
 
     // Monitor output changes and update preview if preview tab is active
@@ -562,6 +600,27 @@
           pastebin.focus();
           info.classList.add('hidden');
           wrapper.classList.add('hidden');
+        }
+      }
+      if (event.key === 'Escape') {
+        document.getElementById('output').value = '';
+        wrapper.classList.add('hidden');
+        info.classList.remove('hidden');
+      }
+
+      if (matchesTabShortcut(event, '1')) {
+        event.preventDefault();
+        var editButton = document.querySelector('.tab-button[data-tab="edit"]');
+        if (editButton && !editButton.classList.contains('active')) {
+          editButton.click();
+        }
+      }
+
+      if (matchesTabShortcut(event, '2')) {
+        event.preventDefault();
+        var previewButton = document.querySelector('.tab-button[data-tab="preview"]');
+        if (previewButton && !previewButton.classList.contains('active')) {
+          previewButton.click();
         }
       }
     });
@@ -669,32 +728,6 @@
 
       event.preventDefault();
     });
-  });
-
-  document.addEventListener('keydown', function (event) {
-    if (event.key === 'Escape') {
-      document.getElementById('output').value = '';
-      wrapper.classList.add('hidden');
-      info.classList.remove('hidden');
-    }
-
-    // Alt+1: Switch to Edit mode
-    if (event.altKey && event.key === '1') {
-      event.preventDefault();
-      var editButton = document.querySelector('.tab-button[data-tab="edit"]');
-      if (editButton && !editButton.classList.contains('active')) {
-        editButton.click();
-      }
-    }
-
-    // Alt+2: Switch to Preview mode
-    if (event.altKey && event.key === '2') {
-      event.preventDefault();
-      var previewButton = document.querySelector('.tab-button[data-tab="preview"]');
-      if (previewButton && !previewButton.classList.contains('active')) {
-        previewButton.click();
-      }
-    }
   });
 
 })();

@@ -8,7 +8,7 @@ A simple, client-side web application for converting clipboard content (HTML/RTF
 2. Press `Ctrl+V` or `⌘+V` on this page to paste clipboard content
 3. You will get a complete Markdown document, press `Ctrl+C` or `⌘+C` to copy it back
 4. Press `Escape` to reset
-5. Press `Alt+1` to switch to edit mode, `Alt+2` to switch to preview mode
+5. Press `Alt+1` / `Option+1` to switch to edit mode, `Alt+2` / `Option+2` to switch to preview mode
 
 ## Features
 

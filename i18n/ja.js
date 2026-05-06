@@ -8,7 +8,7 @@ window.i18nLocales.ja = {
   step2: 'このページで <code>Ctrl+V</code> または <code>⌘+V</code> を押して貼り付けます',
   step3: '完全なMarkdownドキュメントが生成されます。<code>Ctrl+C</code> または <code>⌘+C</code> でコピーできます',
   step4: '<code>Escape</code> を押すとリセットされます',
-  step5: '<code>Alt+1</code> で編集モード、<code>Alt+2</code> でプレビューモードに切り替えます',
+  step5: '<code>Alt+1</code> / <code>Option+1</code> で編集モード、<code>Alt+2</code> / <code>Option+2</code> でプレビューモードに切り替えます',
   basedOn: 'このコンバータは',
   basedOnAfter: 'に基づいています。すべてのデータはローカルで処理され、サーバーには送信されません。',
   styleFrom: 'スタイルは',
