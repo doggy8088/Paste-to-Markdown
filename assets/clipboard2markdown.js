@@ -412,6 +412,8 @@
     // Tab switching functionality
     var tabButtons = document.querySelectorAll('.tab-button');
     var tabContents = document.querySelectorAll('.tab-content');
+    // Prefer userAgentData when available, but keep older navigator properties
+    // as fallbacks so shortcut hints still work in browsers without that API.
     var platform = (
       (navigator.userAgentData && navigator.userAgentData.platform) ||
       navigator.platform ||
@@ -441,6 +443,8 @@
     }
 
     function matchesTabShortcut(event, digit) {
+      // macOS Option+number can change event.key to a symbol, so we match the
+      // physical digit key via event.code and keep event.key as a fallback.
       return event.altKey &&
         !event.ctrlKey &&
         !event.metaKey &&
