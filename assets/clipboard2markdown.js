@@ -412,8 +412,9 @@
     // Tab switching functionality
     var tabButtons = document.querySelectorAll('.tab-button');
     var tabContents = document.querySelectorAll('.tab-content');
-    // Prefer userAgentData when available, but keep older navigator properties
-    // as fallbacks so shortcut hints still work in browsers without that API.
+    // Prefer userAgentData when available (it may be unavailable outside secure
+    // contexts), but keep older navigator properties as fallbacks so shortcut
+    // hints still work in browsers without that API.
     var platform = (
       (navigator.userAgentData && navigator.userAgentData.platform) ||
       navigator.platform ||
@@ -438,6 +439,8 @@
       });
 
       if (tabsContainer) {
+        // Also set the container title so hovering the gap around the buttons
+        // still shows the shortcut hint for the whole tab area.
         tabsContainer.title = shortcuts.join(' • ');
       }
     }
@@ -520,6 +523,7 @@
       if (previewTab.classList.contains('active')) {
         updatePreview();
       }
+      // i18n rewrites the tab button labels, so refresh the tooltip text too.
       updateTabShortcutHints();
     });
 
