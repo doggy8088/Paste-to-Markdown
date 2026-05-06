@@ -407,7 +407,7 @@
     var output = document.querySelector('#output');
     var wrapper = document.querySelector('#wrapper');
     var preview = document.querySelector('#preview');
-    var tabs = document.querySelector('.tabs');
+    var tabsContainer = document.querySelector('.tabs');
 
     // Tab switching functionality
     var tabButtons = document.querySelectorAll('.tab-button');
@@ -435,8 +435,8 @@
         shortcuts.push(label + ' (' + shortcut + ')');
       });
 
-      if (tabs) {
-        tabs.title = shortcuts.join(' • ');
+      if (tabsContainer) {
+        tabsContainer.title = shortcuts.join(' • ');
       }
     }
 
@@ -603,7 +603,7 @@
         }
       }
       if (event.key === 'Escape') {
-        document.getElementById('output').value = '';
+        output.value = '';
         wrapper.classList.add('hidden');
         info.classList.remove('hidden');
       }
