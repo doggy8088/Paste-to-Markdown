@@ -1,3 +1,5 @@
+![Paste to Markdown banner](assets/readme-banner.png)
+
 # Paste to Markdown
 
 A simple, client-side web application for converting clipboard content (HTML/RTF/Text) to Markdown.
