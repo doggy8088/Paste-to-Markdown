@@ -408,6 +408,8 @@
     var wrapper = document.querySelector('#wrapper');
     var preview = document.querySelector('#preview');
     var tabsContainer = document.querySelector('.tabs');
+    var themeButtons = document.querySelectorAll('.theme-button');
+    var themeStorageKey = 'pasteToMarkdownTheme';
 
     // Tab switching functionality
     var tabButtons = document.querySelectorAll('.tab-button');
@@ -415,10 +417,11 @@
     // Prefer userAgentData when available (it may be unavailable outside secure
     // contexts), but keep older navigator properties as fallbacks so shortcut
     // hints still work in browsers without that API.
+    var nav = window.navigator || {};
     var platform = (
-      (navigator.userAgentData && navigator.userAgentData.platform) ||
-      navigator.platform ||
-      navigator.userAgent ||
+      (nav.userAgentData && nav.userAgentData.platform) ||
+      nav.platform ||
+      nav.userAgent ||
       ''
     ).toLowerCase();
     var isMacPlatform = /mac|iphone|ipad|ipod/.test(platform);
@@ -445,6 +448,64 @@
       }
     }
 
+    function getStoredThemeChoice() {
+      try {
+        var savedTheme = localStorage.getItem(themeStorageKey);
+        if (savedTheme === 'light' || savedTheme === 'dark') {
+          return savedTheme;
+        }
+      } catch (error) {
+        return 'system';
+      }
+
+      return 'system';
+    }
+
+    function setThemeChoice(themeChoice) {
+      var nextThemeChoice = themeChoice === 'light' || themeChoice === 'dark' ? themeChoice : 'system';
+
+      if (nextThemeChoice === 'system') {
+        document.documentElement.removeAttribute('data-theme');
+        document.body.removeAttribute('data-theme');
+        document.body.style.background = '';
+        document.body.style.backgroundAttachment = '';
+        document.body.style.backgroundPosition = '';
+        document.body.style.backgroundRepeat = '';
+        document.body.style.backgroundSize = '';
+        document.body.style.color = '';
+      } else {
+        document.documentElement.setAttribute('data-theme', nextThemeChoice);
+        document.body.setAttribute('data-theme', nextThemeChoice);
+        if (nextThemeChoice === 'light') {
+          document.body.style.background = 'linear-gradient(rgba(245, 247, 251, 0.74), rgba(245, 247, 251, 0.74)), url("./assets/workspace-bg-light.png"), radial-gradient(circle at top left, #eef4ff, transparent 36rem), #f5f7fb';
+          document.body.style.color = '#17202e';
+        } else {
+          document.body.style.background = 'linear-gradient(rgba(14, 20, 29, 0.72), rgba(14, 20, 29, 0.72)), url("./assets/workspace-bg-dark.png"), radial-gradient(circle at top left, #101b2d, transparent 36rem), #0e141d';
+          document.body.style.color = '#eef4ff';
+        }
+        document.body.style.backgroundAttachment = 'fixed';
+        document.body.style.backgroundPosition = 'center top';
+        document.body.style.backgroundRepeat = 'no-repeat';
+        document.body.style.backgroundSize = 'cover';
+      }
+
+      try {
+        if (nextThemeChoice === 'system') {
+          localStorage.removeItem(themeStorageKey);
+        } else {
+          localStorage.setItem(themeStorageKey, nextThemeChoice);
+        }
+      } catch (error) {
+        // Theme choice is an enhancement; system preference remains the safe fallback.
+      }
+
+      themeButtons.forEach(function(button) {
+        var isActive = button.getAttribute('data-theme-choice') === nextThemeChoice;
+        button.classList.toggle('active', isActive);
+        button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+      });
+    }
+
     function matchesTabShortcut(event, digit) {
       // macOS Option+number can change event.key to a symbol, so we match the
       // physical digit key via event.code and keep event.key as a fallback.
@@ -464,7 +525,7 @@
 
     function resetOutputView() {
       output.value = '';
-      wrapper.classList.add('hidden');
+      wrapper.classList.remove('hidden');
       info.classList.remove('hidden');
     }
 
@@ -482,7 +543,13 @@
 
         // Add active class to clicked button and corresponding content
         this.classList.add('active');
+        this.setAttribute('aria-selected', 'true');
         document.getElementById(targetTab + '-tab').classList.add('active');
+        tabButtons.forEach(function(btn) {
+          if (btn !== button) {
+            btn.setAttribute('aria-selected', 'false');
+          }
+        });
 
         // Update preview when switching to preview tab
         if (targetTab === 'preview') {
@@ -492,6 +559,13 @@
     });
 
     updateTabShortcutHints();
+    setThemeChoice(getStoredThemeChoice());
+
+    themeButtons.forEach(function(button) {
+      button.addEventListener('click', function() {
+        setThemeChoice(button.getAttribute('data-theme-choice'));
+      });
+    });
 
     // Function to update preview with rendered markdown
     function updatePreview() {
@@ -514,7 +588,7 @@
 
         preview.innerHTML = html;
       } else {
-        preview.innerHTML = '<p style="color: #999;">' + (window.i18n ? i18n.t('noPreview') : 'No content to preview') + '</p>';
+        preview.innerHTML = '<p class="empty-preview">' + (window.i18n ? i18n.t('noPreview') : 'No content to preview') + '</p>';
       }
     }
 

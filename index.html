@@ -3,231 +3,710 @@
 
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-    <title>Paste to Markdown</title>
+    <title>Paste to Markdown - Local Clipboard HTML, RTF, and Text Converter</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Convert clipboard content from HTML, RTF, and plain text into Markdown locally in your browser.">
+    <meta name="description" content="Convert copied HTML, RTF, Word, Excel, VS Code, and plain text into clean Markdown locally in your browser. No upload, no server, no setup.">
+    <meta name="robots" content="index, follow, max-image-preview:large">
+    <meta name="googlebot" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
+    <meta name="application-name" content="Paste to Markdown">
+    <meta name="apple-mobile-web-app-title" content="Paste to Markdown">
+    <meta name="theme-color" content="#f5f7fb" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0e141d" media="(prefers-color-scheme: dark)">
+    <meta name="color-scheme" content="light dark">
+    <link rel="canonical" href="https://p2m.gh.miniasp.com/">
     <meta property="og:type" content="website">
-    <meta property="og:title" content="Paste to Markdown">
-    <meta property="og:description" content="Convert clipboard content from HTML, RTF, and plain text into Markdown locally in your browser.">
+    <meta property="og:site_name" content="Paste to Markdown">
+    <meta property="og:title" content="Paste to Markdown - Local Clipboard to Markdown Converter">
+    <meta property="og:description" content="Convert copied HTML, RTF, Word, Excel, VS Code, and plain text into clean Markdown locally in your browser.">
     <meta property="og:url" content="https://p2m.gh.miniasp.com/">
     <meta property="og:image" content="https://p2m.gh.miniasp.com/assets/og-image.png">
+    <meta property="og:image:alt" content="Paste to Markdown clipboard converter preview">
     <meta property="og:image:type" content="image/png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
+    <meta property="og:locale" content="en_US">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Paste to Markdown">
-    <meta name="twitter:description" content="Convert clipboard content from HTML, RTF, and plain text into Markdown locally in your browser.">
+    <meta name="twitter:title" content="Paste to Markdown - Local Clipboard to Markdown Converter">
+    <meta name="twitter:description" content="Convert copied HTML, RTF, Word, Excel, VS Code, and plain text into clean Markdown locally in your browser.">
     <meta name="twitter:image" content="https://p2m.gh.miniasp.com/assets/og-image.png">
+    <meta name="twitter:image:alt" content="Paste to Markdown clipboard converter preview">
 
+    <script type="application/ld+json">
+        {
+            "@context": "https://schema.org",
+            "@type": "WebApplication",
+            "name": "Paste to Markdown",
+            "url": "https://p2m.gh.miniasp.com/",
+            "description": "Convert copied HTML, RTF, Word, Excel, VS Code, and plain text into clean Markdown locally in your browser.",
+            "applicationCategory": "DeveloperApplication",
+            "operatingSystem": "Any",
+            "browserRequirements": "Requires a modern browser with Clipboard API support.",
+            "isAccessibleForFree": true,
+            "offers": {
+                "@type": "Offer",
+                "price": "0",
+                "priceCurrency": "USD"
+            },
+            "softwareHelp": "https://github.com/doggy8088/Paste-to-Markdown/issues",
+            "codeRepository": "https://github.com/doggy8088/Paste-to-Markdown",
+            "featureList": [
+                "Convert copied HTML to Markdown",
+                "Convert RTF and Microsoft Office content to Markdown",
+                "Convert VS Code snippets and plain text to Markdown",
+                "Preview rendered Markdown locally",
+                "Process clipboard data in the browser without upload"
+            ]
+        }
+    </script>
+
+    <script>
+        (function () {
+            'use strict';
+
+            try {
+                var savedTheme = localStorage.getItem('pasteToMarkdownTheme');
+                if (savedTheme === 'light' || savedTheme === 'dark') {
+                    document.documentElement.setAttribute('data-theme', savedTheme);
+                }
+            } catch (error) {
+                document.documentElement.removeAttribute('data-theme');
+            }
+        })();
+    </script>
     <link href="./assets/favicon.ico" rel="icon" type="image/x-icon">
     <link rel="stylesheet" href="./assets/bootstrap.css">
     <style>
-        h2 {
-            font-size: 22px;
-            font-style: italic;
+        :root {
+            color-scheme: light;
+            --bg: #f5f7fb;
+            --bg-accent: #eef4ff;
+            --bg-image: url('./assets/workspace-bg-light.png');
+            --bg-overlay: rgba(245, 247, 251, 0.74);
+            --surface: #ffffff;
+            --surface-subtle: #f8fafc;
+            --surface-elevated: #ffffff;
+            --border: #d8e0ea;
+            --border-strong: #b9c6d6;
+            --ink: #17202e;
+            --ink-muted: #58677a;
+            --ink-soft: #738094;
+            --accent: #2563eb;
+            --accent-strong: #1d4ed8;
+            --accent-soft: #dbeafe;
+            --focus: rgba(37, 99, 235, 0.28);
+            --code-bg: #e9eef8;
+            --code-ink: #1f3a68;
+            --shadow: 0 18px 50px rgba(27, 39, 58, 0.10);
+            --radius: 14px;
+            --radius-sm: 10px;
+            --control-height: 36px;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                color-scheme: dark;
+                --bg: #0e141d;
+                --bg-accent: #101b2d;
+                --bg-image: url('./assets/workspace-bg-dark.png');
+                --bg-overlay: rgba(14, 20, 29, 0.72);
+                --surface: #151d29;
+                --surface-subtle: #101722;
+                --surface-elevated: #1a2432;
+                --border: #2a3748;
+                --border-strong: #3a4b60;
+                --ink: #eef4ff;
+                --ink-muted: #adbacb;
+                --ink-soft: #8493a6;
+                --accent: #7aa7ff;
+                --accent-strong: #a8c4ff;
+                --accent-soft: #172948;
+                --focus: rgba(122, 167, 255, 0.32);
+                --code-bg: #202d3e;
+                --code-ink: #cfe0ff;
+                --shadow: 0 20px 60px rgba(0, 0, 0, 0.34);
+            }
+        }
+
+        html[data-theme="light"],
+        body[data-theme="light"] {
+            color-scheme: light;
+            --bg: #f5f7fb;
+            --bg-accent: #eef4ff;
+            --bg-image: url('./assets/workspace-bg-light.png');
+            --bg-overlay: rgba(245, 247, 251, 0.74);
+            --surface: #ffffff;
+            --surface-subtle: #f8fafc;
+            --surface-elevated: #ffffff;
+            --border: #d8e0ea;
+            --border-strong: #b9c6d6;
+            --ink: #17202e;
+            --ink-muted: #58677a;
+            --ink-soft: #738094;
+            --accent: #2563eb;
+            --accent-strong: #1d4ed8;
+            --accent-soft: #dbeafe;
+            --focus: rgba(37, 99, 235, 0.28);
+            --code-bg: #e9eef8;
+            --code-ink: #1f3a68;
+            --shadow: 0 18px 50px rgba(27, 39, 58, 0.10);
+        }
+
+        html[data-theme="dark"],
+        body[data-theme="dark"] {
+            color-scheme: dark;
+            --bg: #0e141d;
+            --bg-accent: #101b2d;
+            --bg-image: url('./assets/workspace-bg-dark.png');
+            --bg-overlay: rgba(14, 20, 29, 0.72);
+            --surface: #151d29;
+            --surface-subtle: #101722;
+            --surface-elevated: #1a2432;
+            --border: #2a3748;
+            --border-strong: #3a4b60;
+            --ink: #eef4ff;
+            --ink-muted: #adbacb;
+            --ink-soft: #8493a6;
+            --accent: #7aa7ff;
+            --accent-strong: #a8c4ff;
+            --accent-soft: #172948;
+            --focus: rgba(122, 167, 255, 0.32);
+            --code-bg: #202d3e;
+            --code-ink: #cfe0ff;
+            --shadow: 0 20px 60px rgba(0, 0, 0, 0.34);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html {
+            min-height: 100%;
         }
 
         body {
+            background:
+                linear-gradient(var(--bg-overlay), var(--bg-overlay)),
+                var(--bg-image),
+                radial-gradient(circle at top left, var(--bg-accent), transparent 36rem),
+                var(--bg);
             background-attachment: fixed;
-            background-image: url('assets/background.svg');
-            background-position: right 10% bottom 20%;
+            background-position: center top;
             background-repeat: no-repeat;
-            background-size: 20em;
-            margin-bottom: 10vh;
-            margin-top: 10vh;
+            background-size: cover;
+            color: var(--ink);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-size: 15px;
+            line-height: 1.5;
+            margin: 0;
+            min-height: 100vh;
+            transition: background-color 180ms ease, color 180ms ease;
+        }
+
+        body[data-theme="light"] {
+            background:
+                linear-gradient(rgba(245, 247, 251, 0.74), rgba(245, 247, 251, 0.74)),
+                url('./assets/workspace-bg-light.png'),
+                radial-gradient(circle at top left, #eef4ff, transparent 36rem),
+                #f5f7fb;
+            background-attachment: fixed;
+            background-position: center top;
+            background-repeat: no-repeat;
+            background-size: cover;
+            color: #17202e;
+        }
+
+        body[data-theme="dark"] {
+            background:
+                linear-gradient(rgba(14, 20, 29, 0.72), rgba(14, 20, 29, 0.72)),
+                url('./assets/workspace-bg-dark.png'),
+                radial-gradient(circle at top left, #101b2d, transparent 36rem),
+                #0e141d;
+            background-attachment: fixed;
+            background-position: center top;
+            background-repeat: no-repeat;
+            background-size: cover;
+            color: #eef4ff;
+        }
+
+        a {
+            color: var(--accent-strong);
+        }
+
+        a:hover,
+        a:focus {
+            color: var(--accent);
+        }
+
+        code {
+            background: var(--code-bg);
+            border-radius: 6px;
+            color: var(--code-ink);
+            font-size: 0.92em;
+            padding: 0.1em 0.35em;
+        }
+
+        .app-shell {
+            margin: 0 auto;
+            max-width: 1180px;
+            min-height: 100vh;
+            padding: 24px;
+        }
+
+        .app-header {
+            align-items: center;
+            display: flex;
+            gap: 16px;
+            justify-content: space-between;
+            margin-bottom: 28px;
+        }
+
+        .brand-block {
+            min-width: 0;
+        }
+
+        .brand-title {
+            font-size: 28px;
+            font-weight: 720;
+            letter-spacing: -0.02em;
+            line-height: 1.1;
+            margin: 0;
+            text-wrap: balance;
+        }
+
+        .brand-subtitle {
+            color: var(--ink-muted);
+            margin: 7px 0 0;
+            max-width: 62ch;
+        }
+
+        .top-controls {
+            align-items: center;
+            display: flex;
+            flex-shrink: 0;
+            gap: 10px;
+        }
+
+        .theme-switcher {
+            align-items: center;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            display: inline-flex;
+            gap: 2px;
+            min-height: var(--control-height);
+            padding: 3px;
+        }
+
+        .theme-button {
+            align-items: center;
+            background: transparent;
+            border: 0;
+            border-radius: 7px;
+            color: var(--ink-muted);
+            cursor: pointer;
+            display: inline-flex;
+            font-size: 13px;
+            font-weight: 650;
+            gap: 6px;
+            min-height: 28px;
+            padding: 5px 9px;
+            transition: background 160ms ease, color 160ms ease;
+            white-space: nowrap;
+        }
+
+        .theme-button:hover {
+            background: var(--surface-subtle);
+            color: var(--ink);
+        }
+
+        .theme-button:focus-visible,
+        #lang-select:focus-visible,
+        .tab-button:focus-visible,
+        #output:focus-visible {
+            outline: 3px solid var(--focus);
+            outline-offset: 2px;
+        }
+
+        .theme-button.active {
+            background: var(--accent-soft);
+            color: var(--accent-strong);
+        }
+
+        .theme-icon {
+            font-size: 14px;
+            line-height: 1;
+        }
+
+        .language-selector {
+            position: static;
+            z-index: auto;
+        }
+
+        #lang-select {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--ink);
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 650;
+            height: var(--control-height);
+            padding: 0 34px 0 11px;
+            transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+        }
+
+        #lang-select:hover {
+            border-color: var(--border-strong);
+        }
+
+        #lang-select option {
+            background: var(--surface);
+            color: var(--ink);
+        }
+
+        .workspace {
+            align-items: stretch;
+            display: grid;
+            gap: 24px;
+            grid-template-columns: minmax(340px, 0.9fr) minmax(0, 1.7fr);
+        }
+
+        .intro-panel,
+        .editor-panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+        }
+
+        .intro-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            padding: 24px;
+        }
+
+        .intro-heading {
+            margin: 0;
+        }
+
+        .intro-heading h2 {
+            font-size: 18px;
+            font-style: normal;
+            font-weight: 720;
+            letter-spacing: 0;
+            margin: 0;
+        }
+
+        .intro-heading p {
+            color: var(--ink-muted);
+            margin: 8px 0 0;
+        }
+
+        .steps {
+            counter-reset: step;
+            display: grid;
+            gap: 8px;
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .steps li {
+            background: var(--surface-subtle);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--ink-muted);
+            counter-increment: step;
+            display: block;
+            line-height: 1.35;
+            min-width: 0;
+            padding: 10px 10px 10px 44px;
+            position: relative;
+        }
+
+        .steps li::before {
+            align-items: center;
+            background: var(--surface);
+            border: 1px solid var(--border-strong);
+            border-radius: 50%;
+            color: var(--ink);
+            content: counter(step);
+            display: inline-flex;
+            font-size: 12px;
+            font-weight: 720;
+            height: 24px;
+            justify-content: center;
+            left: 10px;
+            position: absolute;
+            top: 10px;
+            width: 24px;
+        }
+
+        .steps code {
+            display: inline-block;
+            line-height: 1.2;
+            margin: 0 1px;
+            white-space: nowrap;
+        }
+
+        .trust-note {
+            border-top: 1px solid var(--border);
+            color: var(--ink-muted);
+            font-size: 13px;
+            margin-top: auto;
+            padding-top: 18px;
+        }
+
+        .trust-note p {
+            margin: 0 0 10px;
+        }
+
+        .trust-note p:last-child {
+            margin-bottom: 0;
         }
 
         #pastebin {
-            opacity: 0.01;
-            width: 100%;
             height: 1px;
+            left: -9999px;
+            opacity: 0.01;
+            overflow: hidden;
+            position: absolute;
+            top: 0;
+            width: 1px;
+        }
+
+        #info.hidden + #pastebin + #wrapper {
+            grid-column: 1 / -1;
+        }
+
+        .editor-panel {
+            display: flex;
+            flex-direction: column;
+            min-height: 640px;
             overflow: hidden;
         }
 
-        #output {
-            border: none;
-            background: transparent;
-            font-family: Consolas, "Liberation Mono", Courier, monospace;
-            font-size: 13px;
-            line-height: 19px;
-            min-height: 78vh;
-            overflow: auto;
-            padding: 6px 10px;
-            resize: none;
-            width: 100%;
+        .editor-panel.hidden {
+            display: none;
+        }
+
+        .editor-topbar {
+            align-items: center;
+            background: var(--surface-elevated);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            gap: 16px;
+            justify-content: space-between;
+            padding: 14px 16px;
         }
 
         .tabs {
+            align-items: center;
+            border-bottom: 0;
             display: flex;
-            border-bottom: 2px solid #ddd;
-            margin-bottom: 10px;
+            gap: 4px;
+            margin-bottom: 0;
         }
 
         .tab-button {
             background: transparent;
-            border: none;
-            padding: 10px 20px;
+            border: 0;
+            border-radius: 8px;
+            color: var(--ink-muted);
             cursor: pointer;
-            font-size: 16px;
-            color: #666;
-            border-bottom: 2px solid transparent;
-            margin-bottom: -2px;
-            transition: all 0.3s;
+            font-size: 14px;
+            font-weight: 700;
+            margin-bottom: 0;
+            padding: 8px 12px;
+            transition: background 160ms ease, color 160ms ease;
         }
 
         .tab-button:hover {
-            color: #333;
+            background: var(--surface-subtle);
+            color: var(--ink);
         }
 
         .tab-button.active {
-            color: #007bff;
-            border-bottom: 2px solid #007bff;
+            background: var(--accent-soft);
+            color: var(--accent-strong);
+        }
+
+        .workspace-status {
+            color: var(--ink-soft);
+            font-size: 13px;
+            margin: 0;
+            text-align: right;
         }
 
         .tab-content {
             display: none;
+            flex: 1;
+            min-height: 0;
         }
 
         .tab-content.active {
-            display: block;
+            display: flex;
+        }
+
+        #output {
+            border: none;
+            background: var(--surface-subtle);
+            color: var(--ink);
+            font-family: Consolas, "Liberation Mono", Courier, monospace;
+            font-size: 14px;
+            line-height: 1.55;
+            min-height: 100%;
+            overflow: auto;
+            padding: 18px;
+            resize: none;
+            width: 100%;
         }
 
         #preview {
-            border: 1px solid #ddd;
-            padding: 20px;
-            min-height: 78vh;
+            background: var(--surface-subtle);
+            color: var(--ink);
+            flex: 1;
+            min-height: 100%;
             overflow: auto;
-            background: white;
-            border-radius: 4px;
+            padding: 18px;
         }
 
-        .language-selector {
-            position: fixed;
-            top: 10px;
+        #preview table {
+            color: var(--ink);
+        }
+
+        #preview table,
+        #preview table td,
+        #preview table th {
+            border-color: var(--border);
+        }
+
+        #preview table thead th {
+            background: var(--surface-elevated);
+            color: var(--ink);
+        }
+
+        #preview .table-striped > tbody > tr:nth-of-type(odd) {
+            background: var(--surface);
+        }
+
+        #preview blockquote {
+            border-left-color: var(--border-strong);
+            color: var(--ink-muted);
+        }
+
+        #preview .badge {
+            background: var(--code-bg);
+            color: var(--code-ink);
+        }
+
+        #preview pre {
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            color: var(--code-ink);
+        }
+
+        .empty-preview {
+            color: var(--ink-soft);
+            margin: 0;
+        }
+
+        [dir="rtl"] .workspace-status {
+            text-align: left;
+        }
+
+        [dir="rtl"] .steps li {
+            padding-left: 10px;
+            padding-right: 44px;
+        }
+
+        [dir="rtl"] .steps li::before {
+            left: auto;
             right: 10px;
-            z-index: 1000;
         }
 
-        #lang-select {
-            padding: 5px;
-            border-radius: 4px;
-            border: 1px solid #ccc;
-            background: white;
-            color: #333;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        #lang-select:hover {
-            border-color: #007bff;
-        }
-
-        #lang-select:focus {
-            outline: none;
-            border-color: #007bff;
-            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
-        }
-
-        @media (prefers-color-scheme: dark) {
-            body {
-                background-image: url('assets/background-dark.svg');
-                background-color: #222;
-                color: white;
+        @media (max-width: 900px) {
+            .app-shell {
+                padding: 18px;
             }
 
-            code {
-                color: #ff7a9c;
-                background-color: #0e0609;
+            .app-header {
+                align-items: flex-start;
+                flex-direction: column;
             }
 
-            a {
-                color: #8fcbff;
+            .top-controls {
+                justify-content: space-between;
+                width: 100%;
+            }
+
+            .workspace {
+                grid-template-columns: 1fr;
+            }
+
+            .intro-panel {
+                gap: 16px;
+            }
+
+            .editor-panel {
+                min-height: 560px;
+            }
+        }
+
+        @media (max-width: 560px) {
+            .app-shell {
+                padding: 14px;
+            }
+
+            .brand-title {
+                font-size: 24px;
+            }
+
+            .top-controls {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .theme-switcher,
+            #lang-select {
+                width: 100%;
+            }
+
+            .theme-button {
+                flex: 1;
+                justify-content: center;
+            }
+
+            .intro-panel {
+                padding: 22px;
+            }
+
+            .editor-topbar {
+                align-items: stretch;
+                flex-direction: column;
+                gap: 10px;
             }
 
             .tabs {
-                border-bottom: 2px solid #444;
+                width: 100%;
             }
 
             .tab-button {
-                color: #aaa;
+                flex: 1;
             }
 
-            .tab-button:hover {
-                color: #ddd;
+            .workspace-status {
+                text-align: left;
             }
+        }
 
-            .tab-button.active {
-                color: #007bff;
-            }
-
-            #preview {
-                background: #2a2a2a;
-                border-color: #444;
-                color: #e0e0e0;
-            }
-
-            /* Dark mode table styles */
-            #preview table {
-                color: #e0e0e0;
-                border-color: #555;
-            }
-
-            #preview table thead th {
-                background-color: #1a1a1a;
-                border-color: #555;
-                color: #fff;
-            }
-
-            #preview table tbody tr {
-                background-color: #2a2a2a;
-            }
-
-            #preview table tbody tr:nth-child(odd) {
-                background-color: #333;
-            }
-
-            #preview table td,
-            #preview table th {
-                border-color: #555;
-            }
-
-            /* Dark mode blockquote styles */
-            #preview blockquote {
-                border-left-color: #555;
-                color: #ccc;
-            }
-
-            /* Dark mode code styles */
-            #preview .badge {
-                background-color: #444;
-                color: #ff7a9c;
-            }
-
-            #preview pre {
-                background-color: #1a1a1a;
-                border: 1px solid #444;
-                color: #e0e0e0;
-            }
-
-            /* Dark mode language selector styles */
-            #lang-select {
-                background: #2a2a2a;
-                color: #e0e0e0;
-                border-color: #555;
-            }
-
-            #lang-select:hover {
-                border-color: #007bff;
-            }
-
-            #lang-select:focus {
-                border-color: #007bff;
-                box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.2);
-            }
-
-        #lang-select option {
-                background: #2a2a2a;
-                color: #e0e0e0;
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                scroll-behavior: auto !important;
+                transition-duration: 0.01ms !important;
             }
         }
 
@@ -235,47 +714,73 @@
             background-position: left 10% bottom 20%;
         }
 
-        [dir="rtl"] .language-selector {
-            right: auto;
-            left: 10px;
-        }
     </style>
 </head>
 
 <body>
-    <div class="container">
-        <section id="info">
-            <h1>Paste to Markdown</h1>
-            <h2 data-i18n="subtitle">How to use</h2>
-            <ol>
-                <li data-i18n="step1">Copy content from any webpage using <code>Ctrl+C</code> or <code>⌘+C</code></li>
-                <li data-i18n="step2">Press <code>Ctrl+V</code> or <code>⌘+V</code> on this page to paste clipboard content</li>
-                <li data-i18n="step3">You will get a complete Markdown document, press <code>Ctrl+C</code> or <code>⌘+C</code> to copy it back</li>
+    <div class="app-shell">
+        <header class="app-header">
+            <div class="brand-block">
+                <h1 class="brand-title">Paste to Markdown</h1>
+                <p class="brand-subtitle">Convert rich clipboard content to Markdown locally, then edit or preview the result in one focused workspace.</p>
+            </div>
+            <div class="top-controls" aria-label="Page settings">
+                <div class="theme-switcher" role="group" aria-label="Theme">
+                    <button class="theme-button active" type="button" data-theme-choice="system" aria-pressed="true">
+                        <span class="theme-icon" aria-hidden="true">A</span>
+                        <span>System</span>
+                    </button>
+                    <button class="theme-button" type="button" data-theme-choice="light" aria-pressed="false">
+                        <span class="theme-icon" aria-hidden="true">L</span>
+                        <span>Light</span>
+                    </button>
+                    <button class="theme-button" type="button" data-theme-choice="dark" aria-pressed="false">
+                        <span class="theme-icon" aria-hidden="true">D</span>
+                        <span>Dark</span>
+                    </button>
+                </div>
+                <div class="language-selector">
+                    <select id="lang-select" aria-label="Language">
+                    </select>
+                </div>
+            </div>
+        </header>
+
+        <main class="workspace">
+        <section id="info" class="intro-panel" aria-labelledby="how-to-use-title">
+            <div class="intro-heading">
+                <h2 id="how-to-use-title" data-i18n="subtitle">How to use</h2>
+                <p>Paste from the source you already use. The conversion happens on this device.</p>
+            </div>
+            <ol class="steps">
+                <li data-i18n="step1">Copy rich content with {copyShortcut}</li>
+                <li data-i18n="step2">Paste on this page with {pasteShortcut}</li>
+                <li data-i18n="step3">Edit, preview, then copy the Markdown result</li>
                 <li data-i18n="step4">Press <code>Escape</code> to reset</li>
-                <li data-i18n="step5">Press <code>Alt+1</code> / <code>Option+1</code> to switch to edit mode, <code>Alt+2</code> / <code>Option+2</code> to switch to preview mode</li>
+                <li data-i18n="step5">Switch tabs with {editShortcut} and {previewShortcut}</li>
             </ol>
-            <p><span data-i18n="basedOn">This converter is based on</span> <a href="https://github.com/domchristie/to-markdown">to-markdown</a><span data-i18n="basedOnAfter">. All data is processed locally, nothing is sent to any server.</span></p>
-            <p><span data-i18n="styleFrom">Style adapted from</span> <a href="https://euangoddard.github.io/clipboard2markdown/">Paste to Markdown</a><span data-i18n="styleFromAfter">.</span></p>
-            <p><span data-i18n="sourceCode">Source code available at</span> <a href="https://github.com/doggy8088/Paste-to-Markdown">https://github.com/doggy8088/Paste-to-Markdown</a><span data-i18n="feedbackPre">, </span><a href="https://github.com/doggy8088/Paste-to-Markdown/issues" data-i18n="issues">Issues</a><span data-i18n="feedbackPost">.</span></p>
+            <div class="trust-note">
+                <p><span data-i18n="basedOn">This converter is based on</span> <a href="https://github.com/domchristie/to-markdown">to-markdown</a><span data-i18n="basedOnAfter">. All data is processed locally, nothing is sent to any server.</span></p>
+                <p><span data-i18n="sourceCode">Source code available at</span> <a href="https://github.com/doggy8088/Paste-to-Markdown">GitHub</a><span data-i18n="feedbackPre">, </span><a href="https://github.com/doggy8088/Paste-to-Markdown/issues" data-i18n="issues">Issues</a><span data-i18n="feedbackPost">.</span></p>
+            </div>
         </section>
         <div contenteditable="true" id="pastebin"></div>
-        <section class="hidden" id="wrapper">
-            <div class="tabs">
-                <button class="tab-button active" data-tab="edit" data-i18n="tabEdit">Edit</button>
-                <button class="tab-button" data-tab="preview" data-i18n="tabPreview">Preview</button>
+        <section class="editor-panel" id="wrapper">
+            <div class="editor-topbar">
+                <div class="tabs" role="tablist" aria-label="Markdown view">
+                    <button class="tab-button active" type="button" role="tab" aria-selected="true" aria-controls="edit-tab" data-tab="edit" data-i18n="tabEdit">Edit</button>
+                    <button class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="preview-tab" data-tab="preview" data-i18n="tabPreview">Preview</button>
+                </div>
+                <p class="workspace-status">Ready to copy after paste</p>
             </div>
-            <div class="tab-content active" id="edit-tab">
+            <div class="tab-content active" id="edit-tab" role="tabpanel">
                 <textarea id="output" data-i18n-placeholder="placeholder"></textarea>
             </div>
-            <div class="tab-content" id="preview-tab">
+            <div class="tab-content" id="preview-tab" role="tabpanel">
                 <div id="preview"></div>
             </div>
         </section>
-    </div>
-
-    <div class="language-selector">
-        <select id="lang-select">
-        </select>
+        </main>
     </div>
 
 
@@ -283,22 +788,22 @@
 <script src="vendor/turndown-plugin-gfm/dist/turndown-plugin-gfm.js"></script>
 <script src="vendor/marked/marked.min.js"></script>
 
-<script src="./i18n/en.js"></script>
-<script src="./i18n/ar.js"></script>
-<script src="./i18n/tr.js"></script>
-<script src="./i18n/zh.js"></script>
-<script src="./i18n/zh-cn.js"></script>
-<script src="./i18n/ko.js"></script>
-<script src="./i18n/ja.js"></script>
-<script src="./i18n/es.js"></script>
-<script src="./i18n/pt.js"></script>
-<script src="./i18n/th.js"></script>
-<script src="./i18n/vi.js"></script>
-<script src="./i18n/ru.js"></script>
-<script src="./i18n/fr.js"></script>
-<script src="./i18n/id.js"></script>
-<script src="./i18n/hi.js"></script>
-<script src="./i18n/index.js"></script>
+<script src="./i18n/en.js?v=20260601-platform"></script>
+<script src="./i18n/ar.js?v=20260601-platform"></script>
+<script src="./i18n/tr.js?v=20260601-platform"></script>
+<script src="./i18n/zh.js?v=20260601-platform"></script>
+<script src="./i18n/zh-cn.js?v=20260601-platform"></script>
+<script src="./i18n/ko.js?v=20260601-platform"></script>
+<script src="./i18n/ja.js?v=20260601-platform"></script>
+<script src="./i18n/es.js?v=20260601-platform"></script>
+<script src="./i18n/pt.js?v=20260601-platform"></script>
+<script src="./i18n/th.js?v=20260601-platform"></script>
+<script src="./i18n/vi.js?v=20260601-platform"></script>
+<script src="./i18n/ru.js?v=20260601-platform"></script>
+<script src="./i18n/fr.js?v=20260601-platform"></script>
+<script src="./i18n/id.js?v=20260601-platform"></script>
+<script src="./i18n/hi.js?v=20260601-platform"></script>
+<script src="./i18n/index.js?v=20260601-platform"></script>
 <script>
   document.addEventListener('DOMContentLoaded', function() {
     if (window.i18n) window.i18n.init();
@@ -306,7 +811,7 @@
 </script>
 
 <script src="./assets/to-markdown.js"></script>
-<script src="./assets/clipboard2markdown.js"></script>
+<script src="./assets/clipboard2markdown.js?v=20260601-platform"></script>
 
 </body>
 
