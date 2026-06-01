@@ -3,7 +3,9 @@
 window.i18nLocales = window.i18nLocales || {};
 window.i18nLocales['zh-cn'] = {
   localeName: '简体中文',
+  brandSubtitle: '在本机将富文本剪贴板内容转换为 Markdown，然后在同一个专注工作区编辑或预览结果。',
   subtitle: '使用方式',
+  introSubtitle: '从你原本使用的来源粘贴内容，转换会在这台设备上完成。',
   step1: '使用 {copyShortcut} 复制富文本内容',
   step2: '在这个页面使用 {pasteShortcut} 粘贴',
   step3: '编辑、预览，然后复制 Markdown 结果',
@@ -19,6 +21,7 @@ window.i18nLocales['zh-cn'] = {
   feedbackPost: ' 讨论或提供建议！',
   tabEdit: '编辑',
   tabPreview: '预览',
+  workspaceStatus: '粘贴后即可复制',
   placeholder: '粘贴内容...',
   noPreview: '没有内容可预览'
 };

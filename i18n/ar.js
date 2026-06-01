@@ -3,7 +3,9 @@
 window.i18nLocales = window.i18nLocales || {};
 window.i18nLocales.ar = {
   localeName: 'العربية',
+  brandSubtitle: 'حوّل محتوى الحافظة المنسّق إلى Markdown محليًا، ثم حرّره أو عاينه في مساحة عمل واحدة مركّزة.',
   subtitle: 'كيفية الاستخدام',
+  introSubtitle: 'الصق من المصدر الذي تستخدمه بالفعل. تتم عملية التحويل على هذا الجهاز.',
   step1: 'انسخ المحتوى الغني باستخدام {copyShortcut}',
   step2: 'الصق في هذه الصفحة باستخدام {pasteShortcut}',
   step3: 'حرّر النتيجة وعاينها، ثم انسخ Markdown',
@@ -19,6 +21,7 @@ window.i18nLocales.ar = {
   feedbackPost: '.',
   tabEdit: 'تحرير',
   tabPreview: 'معاينة',
+  workspaceStatus: 'جاهز للنسخ بعد اللصق',
   placeholder: 'الصق المحتوى هنا...',
   noPreview: 'لا يوجد محتوى للمعاينة'
 };

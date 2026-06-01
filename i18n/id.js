@@ -3,7 +3,9 @@
 window.i18nLocales = window.i18nLocales || {};
 window.i18nLocales.id = {
   localeName: 'Bahasa Indonesia',
+  brandSubtitle: 'Konversi konten kaya dari clipboard ke Markdown secara lokal, lalu edit atau pratinjau hasilnya dalam satu ruang kerja yang fokus.',
   subtitle: 'Cara penggunaan',
+  introSubtitle: 'Tempel dari sumber yang sudah Anda gunakan. Konversi berlangsung di perangkat ini.',
   step1: 'Salin konten kaya dengan {copyShortcut}',
   step2: 'Tempel di halaman ini dengan {pasteShortcut}',
   step3: 'Edit, pratinjau, lalu salin hasil Markdown',
@@ -19,6 +21,7 @@ window.i18nLocales.id = {
   feedbackPost: '.',
   tabEdit: 'Edit',
   tabPreview: 'Pratinjau',
+  workspaceStatus: 'Siap disalin setelah ditempel',
   placeholder: 'Tempel konten di sini...',
   noPreview: 'Tidak ada konten untuk pratinjau'
 };

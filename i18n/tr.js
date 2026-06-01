@@ -3,7 +3,9 @@
 window.i18nLocales = window.i18nLocales || {};
 window.i18nLocales.tr = {
   localeName: 'Türkçe',
+  brandSubtitle: 'Zengin pano içeriğini yerel olarak Markdown biçimine dönüştürün, ardından sonucu tek bir odaklı çalışma alanında düzenleyin veya önizleyin.',
   subtitle: 'Kullanım şekli',
+  introSubtitle: 'Zaten kullandığınız kaynaktan yapıştırın. Dönüştürme bu cihazda gerçekleşir.',
   step1: 'Zengin içeriği {copyShortcut} ile kopyalayın',
   step2: 'Bu sayfaya {pasteShortcut} ile yapıştırın',
   step3: 'Düzenleyin, önizleyin ve Markdown sonucunu kopyalayın',
@@ -19,6 +21,7 @@ window.i18nLocales.tr = {
   feedbackPost: '.',
   tabEdit: 'Düzenle',
   tabPreview: 'Önizleme',
+  workspaceStatus: 'Yapıştırdıktan sonra kopyalamaya hazır',
   placeholder: 'İçeriği buraya yapıştırın...',
   noPreview: 'Önizlenecek içerik yok'
 };

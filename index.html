@@ -85,6 +85,12 @@
             --surface: #ffffff;
             --surface-subtle: #f8fafc;
             --surface-elevated: #ffffff;
+            --editor-bg: rgba(255, 255, 255, 0.72);
+            --editor-bg-hover: rgba(255, 255, 255, 0.82);
+            --editor-topbar-bg: rgba(255, 255, 255, 0.88);
+            --intro-bg: rgba(255, 255, 255, 0.84);
+            --intro-step-bg: rgba(248, 250, 252, 0.78);
+            --footer-bg: rgba(255, 255, 255, 0.68);
             --border: #d8e0ea;
             --border-strong: #b9c6d6;
             --ink: #17202e;
@@ -112,6 +118,12 @@
                 --surface: #151d29;
                 --surface-subtle: #101722;
                 --surface-elevated: #1a2432;
+                --editor-bg: rgba(16, 23, 34, 0.72);
+                --editor-bg-hover: rgba(19, 28, 41, 0.82);
+                --editor-topbar-bg: rgba(26, 36, 50, 0.88);
+                --intro-bg: rgba(21, 29, 41, 0.84);
+                --intro-step-bg: rgba(16, 23, 34, 0.78);
+                --footer-bg: rgba(21, 29, 41, 0.58);
                 --border: #2a3748;
                 --border-strong: #3a4b60;
                 --ink: #eef4ff;
@@ -137,6 +149,12 @@
             --surface: #ffffff;
             --surface-subtle: #f8fafc;
             --surface-elevated: #ffffff;
+            --editor-bg: rgba(255, 255, 255, 0.72);
+            --editor-bg-hover: rgba(255, 255, 255, 0.82);
+            --editor-topbar-bg: rgba(255, 255, 255, 0.88);
+            --intro-bg: rgba(255, 255, 255, 0.84);
+            --intro-step-bg: rgba(248, 250, 252, 0.78);
+            --footer-bg: rgba(255, 255, 255, 0.68);
             --border: #d8e0ea;
             --border-strong: #b9c6d6;
             --ink: #17202e;
@@ -161,6 +179,12 @@
             --surface: #151d29;
             --surface-subtle: #101722;
             --surface-elevated: #1a2432;
+            --editor-bg: rgba(16, 23, 34, 0.72);
+            --editor-bg-hover: rgba(19, 28, 41, 0.82);
+            --editor-topbar-bg: rgba(26, 36, 50, 0.88);
+            --intro-bg: rgba(21, 29, 41, 0.84);
+            --intro-step-bg: rgba(16, 23, 34, 0.78);
+            --footer-bg: rgba(21, 29, 41, 0.58);
             --border: #2a3748;
             --border-strong: #3a4b60;
             --ink: #eef4ff;
@@ -333,8 +357,10 @@
         }
 
         .theme-icon {
-            font-size: 14px;
-            line-height: 1;
+            display: block;
+            height: 15px;
+            stroke-width: 2;
+            width: 15px;
         }
 
         .language-selector {
@@ -371,9 +397,8 @@
             grid-template-columns: minmax(340px, 0.9fr) minmax(0, 1.7fr);
         }
 
-        .intro-panel,
-        .editor-panel {
-            background: var(--surface);
+        .intro-panel {
+            background: var(--intro-bg);
             border: 1px solid var(--border);
             border-radius: var(--radius);
             box-shadow: var(--shadow);
@@ -413,7 +438,7 @@
         }
 
         .steps li {
-            background: var(--surface-subtle);
+            background: var(--intro-step-bg);
             border: 1px solid var(--border);
             border-radius: var(--radius-sm);
             color: var(--ink-muted);
@@ -466,6 +491,19 @@
             margin-bottom: 0;
         }
 
+        .app-footer {
+            border-radius: var(--radius-sm);
+            color: var(--ink-muted);
+            font-size: 13px;
+            margin-top: 24px;
+            padding: 12px 16px;
+            text-align: center;
+        }
+
+        .app-footer a {
+            font-weight: 650;
+        }
+
         #pastebin {
             height: 1px;
             left: -9999px;
@@ -481,6 +519,10 @@
         }
 
         .editor-panel {
+            background: transparent;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
             display: flex;
             flex-direction: column;
             min-height: 640px;
@@ -493,7 +535,7 @@
 
         .editor-topbar {
             align-items: center;
-            background: var(--surface-elevated);
+            background: var(--editor-topbar-bg);
             border-bottom: 1px solid var(--border);
             display: flex;
             gap: 16px;
@@ -551,7 +593,7 @@
 
         #output {
             border: none;
-            background: var(--surface-subtle);
+            background: var(--editor-bg);
             color: var(--ink);
             font-family: Consolas, "Liberation Mono", Courier, monospace;
             font-size: 14px;
@@ -560,11 +602,22 @@
             overflow: auto;
             padding: 18px;
             resize: none;
+            transition: background 160ms ease;
             width: 100%;
         }
 
+        #output::placeholder {
+            color: var(--ink-soft);
+            opacity: 1;
+        }
+
+        #output:hover,
+        #output:focus {
+            background: var(--editor-bg-hover);
+        }
+
         #preview {
-            background: var(--surface-subtle);
+            background: var(--editor-bg);
             color: var(--ink);
             flex: 1;
             min-height: 100%;
@@ -722,20 +775,36 @@
         <header class="app-header">
             <div class="brand-block">
                 <h1 class="brand-title">Paste to Markdown</h1>
-                <p class="brand-subtitle">Convert rich clipboard content to Markdown locally, then edit or preview the result in one focused workspace.</p>
+                <p class="brand-subtitle" data-i18n="brandSubtitle">Convert rich clipboard content to Markdown locally, then edit or preview the result in one focused workspace.</p>
             </div>
             <div class="top-controls" aria-label="Page settings">
                 <div class="theme-switcher" role="group" aria-label="Theme">
                     <button class="theme-button active" type="button" data-theme-choice="system" aria-pressed="true">
-                        <span class="theme-icon" aria-hidden="true">A</span>
+                        <svg class="theme-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="4" width="18" height="12" rx="2"></rect>
+                            <path d="M8 20h8"></path>
+                            <path d="M12 16v4"></path>
+                        </svg>
                         <span>System</span>
                     </button>
                     <button class="theme-button" type="button" data-theme-choice="light" aria-pressed="false">
-                        <span class="theme-icon" aria-hidden="true">L</span>
+                        <svg class="theme-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="4"></circle>
+                            <path d="M12 2v2"></path>
+                            <path d="M12 20v2"></path>
+                            <path d="m4.93 4.93 1.41 1.41"></path>
+                            <path d="m17.66 17.66 1.41 1.41"></path>
+                            <path d="M2 12h2"></path>
+                            <path d="M20 12h2"></path>
+                            <path d="m6.34 17.66-1.41 1.41"></path>
+                            <path d="m19.07 4.93-1.41 1.41"></path>
+                        </svg>
                         <span>Light</span>
                     </button>
                     <button class="theme-button" type="button" data-theme-choice="dark" aria-pressed="false">
-                        <span class="theme-icon" aria-hidden="true">D</span>
+                        <svg class="theme-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M20.99 13.01A8 8 0 1 1 10.99 3a6.5 6.5 0 0 0 10 10.01z"></path>
+                        </svg>
                         <span>Dark</span>
                     </button>
                 </div>
@@ -750,7 +819,7 @@
         <section id="info" class="intro-panel" aria-labelledby="how-to-use-title">
             <div class="intro-heading">
                 <h2 id="how-to-use-title" data-i18n="subtitle">How to use</h2>
-                <p>Paste from the source you already use. The conversion happens on this device.</p>
+                <p data-i18n="introSubtitle">Paste from the source you already use. The conversion happens on this device.</p>
             </div>
             <ol class="steps">
                 <li data-i18n="step1">Copy rich content with {copyShortcut}</li>
@@ -771,7 +840,7 @@
                     <button class="tab-button active" type="button" role="tab" aria-selected="true" aria-controls="edit-tab" data-tab="edit" data-i18n="tabEdit">Edit</button>
                     <button class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="preview-tab" data-tab="preview" data-i18n="tabPreview">Preview</button>
                 </div>
-                <p class="workspace-status">Ready to copy after paste</p>
+                <p class="workspace-status" data-i18n="workspaceStatus">Ready to copy after paste</p>
             </div>
             <div class="tab-content active" id="edit-tab" role="tabpanel">
                 <textarea id="output" data-i18n-placeholder="placeholder"></textarea>
@@ -781,6 +850,9 @@
             </div>
         </section>
         </main>
+        <footer class="app-footer">
+            本工具由 <a href="https://www.facebook.com/will.fans/" target="_blank" rel="noopener noreferrer">Will 保哥的技術交流中心</a> 設計、開發與維護
+        </footer>
     </div>
 
 

@@ -3,7 +3,9 @@
 window.i18nLocales = window.i18nLocales || {};
 window.i18nLocales.vi = {
   localeName: 'Tiếng Việt',
+  brandSubtitle: 'Chuyển đổi nội dung clipboard có định dạng sang Markdown ngay trên máy, rồi chỉnh sửa hoặc xem trước trong một không gian làm việc tập trung.',
   subtitle: 'Cách sử dụng',
+  introSubtitle: 'Dán từ nguồn bạn đang dùng. Việc chuyển đổi diễn ra trên thiết bị này.',
   step1: 'Sao chép nội dung định dạng bằng {copyShortcut}',
   step2: 'Dán vào trang này bằng {pasteShortcut}',
   step3: 'Chỉnh sửa, xem trước, rồi sao chép kết quả Markdown',
@@ -19,6 +21,7 @@ window.i18nLocales.vi = {
   feedbackPost: '.',
   tabEdit: 'Chỉnh sửa',
   tabPreview: 'Xem trước',
+  workspaceStatus: 'Sẵn sàng sao chép sau khi dán',
   placeholder: 'Dán nội dung vào đây...',
   noPreview: 'Không có nội dung để xem trước'
 };

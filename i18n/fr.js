@@ -3,7 +3,9 @@
 window.i18nLocales = window.i18nLocales || {};
 window.i18nLocales.fr = {
   localeName: 'Français',
+  brandSubtitle: 'Convertissez localement le contenu enrichi du presse-papiers en Markdown, puis modifiez ou prévisualisez le résultat dans un espace de travail dédié.',
   subtitle: 'Comment utiliser',
+  introSubtitle: 'Collez depuis la source que vous utilisez déjà. La conversion s’effectue sur cet appareil.',
   step1: 'Copiez le contenu enrichi avec {copyShortcut}',
   step2: 'Collez-le sur cette page avec {pasteShortcut}',
   step3: 'Modifiez, prévisualisez, puis copiez le Markdown obtenu',
@@ -19,7 +21,7 @@ window.i18nLocales.fr = {
   feedbackPost: '.',
   tabEdit: 'Éditer',
   tabPreview: 'Aperçu',
+  workspaceStatus: 'Prêt à copier après le collage',
   placeholder: 'Collez le contenu ici...',
   noPreview: 'Pas de contenu à prévisualiser'
 };
-

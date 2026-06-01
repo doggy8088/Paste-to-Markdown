@@ -3,7 +3,9 @@
 window.i18nLocales = window.i18nLocales || {};
 window.i18nLocales.pt = {
   localeName: 'Português',
+  brandSubtitle: 'Converta conteúdo rico da área de transferência para Markdown localmente e depois edite ou visualize o resultado em um espaço de trabalho focado.',
   subtitle: 'Como usar',
+  introSubtitle: 'Cole a partir da fonte que você já usa. A conversão acontece neste dispositivo.',
   step1: 'Copie conteúdo rico com {copyShortcut}',
   step2: 'Cole nesta página com {pasteShortcut}',
   step3: 'Edite, visualize e copie o Markdown gerado',
@@ -19,6 +21,7 @@ window.i18nLocales.pt = {
   feedbackPost: '.',
   tabEdit: 'Editar',
   tabPreview: 'Visualizar',
+  workspaceStatus: 'Pronto para copiar depois de colar',
   placeholder: 'Cole o conteúdo aqui...',
   noPreview: 'Nenhum conteúdo para visualizar'
 };

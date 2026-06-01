@@ -3,7 +3,9 @@
 window.i18nLocales = window.i18nLocales || {};
 window.i18nLocales.es = {
   localeName: 'Español',
+  brandSubtitle: 'Convierte contenido enriquecido del portapapeles a Markdown de forma local y luego edítalo o previsualízalo en un espacio de trabajo enfocado.',
   subtitle: 'Cómo usar',
+  introSubtitle: 'Pega desde la fuente que ya usas. La conversión ocurre en este dispositivo.',
   step1: 'Copia contenido enriquecido con {copyShortcut}',
   step2: 'Pégalo en esta página con {pasteShortcut}',
   step3: 'Edita, previsualiza y copia el Markdown resultante',
@@ -19,6 +21,7 @@ window.i18nLocales.es = {
   feedbackPost: '.',
   tabEdit: 'Editar',
   tabPreview: 'Vista previa',
+  workspaceStatus: 'Listo para copiar después de pegar',
   placeholder: 'Pega el contenido aquí...',
   noPreview: 'No hay contenido para previsualizar'
 };

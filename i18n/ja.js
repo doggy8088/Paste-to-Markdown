@@ -3,7 +3,9 @@
 window.i18nLocales = window.i18nLocales || {};
 window.i18nLocales.ja = {
   localeName: '日本語',
+  brandSubtitle: 'リッチなクリップボード内容をローカルで Markdown に変換し、1つの集中した作業スペースで編集またはプレビューできます。',
   subtitle: '使い方',
+  introSubtitle: '普段使っているソースから貼り付けてください。変換はこのデバイス上で行われます。',
   step1: 'リッチコンテンツを {copyShortcut} でコピーします',
   step2: 'このページで {pasteShortcut} を押して貼り付けます',
   step3: '編集とプレビューを確認してから Markdown をコピーします',
@@ -19,6 +21,7 @@ window.i18nLocales.ja = {
   feedbackPost: '。',
   tabEdit: '編集',
   tabPreview: 'プレビュー',
+  workspaceStatus: '貼り付け後にコピーできます',
   placeholder: 'ここにコンテンツを貼り付け...',
   noPreview: 'プレビューする内容がありません'
 };
