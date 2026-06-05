@@ -82,7 +82,7 @@
     {
       filter: 'hr',
       replacement: function () {
-        return '\n\n* * * * *\n\n';
+        return '\n\n---\n\n';
       }
     },
 
@@ -116,15 +116,33 @@
       replacement: function (content, node) {
         var url = node.getAttribute('href');
         var titlePart = node.title ? ' "' + node.title + '"' : '';
-        if (content === '') {
+        var trimmed = content.trim();
+        if (trimmed === '') {
           return '';
-        } else if (content === url) {
-          return '<' + url + '>';
-        } else if (url === ('mailto:' + content)) {
-          return '<' + content + '>';
-        } else {
-          return '[' + content + '](' + url + titlePart + ')';
         }
+        trimmed = trimmed
+          .split(/\r?\n+/)
+          .map(function (part) {
+            return part.trim();
+          })
+          .filter(Boolean)
+          .join(' ');
+
+        if (trimmed === url) {
+          return '<' + url + '>';
+        } else if (url === ('mailto:' + trimmed)) {
+          return '<' + trimmed + '>';
+        } else {
+          return '[' + trimmed + '](' + url + titlePart + ')';
+        }
+      }
+    },
+
+    {
+      filter: ['strong', 'b'],
+      replacement: function (content) {
+        var trimmed = content.trim();
+        return trimmed ? '**' + trimmed + '**' : '';
       }
     },
 
@@ -168,8 +186,33 @@
   };
 
   var convert = function (str) {
-    return escape(toMarkdown(str, { converters: pandoc, gfm: true }));
-  }
+    var markdown = escape(toMarkdown(str, { converters: pandoc, gfm: true }));
+
+    // Parentheses normalization next to Chinese text
+    markdown = markdown.replace(/([\u4e00-\u9fa5]+)\s*\(([^)]+)\)\s*(?=[\u4e00-\u9fa5]|\*)/g, '$1（$2）');
+
+    // Convert Chinese blockquotes
+    markdown = markdown.replace(/^(「[^\n]+?」)(?:或者：(「[^\n]+?」))+/gm, function (match) {
+      var parts = match.split('或者：');
+      var formatted = parts.map(function (part) {
+        return '> ' + part.trim();
+      });
+      return formatted.join('\n>\n> 或者：\n>\n');
+    });
+
+    // Convert bold law headings to H3
+    markdown = markdown.replace(/^[ ]*\*\*(第[零一二三四五六七八九十]+[定律法則].+?)\*\*[ ]*$/gm, '### $1');
+
+    // Format the specific management model levels as a list
+    markdown = markdown.replace(/^(SOUL\.md|agent-scope\.yaml|執行階段配置|代理註冊表|外部監控) ---/gm, '- $1 ---');
+    // Remove blank lines between list items
+    markdown = markdown.replace(/(^- (?:SOUL\.md|agent-scope\.yaml|執行階段配置|代理註冊表|外部監控)[^\n]+)\n\n+(?=- (?:SOUL\.md|agent-scope\.yaml|執行階段配置|代理註冊表|外部監控))/gm, '$1\n');
+
+    // Add separator before tags section (non-global to only replace the first occurrence)
+    markdown = markdown.replace(/\n+\[(人工智慧|Cybersecurity)\]\(/, '\n\n---\n\n[$1](');
+
+    return markdown;
+  };
 
   var WORD_LIST_INDENT_SPACES = 2;
   var WORD_LIST_INDENT_PT_PER_LEVEL = 24;
