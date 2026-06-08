@@ -22,6 +22,12 @@ window.i18nLocales.id = {
   tabEdit: 'Edit',
   tabPreview: 'Pratinjau',
   workspaceStatus: 'Siap disalin setelah ditempel',
+  themeSystem: 'Sistem',
+  themeLight: 'Terang',
+  themeDark: 'Gelap',
+  shareButton: '🔗 Bagikan',
+  shareButtonTitle: 'Salin URL yang bisa dibagikan',
+  shareSuccess: '🔗 Tautan disalin',
   placeholder: 'Tempel konten di sini...',
   noPreview: 'Tidak ada konten untuk pratinjau'
 };

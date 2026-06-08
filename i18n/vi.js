@@ -22,6 +22,12 @@ window.i18nLocales.vi = {
   tabEdit: 'Chỉnh sửa',
   tabPreview: 'Xem trước',
   workspaceStatus: 'Sẵn sàng sao chép sau khi dán',
+  themeSystem: 'Hệ thống',
+  themeLight: 'Sáng',
+  themeDark: 'Tối',
+  shareButton: '🔗 Chia sẻ',
+  shareButtonTitle: 'Sao chép URL có thể chia sẻ',
+  shareSuccess: '🔗 Đã sao chép liên kết',
   placeholder: 'Dán nội dung vào đây...',
   noPreview: 'Không có nội dung để xem trước'
 };

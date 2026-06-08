@@ -22,6 +22,12 @@ window.i18nLocales.hi = {
   tabEdit: 'संपादित करें',
   tabPreview: 'पूर्वावलोकन',
   workspaceStatus: 'पेस्ट करने के बाद कॉपी करने के लिए तैयार',
+  themeSystem: 'सिस्टम',
+  themeLight: 'हल्का',
+  themeDark: 'गहरा',
+  shareButton: '🔗 शेयर करें',
+  shareButtonTitle: 'साझा करने योग्य URL कॉपी करें',
+  shareSuccess: '🔗 लिंक कॉपी हो गया',
   placeholder: 'सामग्री यहाँ पेस्ट करें...',
   noPreview: 'पूर्वावलोकन के लिए कोई सामग्री नहीं है'
 };

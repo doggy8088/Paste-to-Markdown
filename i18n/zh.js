@@ -19,9 +19,15 @@ window.i18nLocales.zh = {
   feedbackPre: '，歡迎到 ',
   issues: 'Issues',
   feedbackPost: ' 討論或提供建議！',
-  tabEdit: '編輯',
-  tabPreview: '預覽',
+  tabEdit: '✏️ 編輯',
+  tabPreview: '👀 預覽',
   workspaceStatus: '貼上後即可複製',
+  themeSystem: '系統',
+  themeLight: '淺色',
+  themeDark: '深色',
+  shareButton: '🔗 分享',
+  shareButtonTitle: '複製可分享網址',
+  shareSuccess: '🔗 已複製連結',
   placeholder: '貼上內容...',
   noPreview: '沒有內容可預覽'
 };

@@ -450,8 +450,14 @@
     var output = document.querySelector('#output');
     var wrapper = document.querySelector('#wrapper');
     var preview = document.querySelector('#preview');
+    var shareButton = document.querySelector('#share-button');
     var tabsContainer = document.querySelector('.tabs');
     var themeButtons = document.querySelectorAll('.theme-button');
+    var shareButtonBusy = false;
+    var sharedHashSeed = '';
+    var hasEditedFromSharedHash = false;
+    var SHARE_HASH_PREFIX = 'z:';
+    var RAW_HASH_PREFIX = 'r:';
     var themeStorageKey = 'pasteToMarkdownTheme';
 
     // Tab switching functionality
@@ -559,6 +565,99 @@
         (event.code === 'Digit' + digit || event.key === String(digit));
     }
 
+    function matchesShareShortcut(event) {
+      return event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.shiftKey &&
+        (event.key === 's' || event.key === 'S' || event.code === 'KeyS');
+    }
+
+    async function executeShareAction() {
+      if (!shareButton || shareButtonBusy) {
+        return;
+      }
+
+      shareButtonBusy = true;
+      shareButton.disabled = true;
+
+      try {
+        var shareParams = new URLSearchParams();
+        shareParams.set('mode', getActiveTab());
+        shareParams.set('text', await buildHashFromCurrentState());
+
+        var hash = shareParams.toString();
+        var shareUrl = window.location.origin + window.location.pathname + window.location.search + '#' + hash;
+
+        window.location.hash = hash;
+
+        var linkText = getShareTitle(output.value);
+        var linkHtml = '<a href="' + toEscapedHtml(shareUrl) + '">' + toEscapedHtml(linkText) + '</a>';
+        var plainBlob = new Blob([shareUrl], { type: 'text/plain' });
+        var htmlBlob = new Blob([linkHtml], { type: 'text/html' });
+
+        if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+          var item = new ClipboardItem({
+            'text/plain': plainBlob,
+            'text/html': htmlBlob
+          });
+          await navigator.clipboard.write([item]);
+        } else if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(shareUrl);
+        } else {
+          throw new Error('Clipboard API is not available');
+        }
+
+        shareButton.textContent = window.i18n ? i18n.t('shareSuccess') : '🔗 Copied';
+      } catch (error) {
+        console.error('Unable to copy share URL.', error);
+        if (window.i18n) {
+          shareButton.textContent = i18n.t('shareButton');
+        } else {
+          shareButton.textContent = '🔗 Share';
+        }
+      } finally {
+        setTimeout(function () {
+          refreshShareButtonLabel();
+          shareButton.disabled = false;
+          shareButtonBusy = false;
+        }, 1200);
+      }
+    }
+
+    function getActiveTab() {
+      var activeButton = document.querySelector('.tab-button.active');
+      return activeButton ? activeButton.getAttribute('data-tab') : 'edit';
+    }
+
+    function activateTab(targetTab, options) {
+      var requestedTab = targetTab === 'preview' ? 'preview' : 'edit';
+      var isFound = false;
+
+      tabButtons.forEach(function(button) {
+        var isTarget = button.getAttribute('data-tab') === requestedTab;
+        button.classList.toggle('active', isTarget);
+        button.setAttribute('aria-selected', isTarget ? 'true' : 'false');
+        if (isTarget) {
+          isFound = true;
+        }
+      });
+
+      if (!isFound) {
+        return;
+      }
+
+      tabContents.forEach(function(content) {
+        content.classList.toggle('active', content.id === requestedTab + '-tab');
+      });
+
+      if (requestedTab === 'preview') {
+        updatePreview();
+      } else if (options && options.focus === true) {
+        output.focus();
+      }
+    }
+
     function prepareForPaste() {
       pastebin.innerHTML = '';
       pastebin.focus();
@@ -568,39 +667,21 @@
 
     function resetOutputView() {
       output.value = '';
+      sharedHashSeed = '';
+      hasEditedFromSharedHash = false;
+      clearHashModeState();
       wrapper.classList.remove('hidden');
       info.classList.remove('hidden');
     }
 
     tabButtons.forEach(function(button) {
       button.addEventListener('click', function() {
-        var targetTab = this.getAttribute('data-tab');
-
-        // Remove active class from all buttons and contents
-        tabButtons.forEach(function(btn) {
-          btn.classList.remove('active');
-        });
-        tabContents.forEach(function(content) {
-          content.classList.remove('active');
-        });
-
-        // Add active class to clicked button and corresponding content
-        this.classList.add('active');
-        this.setAttribute('aria-selected', 'true');
-        document.getElementById(targetTab + '-tab').classList.add('active');
-        tabButtons.forEach(function(btn) {
-          if (btn !== button) {
-            btn.setAttribute('aria-selected', 'false');
-          }
-        });
-
-        // Update preview when switching to preview tab
-        if (targetTab === 'preview') {
-          updatePreview();
-        }
+        activateTab(button.getAttribute('data-tab'), { focus: true });
       });
     });
 
+    refreshShareButtonLabel();
+    hideIntroIfHashProvided();
     updateTabShortcutHints();
     setThemeChoice(getStoredThemeChoice());
 
@@ -642,16 +723,99 @@
         updatePreview();
       }
       // i18n rewrites the tab button labels, so refresh the tooltip text too.
+      refreshShareButtonLabel();
+      syncHashModeState();
       updateTabShortcutHints();
     });
+
+    if (shareButton) {
+      shareButton.addEventListener('click', function () {
+        executeShareAction();
+      });
+    }
 
     // Monitor output changes and update preview if preview tab is active
     output.addEventListener('input', function() {
       var previewTab = document.getElementById('preview-tab');
+      if (isHashProvided()) {
+        clearSharedHashSeedContent();
+      }
+
       if (previewTab.classList.contains('active')) {
         updatePreview();
       }
     });
+
+    function clearSharedHashSeedContent() {
+      if (!isHashProvided() || hasEditedFromSharedHash) {
+        return;
+      }
+
+      hasEditedFromSharedHash = true;
+      sharedHashSeed = '';
+      clearHashModeState();
+      output.value = '';
+
+      if (!output.value) {
+        output.focus();
+      }
+    }
+
+    function syncHashModeState() {
+      var isHashMode = isHashProvided();
+      if (!document.documentElement) {
+        return;
+      }
+
+      if (isHashMode) {
+        document.documentElement.setAttribute('data-hash-mode', '1');
+      } else {
+        document.documentElement.removeAttribute('data-hash-mode');
+      }
+
+      enforceHashModePlaceholder();
+    }
+
+    function clearHashModeState() {
+      if (!window.history || !window.history.replaceState) {
+        return;
+      }
+
+      var baseLocation = window.location.pathname + window.location.search;
+      window.history.replaceState({}, document.title, baseLocation);
+      syncHashModeState();
+    }
+
+    function isHashProvided() {
+      return Boolean(window.location && window.location.hash && window.location.hash.length > 1);
+    }
+
+    function hideIntroIfHashProvided() {
+      if (!isHashProvided()) {
+        return;
+      }
+      syncHashModeState();
+      enforceHashModePlaceholder();
+      if (info) {
+        info.classList.add('hidden');
+      }
+      if (wrapper) {
+        wrapper.classList.remove('hidden');
+      }
+    }
+
+    function enforceHashModePlaceholder() {
+      if (!output) {
+        return;
+      }
+
+      if (isHashProvided()) {
+        output.setAttribute('placeholder', '');
+        return;
+      }
+
+      output.setAttribute('placeholder', window.i18n ? i18n.t('placeholder') : 'Paste content here...');
+    }
 
     // Sanitize HTML and add Bootstrap classes
     function sanitizeHtml(html) {
@@ -732,6 +896,316 @@
              (!trimmedUrl.includes(':'));
     }
 
+    function base64UrlEncode(bytes) {
+      if (!bytes || !bytes.length) {
+        return '';
+      }
+
+      var binary = '';
+      var index;
+      for (index = 0; index < bytes.length; index++) {
+        binary += String.fromCharCode(bytes[index]);
+      }
+      return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+    }
+
+    function base64UrlDecode(base64) {
+      if (!base64) {
+        return new Uint8Array(0);
+      }
+
+      var normalized = base64.replace(/-/g, '+').replace(/_/g, '/');
+      while (normalized.length % 4) {
+        normalized += '=';
+      }
+
+      var binary = atob(normalized);
+      var bytes = new Uint8Array(binary.length);
+      var i;
+      for (i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return bytes;
+    }
+
+    function hasCompressionSupport() {
+      return typeof CompressionStream === 'function' && typeof DecompressionStream === 'function';
+    }
+
+    function toUtf8Bytes(value) {
+      if (typeof TextEncoder === 'function') {
+        return new TextEncoder().encode(value || '');
+      }
+
+      var escaped = encodeURIComponent(value || '');
+      var bytes = [];
+      var i;
+      for (i = 0; i < escaped.length; i++) {
+        if (escaped[i] === '%') {
+          bytes.push(parseInt(escaped.substr(i + 1, 2), 16));
+          i += 2;
+        } else {
+          bytes.push(escaped.charCodeAt(i));
+        }
+      }
+
+      return bytes;
+    }
+
+    function utf8BytesToString(bytes) {
+      if (typeof TextDecoder === 'function') {
+        return new TextDecoder().decode(bytes);
+      }
+
+      var binary = '';
+      var i;
+      for (i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      return decodeURIComponent(escape(binary));
+    }
+
+    function toEscapedHtml(text) {
+      var value = String(text || '');
+      return value.replace(/[&<>"']/g, function (match) {
+        switch (match) {
+          case '&':
+            return '&amp;';
+          case '<':
+            return '&lt;';
+          case '>':
+            return '&gt;';
+          case '"':
+            return '&quot;';
+          case '\'':
+            return '&#39;';
+          default:
+            return match;
+        }
+      });
+    }
+
+    function buildHashFromCurrentState() {
+      var markdown = output.value || '';
+      if (!hasCompressionSupport()) {
+        return Promise.resolve(createFallbackHash(markdown));
+      }
+
+      return compressMarkdown(markdown).then(function (payload) {
+        return payload;
+      }).catch(function () {
+        return createFallbackHash(markdown);
+      });
+    }
+
+    function createFallbackHash(markdown) {
+      var markdownBytes = toUtf8Bytes(markdown);
+      return RAW_HASH_PREFIX + base64UrlEncode(new Uint8Array(markdownBytes));
+    }
+
+    function parseHashState() {
+      var hash = window.location.hash || '';
+      return new URLSearchParams(hash.charAt(0) === '#' ? hash.substring(1) : hash);
+    }
+
+    function parseTabFromHash(value) {
+      if (!value) {
+        return 'edit';
+      }
+      return value === 'preview' ? 'preview' : 'edit';
+    }
+
+    function getShareTitle(markdown) {
+      var lines = (markdown || '').split('\n');
+      var i;
+      var raw = '';
+      var title;
+
+      for (i = 0; i < lines.length; i++) {
+        if (lines[i].trim() !== '') {
+          raw = lines[i].trim();
+          break;
+        }
+      }
+
+      if (raw === '') {
+        raw = 'Markdown';
+      }
+
+      raw = raw.replace(/^\s*#{1,6}\s*/, '');
+      raw = stripMarkdownLinksFromTitle(raw);
+      raw = raw.replace(/^[\s`~!@#\$%\^&\*\(\)\[\]\{\}\|\\:;"',\.\?\/<>]+/, '');
+      raw = raw.replace(/[`\~!@#\$%\^&\*\(\)\[\]\{\}\|\\:;"',\.\?\/<>]+$/, '');
+      raw = raw.replace(/\s+/g, ' ').trim();
+      if (raw === '') {
+        raw = 'Markdown';
+      }
+
+      if (!/[A-Za-z]/.test(raw)) {
+        title = truncateByNonWhitespace(raw, 15);
+      } else {
+        title = truncateByWordBoundary(raw, 15);
+      }
+
+      return title || 'Markdown';
+    }
+
+    function stripMarkdownLinksFromTitle(value) {
+      var text = value;
+      text = text.replace(/!\[([^\]]*)\]\(([^)\n]+)\)/g, '$1');
+      text = text.replace(/\[([^\]]+)\]\(([^)\n]+)\)/g, '$1');
+      text = text.replace(/!\[([^\]]*)\]\[[^\]]*\]/g, '$1');
+      text = text.replace(/\[([^\]]+)\]\[[^\]]*\]/g, '$1');
+      return text.replace(/\s+/g, ' ').trim();
+    }
+
+    function countNonWhitespaceLength(value) {
+      return value.replace(/\s/g, '').length;
+    }
+
+    function truncateByNonWhitespace(value, maxVisibleChars) {
+      if (countNonWhitespaceLength(value) <= maxVisibleChars) {
+        return value;
+      }
+
+      var result = '';
+      var visibleCount = 0;
+      var charIndex;
+      for (charIndex = 0; charIndex < value.length; charIndex++) {
+        result += value[charIndex];
+        if (!/\s/.test(value[charIndex])) {
+          visibleCount++;
+        }
+
+        if (visibleCount >= maxVisibleChars) {
+          break;
+        }
+      }
+
+      return result.trim();
+    }
+
+    function truncateByWordBoundary(value, maxVisibleChars) {
+      var words = value.split(/\s+/);
+      if (words.length === 1) {
+        return value;
+      }
+
+      var titleParts = [];
+      var visibleCount = 0;
+      var hasOverLimitWord = false;
+      var wordIndex;
+
+      for (wordIndex = 0; wordIndex < words.length; wordIndex++) {
+        var word = words[wordIndex];
+        var wordVisibleCount = countNonWhitespaceLength(word);
+        var nextCount = visibleCount + wordVisibleCount;
+
+        if (titleParts.length === 0) {
+          titleParts.push(word);
+          visibleCount = wordVisibleCount;
+          continue;
+        }
+
+        if (nextCount > maxVisibleChars && titleParts.length > 0) {
+          if (!hasOverLimitWord) {
+            titleParts.push(word);
+            hasOverLimitWord = true;
+          }
+          break;
+        }
+
+        titleParts.push(word);
+        visibleCount = nextCount;
+      }
+
+      return titleParts.join(' ').trim();
+    }
+
+    async function compressMarkdown(markdown) {
+      if (!hasCompressionSupport()) {
+        return createFallbackHash(markdown);
+      }
+
+      var markdownBytes = toUtf8Bytes(markdown);
+      var blob = new Blob([markdownBytes]);
+      var compressedStream = blob.stream().pipeThrough(new CompressionStream('gzip'));
+      var compressed = await new Response(compressedStream).arrayBuffer();
+
+      return SHARE_HASH_PREFIX + base64UrlEncode(new Uint8Array(compressed));
+    }
+
+    async function decodeMarkdown(value) {
+      if (!value) {
+        return '';
+      }
+
+      var mode = value.substring(0, 2);
+      var payload = value.substring(2);
+      if (!payload) {
+        return '';
+      }
+
+      var bytes = base64UrlDecode(payload);
+      if (!hasCompressionSupport() || mode === RAW_HASH_PREFIX) {
+        return utf8BytesToString(bytes);
+      }
+
+      if (mode === SHARE_HASH_PREFIX) {
+        try {
+          var compressedBlob = new Blob([bytes]);
+          var decompressedStream = compressedBlob.stream().pipeThrough(new DecompressionStream('gzip'));
+          return await new Response(decompressedStream).text();
+        } catch (error) {
+          console.warn('Failed to decompress hash text, fallback to raw text decode.', error);
+          return utf8BytesToString(bytes);
+        }
+      }
+
+      return utf8BytesToString(bytes);
+    }
+
+    function refreshShareButtonLabel() {
+      if (!shareButton) {
+        return;
+      }
+
+      shareButton.textContent = window.i18n ? i18n.t('shareButton') : '🔗 Share';
+      shareButton.title = window.i18n ? i18n.t('shareButtonTitle') : 'Copy shareable URL';
+    }
+
+    async function applySharedHash() {
+      var hashParams = parseHashState();
+      syncHashModeState();
+      var mode = parseTabFromHash(hashParams.get('mode'));
+      var encodedText = hashParams.get('text');
+      var hashHasText = typeof encodedText === 'string' && encodedText.length > 0;
+
+      activateTab(mode, {
+        focus: true
+      });
+
+      if (!hashHasText) {
+        sharedHashSeed = '';
+        hasEditedFromSharedHash = false;
+        return;
+      }
+
+      try {
+        var decodedMarkdown = await decodeMarkdown(encodedText);
+        output.value = decodedMarkdown;
+        sharedHashSeed = decodedMarkdown;
+        hasEditedFromSharedHash = false;
+        wrapper.classList.remove('hidden');
+        info.classList.add('hidden');
+        if (mode === 'preview') {
+          updatePreview();
+        }
+      } catch (error) {
+        console.warn('Failed to load markdown from hash.', error);
+      }
+    }
+
     document.addEventListener('keydown', function (event) {
       if (event.ctrlKey || event.metaKey) {
         if (String.fromCharCode(event.which).toLowerCase() === 'v') {
@@ -739,7 +1213,16 @@
         }
       }
       if (event.key === 'Escape') {
+        activateTab('edit', {
+          focus: true
+        });
         resetOutputView();
+        window.scrollTo(0, 0);
+      }
+
+      if (matchesShareShortcut(event)) {
+        event.preventDefault();
+        executeShareAction();
       }
 
       if (matchesTabShortcut(event, 1)) {
@@ -757,6 +1240,11 @@
           previewButton.click();
         }
       }
+    });
+
+    applySharedHash();
+    window.addEventListener('hashchange', function () {
+      applySharedHash();
     });
 
     pastebin.addEventListener('paste', function (event) {
@@ -779,6 +1267,7 @@
 
         console.log('Plain Text: ', text);
 
+        clearSharedHashSeedContent();
         insert(output, text);
         wrapper.classList.remove('hidden');
         output.focus();
@@ -808,6 +1297,7 @@
 
         console.log('Markdown: ', markdown);
 
+        clearSharedHashSeedContent();
         insert(output, markdown);
         wrapper.classList.remove('hidden');
         output.focus();
@@ -826,6 +1316,7 @@
         plainText = applyPlainTextRules(plainText);
         console.log('After processing:', plainText);
 
+        clearSharedHashSeedContent();
         insert(output, plainText);
         wrapper.classList.remove('hidden');
         output.focus();
@@ -854,6 +1345,7 @@
 
       var markdown = convert(body);
 
+      clearSharedHashSeedContent();
       insert(output, markdown);
       wrapper.classList.remove('hidden');
       output.focus();

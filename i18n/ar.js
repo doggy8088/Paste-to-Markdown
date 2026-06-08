@@ -22,6 +22,12 @@ window.i18nLocales.ar = {
   tabEdit: 'تحرير',
   tabPreview: 'معاينة',
   workspaceStatus: 'جاهز للنسخ بعد اللصق',
+  themeSystem: 'النظام',
+  themeLight: 'فاتح',
+  themeDark: 'غامق',
+  shareButton: '🔗 مشاركة',
+  shareButtonTitle: 'نسخ رابط المشاركة',
+  shareSuccess: '🔗 تم نسخ الرابط',
   placeholder: 'الصق المحتوى هنا...',
   noPreview: 'لا يوجد محتوى للمعاينة'
 };

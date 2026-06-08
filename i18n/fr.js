@@ -22,6 +22,12 @@ window.i18nLocales.fr = {
   tabEdit: 'Éditer',
   tabPreview: 'Aperçu',
   workspaceStatus: 'Prêt à copier après le collage',
+  themeSystem: 'Système',
+  themeLight: 'Clair',
+  themeDark: 'Sombre',
+  shareButton: '🔗 Partager',
+  shareButtonTitle: 'Copier l\'URL partageable',
+  shareSuccess: '🔗 Lien copié',
   placeholder: 'Collez le contenu ici...',
   noPreview: 'Pas de contenu à prévisualiser'
 };

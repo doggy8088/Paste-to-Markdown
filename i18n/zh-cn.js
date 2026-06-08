@@ -22,6 +22,12 @@ window.i18nLocales['zh-cn'] = {
   tabEdit: '编辑',
   tabPreview: '预览',
   workspaceStatus: '粘贴后即可复制',
+  themeSystem: '系统',
+  themeLight: '浅色',
+  themeDark: '深色',
+  shareButton: '🔗 分享',
+  shareButtonTitle: '复制可分享网址',
+  shareSuccess: '🔗 已复制链接',
   placeholder: '粘贴内容...',
   noPreview: '没有内容可预览'
 };

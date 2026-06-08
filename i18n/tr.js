@@ -22,6 +22,12 @@ window.i18nLocales.tr = {
   tabEdit: 'Düzenle',
   tabPreview: 'Önizleme',
   workspaceStatus: 'Yapıştırdıktan sonra kopyalamaya hazır',
+  themeSystem: 'Sistem',
+  themeLight: 'Açık',
+  themeDark: 'Koyu',
+  shareButton: '🔗 Paylaş',
+  shareButtonTitle: 'Paylaşılabilir URL\'yi kopyala',
+  shareSuccess: '🔗 Bağlantı kopyalandı',
   placeholder: 'İçeriği buraya yapıştırın...',
   noPreview: 'Önizlenecek içerik yok'
 };

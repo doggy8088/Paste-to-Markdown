@@ -22,6 +22,12 @@ window.i18nLocales.th = {
   tabEdit: 'แก้ไข',
   tabPreview: 'ตัวอย่าง',
   workspaceStatus: 'พร้อมคัดลอกหลังจากวาง',
+  themeSystem: 'ระบบ',
+  themeLight: 'สว่าง',
+  themeDark: 'มืด',
+  shareButton: '🔗 แชร์',
+  shareButtonTitle: 'คัดลอก URL ที่แชร์ได้',
+  shareSuccess: '🔗 คัดลอกลิงก์แล้ว',
   placeholder: 'วางเนื้อหาที่นี่...',
   noPreview: 'ไม่มีเนื้อหาที่จะแสดงตัวอย่าง'
 };

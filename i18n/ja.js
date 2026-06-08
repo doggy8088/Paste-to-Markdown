@@ -22,6 +22,12 @@ window.i18nLocales.ja = {
   tabEdit: '編集',
   tabPreview: 'プレビュー',
   workspaceStatus: '貼り付け後にコピーできます',
+  themeSystem: 'システム',
+  themeLight: 'ライト',
+  themeDark: 'ダーク',
+  shareButton: '🔗 シェア',
+  shareButtonTitle: '共有用URLをコピー',
+  shareSuccess: '🔗 リンクをコピーしました',
   placeholder: 'ここにコンテンツを貼り付け...',
   noPreview: 'プレビューする内容がありません'
 };

@@ -22,6 +22,12 @@ window.i18nLocales.ru = {
   tabEdit: 'Редактировать',
   tabPreview: 'Просмотр',
   workspaceStatus: 'Готово к копированию после вставки',
+  themeSystem: 'Система',
+  themeLight: 'Светлая',
+  themeDark: 'Темная',
+  shareButton: '🔗 Поделиться',
+  shareButtonTitle: 'Копировать URL для обмена',
+  shareSuccess: '🔗 Ссылка скопирована',
   placeholder: 'Вставьте содержимое сюда...',
   noPreview: 'Нет контента для предпросмотра'
 };

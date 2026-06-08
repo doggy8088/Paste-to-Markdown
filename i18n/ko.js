@@ -22,6 +22,12 @@ window.i18nLocales.ko = {
   tabEdit: '편집',
   tabPreview: '미리보기',
   workspaceStatus: '붙여넣은 뒤 복사할 수 있습니다',
+  themeSystem: '시스템',
+  themeLight: '라이트',
+  themeDark: '다크',
+  shareButton: '🔗 공유',
+  shareButtonTitle: '공유 가능한 URL 복사',
+  shareSuccess: '🔗 링크가 복사되었습니다',
   placeholder: '여기에 내용을 붙여넣으세요...',
   noPreview: '미리 볼 내용이 없습니다'
 };

@@ -73,6 +73,18 @@
             }
         })();
     </script>
+    <script>
+        (function () {
+            'use strict';
+            try {
+                if (window.location && window.location.hash && window.location.hash.length > 1) {
+                    document.documentElement.setAttribute('data-hash-mode', '1');
+                }
+            } catch (error) {
+                // Hash pre-check is optional; fallback to runtime sync in app script.
+            }
+        })();
+    </script>
     <link href="./assets/favicon.ico" rel="icon" type="image/x-icon">
     <link rel="stylesheet" href="./assets/bootstrap.css">
     <style>
@@ -514,6 +526,14 @@
             width: 1px;
         }
 
+        html[data-hash-mode="1"] #info {
+            display: none;
+        }
+
+        html[data-hash-mode="1"] #info + #pastebin + #wrapper {
+            grid-column: 1 / -1;
+        }
+
         #info.hidden + #pastebin + #wrapper {
             grid-column: 1 / -1;
         }
@@ -574,11 +594,24 @@
             color: var(--accent-strong);
         }
 
-        .workspace-status {
-            color: var(--ink-soft);
+        .share-button {
+            background: var(--surface-subtle);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--ink);
+            cursor: pointer;
             font-size: 13px;
-            margin: 0;
-            text-align: right;
+            font-weight: 700;
+            margin: 0 0 0 auto;
+            padding: 8px 12px;
+            transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+        }
+
+        .share-button:hover,
+        .share-button:focus-visible {
+            background: var(--accent-soft);
+            border-color: var(--accent);
+            color: var(--accent-strong);
         }
 
         .tab-content {
@@ -609,6 +642,10 @@
         #output::placeholder {
             color: var(--ink-soft);
             opacity: 1;
+        }
+
+        html[data-hash-mode="1"] #output::placeholder {
+            color: transparent !important;
         }
 
         #output:hover,
@@ -665,8 +702,8 @@
             margin: 0;
         }
 
-        [dir="rtl"] .workspace-status {
-            text-align: left;
+        [dir="rtl"] .share-button {
+            margin: 0 auto 0 0;
         }
 
         [dir="rtl"] .steps li {
@@ -749,8 +786,8 @@
                 flex: 1;
             }
 
-            .workspace-status {
-                text-align: left;
+            .share-button {
+                margin: 0;
             }
         }
 
@@ -785,7 +822,7 @@
                             <path d="M8 20h8"></path>
                             <path d="M12 16v4"></path>
                         </svg>
-                        <span>System</span>
+                        <span data-i18n="themeSystem">System</span>
                     </button>
                     <button class="theme-button" type="button" data-theme-choice="light" aria-pressed="false">
                         <svg class="theme-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
@@ -799,13 +836,13 @@
                             <path d="m6.34 17.66-1.41 1.41"></path>
                             <path d="m19.07 4.93-1.41 1.41"></path>
                         </svg>
-                        <span>Light</span>
+                        <span data-i18n="themeLight">Light</span>
                     </button>
                     <button class="theme-button" type="button" data-theme-choice="dark" aria-pressed="false">
                         <svg class="theme-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M20.99 13.01A8 8 0 1 1 10.99 3a6.5 6.5 0 0 0 10 10.01z"></path>
                         </svg>
-                        <span>Dark</span>
+                        <span data-i18n="themeDark">Dark</span>
                     </button>
                 </div>
                 <div class="language-selector">
@@ -837,10 +874,10 @@
         <section class="editor-panel" id="wrapper">
             <div class="editor-topbar">
                 <div class="tabs" role="tablist" aria-label="Markdown view">
-                    <button class="tab-button active" type="button" role="tab" aria-selected="true" aria-controls="edit-tab" data-tab="edit" data-i18n="tabEdit">Edit</button>
-                    <button class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="preview-tab" data-tab="preview" data-i18n="tabPreview">Preview</button>
+                    <button class="tab-button active" type="button" role="tab" aria-selected="true" aria-controls="edit-tab" data-tab="edit" data-i18n="tabEdit">✏️ Edit</button>
+                    <button class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="preview-tab" data-tab="preview" data-i18n="tabPreview">👀 Preview</button>
                 </div>
-                <p class="workspace-status" data-i18n="workspaceStatus">Ready to copy after paste</p>
+                <button id="share-button" class="share-button" type="button" data-i18n="shareButton">🔗 Share</button>
             </div>
             <div class="tab-content active" id="edit-tab" role="tabpanel">
                 <textarea id="output" data-i18n-placeholder="placeholder"></textarea>

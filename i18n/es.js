@@ -22,6 +22,12 @@ window.i18nLocales.es = {
   tabEdit: 'Editar',
   tabPreview: 'Vista previa',
   workspaceStatus: 'Listo para copiar después de pegar',
+  themeSystem: 'Sistema',
+  themeLight: 'Claro',
+  themeDark: 'Oscuro',
+  shareButton: '🔗 Compartir',
+  shareButtonTitle: 'Copiar URL para compartir',
+  shareSuccess: '🔗 Enlace copiado',
   placeholder: 'Pega el contenido aquí...',
   noPreview: 'No hay contenido para previsualizar'
 };

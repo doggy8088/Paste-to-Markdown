@@ -19,9 +19,15 @@ window.i18nLocales.en = {
   feedbackPre: ', ',
   issues: 'Issues',
   feedbackPost: '.',
-  tabEdit: 'Edit',
-  tabPreview: 'Preview',
+  tabEdit: '✏️ Edit',
+  tabPreview: '👀 Preview',
   workspaceStatus: 'Ready to copy after paste',
+  themeSystem: 'System',
+  themeLight: 'Light',
+  themeDark: 'Dark',
+  shareButton: '🔗 Share',
+  shareButtonTitle: 'Copy shareable URL',
+  shareSuccess: '🔗 Link copied',
   placeholder: 'Paste content here...',
   noPreview: 'No content to preview'
 };
