@@ -1338,8 +1338,44 @@
 
       console.log('HTML:', html);
 
-      var parser = new DOMParser()
-      var doc = parser.parseFromString(html, 'text/html')
+      var parser = new DOMParser();
+      var doc = parser.parseFromString(html, 'text/html');
+
+      // Clean up translation artifacts safely
+      // 1. Remove spinners completely
+      var spinners = doc.querySelectorAll('.read-frog-spinner');
+      spinners.forEach(function (el) {
+        if (el.parentNode) {
+          el.parentNode.removeChild(el);
+        }
+      });
+
+      // 2. Unwrap translation wrappers to keep their text content
+      var wrappers = doc.querySelectorAll('.read-frog-translated-content-wrapper');
+      wrappers.forEach(function (el) {
+        var parent = el.parentNode;
+        if (parent) {
+          while (el.firstChild) {
+            parent.insertBefore(el.firstChild, el);
+          }
+          parent.removeChild(el);
+        }
+      });
+
+      // Unwrap block elements (like div, p) inside headings
+      var headings = doc.querySelectorAll('h1, h2, h3, h4, h5, h6');
+      headings.forEach(function (heading) {
+        var blocks = heading.querySelectorAll('div, p');
+        blocks.forEach(function (block) {
+          var parent = block.parentNode;
+          if (parent) {
+            while (block.firstChild) {
+              parent.insertBefore(block.firstChild, block);
+            }
+            parent.removeChild(block);
+          }
+        });
+      });
 
       var body = doc.querySelector('body').innerHTML;
 
