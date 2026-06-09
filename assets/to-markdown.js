@@ -29,7 +29,13 @@ var blocks = ['address', 'article', 'aside', 'audio', 'blockquote', 'body',
 ]
 
 function isBlock (node) {
-  return blocks.indexOf(node.nodeName.toLowerCase()) !== -1
+  if (node && node.nodeType === 1) {
+    var style = node.getAttribute('style');
+    if (style && /\bdisplay\s*:\s*inline/.test(style)) {
+      return false;
+    }
+  }
+  return blocks.indexOf(node.nodeName.toLowerCase()) !== -1;
 }
 
 var voids = [
