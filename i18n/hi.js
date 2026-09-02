@@ -28,6 +28,9 @@ window.i18nLocales.hi = {
   shareButton: '🔗 शेयर करें',
   shareButtonTitle: 'साझा करने योग्य URL कॉपी करें',
   shareSuccess: '🔗 लिंक कॉपी हो गया',
+  copyButton: '📋 कॉपी करें',
+  copyButtonTitle: 'Markdown और HTML के रूप में कॉपी करें',
+  copySuccess: '📋 कॉपी हो गया',
   placeholder: 'सामग्री यहाँ पेस्ट करें...',
   noPreview: 'पूर्वावलोकन के लिए कोई सामग्री नहीं है'
 };

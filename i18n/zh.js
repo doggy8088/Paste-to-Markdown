@@ -28,6 +28,9 @@ window.i18nLocales.zh = {
   shareButton: '🔗 分享',
   shareButtonTitle: '複製可分享網址',
   shareSuccess: '🔗 已複製連結',
+  copyButton: '📋 複製',
+  copyButtonTitle: '以 Markdown 與 HTML 複製',
+  copySuccess: '📋 已複製',
   placeholder: '貼上內容...',
   noPreview: '沒有內容可預覽'
 };

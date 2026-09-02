@@ -28,6 +28,9 @@ window.i18nLocales.th = {
   shareButton: '🔗 แชร์',
   shareButtonTitle: 'คัดลอก URL ที่แชร์ได้',
   shareSuccess: '🔗 คัดลอกลิงก์แล้ว',
+  copyButton: '📋 คัดลอก',
+  copyButtonTitle: 'คัดลอกเป็น Markdown และ HTML',
+  copySuccess: '📋 คัดลอกแล้ว',
   placeholder: 'วางเนื้อหาที่นี่...',
   noPreview: 'ไม่มีเนื้อหาที่จะแสดงตัวอย่าง'
 };

@@ -28,6 +28,9 @@ window.i18nLocales.ru = {
   shareButton: '🔗 Поделиться',
   shareButtonTitle: 'Копировать URL для обмена',
   shareSuccess: '🔗 Ссылка скопирована',
+  copyButton: '📋 Копировать',
+  copyButtonTitle: 'Копировать как Markdown и HTML',
+  copySuccess: '📋 Скопировано',
   placeholder: 'Вставьте содержимое сюда...',
   noPreview: 'Нет контента для предпросмотра'
 };

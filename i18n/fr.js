@@ -28,6 +28,9 @@ window.i18nLocales.fr = {
   shareButton: '🔗 Partager',
   shareButtonTitle: 'Copier l\'URL partageable',
   shareSuccess: '🔗 Lien copié',
+  copyButton: '📋 Copier',
+  copyButtonTitle: 'Copier en Markdown et HTML',
+  copySuccess: '📋 Copié',
   placeholder: 'Collez le contenu ici...',
   noPreview: 'Pas de contenu à prévisualiser'
 };

@@ -28,6 +28,9 @@ window.i18nLocales.es = {
   shareButton: '🔗 Compartir',
   shareButtonTitle: 'Copiar URL para compartir',
   shareSuccess: '🔗 Enlace copiado',
+  copyButton: '📋 Copiar',
+  copyButtonTitle: 'Copiar como Markdown y HTML',
+  copySuccess: '📋 Copiado',
   placeholder: 'Pega el contenido aquí...',
   noPreview: 'No hay contenido para previsualizar'
 };

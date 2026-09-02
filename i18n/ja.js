@@ -28,6 +28,9 @@ window.i18nLocales.ja = {
   shareButton: '🔗 シェア',
   shareButtonTitle: '共有用URLをコピー',
   shareSuccess: '🔗 リンクをコピーしました',
+  copyButton: '📋 コピー',
+  copyButtonTitle: 'Markdown と HTML としてコピー',
+  copySuccess: '📋 コピーしました',
   placeholder: 'ここにコンテンツを貼り付け...',
   noPreview: 'プレビューする内容がありません'
 };

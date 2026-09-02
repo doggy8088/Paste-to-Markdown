@@ -451,9 +451,11 @@
     var wrapper = document.querySelector('#wrapper');
     var preview = document.querySelector('#preview');
     var shareButton = document.querySelector('#share-button');
+    var copyButton = document.querySelector('#copy-button');
     var tabsContainer = document.querySelector('.tabs');
     var themeButtons = document.querySelectorAll('.theme-button');
     var shareButtonBusy = false;
+    var copyButtonBusy = false;
     var sharedHashSeed = '';
     var hasEditedFromSharedHash = false;
     var SHARE_HASH_PREFIX = 'z:';
@@ -573,6 +575,94 @@
         (event.key === 's' || event.key === 'S' || event.code === 'KeyS');
     }
 
+    function matchesCopyShortcut(event) {
+      return event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.shiftKey &&
+        (event.key === 'c' || event.key === 'C' || event.code === 'KeyC');
+    }
+
+    function getClipboardHtml(markdown) {
+      if (!markdown || !markdown.trim()) {
+        return '';
+      }
+      try {
+        marked.setOptions({
+          breaks: true,
+          gfm: true,
+          headerIds: false,
+          mangle: false,
+          sanitize: false
+        });
+        var rawHtml = marked.parse(markdown);
+        return sanitizeHtml(rawHtml);
+      } catch (error) {
+        console.warn('Failed to render markdown to HTML for clipboard.', error);
+        return toEscapedHtml(markdown);
+      }
+    }
+
+    async function executeCopyAction() {
+      if (!copyButton || copyButtonBusy) {
+        return;
+      }
+
+      copyButtonBusy = true;
+      copyButton.disabled = true;
+
+      try {
+        var markdown = output ? output.value || '' : '';
+        var htmlForClipboard = getClipboardHtml(markdown);
+        var htmlBlob = new Blob([htmlForClipboard], { type: 'text/html' });
+        var markdownBlob = new Blob([markdown], { type: 'text/markdown' });
+        var plainBlob = new Blob([markdown], { type: 'text/plain' });
+
+        if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+          try {
+            var clipboardData = {
+              'text/html': htmlBlob,
+              'text/markdown': markdownBlob,
+              'text/plain': plainBlob
+            };
+            var item = new ClipboardItem(clipboardData);
+            await navigator.clipboard.write([item]);
+          } catch (clipboardItemError) {
+            // Some browsers reject unknown MIME types like text/markdown.
+            // Retry with fallback that still satisfies html + markdown intent via plain text.
+            console.warn('ClipboardItem with text/markdown failed, retrying with fallback.', clipboardItemError);
+            try {
+              var fallbackItem = new ClipboardItem({
+                'text/html': htmlBlob,
+                'text/plain': plainBlob
+              });
+              await navigator.clipboard.write([fallbackItem]);
+              // Also attempt to write markdown via writeText if needed, but primary write already done.
+            } catch (fallbackError) {
+              throw clipboardItemError;
+            }
+          }
+        } else if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(markdown);
+        } else {
+          throw new Error('Clipboard API is not available');
+        }
+
+        copyButton.textContent = window.i18n ? i18n.t('copySuccess') : '📋 Copied';
+      } catch (error) {
+        console.error('Unable to copy markdown.', error);
+        refreshCopyButtonLabel();
+      } finally {
+        setTimeout(function () {
+          refreshCopyButtonLabel();
+          if (copyButton) {
+            copyButton.disabled = false;
+          }
+          copyButtonBusy = false;
+        }, 1200);
+      }
+    }
+
     async function executeShareAction() {
       if (!shareButton || shareButtonBusy) {
         return;
@@ -681,6 +771,7 @@
     });
 
     refreshShareButtonLabel();
+    refreshCopyButtonLabel();
     hideIntroIfHashProvided();
     updateTabShortcutHints();
     setThemeChoice(getStoredThemeChoice());
@@ -724,6 +815,7 @@
       }
       // i18n rewrites the tab button labels, so refresh the tooltip text too.
       refreshShareButtonLabel();
+      refreshCopyButtonLabel();
       syncHashModeState();
       updateTabShortcutHints();
     });
@@ -731,6 +823,12 @@
     if (shareButton) {
       shareButton.addEventListener('click', function () {
         executeShareAction();
+      });
+    }
+
+    if (copyButton) {
+      copyButton.addEventListener('click', function () {
+        executeCopyAction();
       });
     }
 
@@ -1174,6 +1272,15 @@
       shareButton.title = window.i18n ? i18n.t('shareButtonTitle') : 'Copy shareable URL';
     }
 
+    function refreshCopyButtonLabel() {
+      if (!copyButton) {
+        return;
+      }
+
+      copyButton.textContent = window.i18n ? i18n.t('copyButton') : '📋 Copy';
+      copyButton.title = window.i18n ? i18n.t('copyButtonTitle') : 'Copy as Markdown and HTML';
+    }
+
     async function applySharedHash() {
       var hashParams = parseHashState();
       syncHashModeState();
@@ -1223,6 +1330,11 @@
       if (matchesShareShortcut(event)) {
         event.preventDefault();
         executeShareAction();
+      }
+
+      if (matchesCopyShortcut(event)) {
+        event.preventDefault();
+        executeCopyAction();
       }
 
       if (matchesTabShortcut(event, 1)) {

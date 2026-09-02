@@ -28,6 +28,9 @@ window.i18nLocales.ko = {
   shareButton: '🔗 공유',
   shareButtonTitle: '공유 가능한 URL 복사',
   shareSuccess: '🔗 링크가 복사되었습니다',
+  copyButton: '📋 복사',
+  copyButtonTitle: 'Markdown 및 HTML로 복사',
+  copySuccess: '📋 복사됨',
   placeholder: '여기에 내용을 붙여넣으세요...',
   noPreview: '미리 볼 내용이 없습니다'
 };

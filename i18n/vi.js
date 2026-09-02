@@ -28,6 +28,9 @@ window.i18nLocales.vi = {
   shareButton: '🔗 Chia sẻ',
   shareButtonTitle: 'Sao chép URL có thể chia sẻ',
   shareSuccess: '🔗 Đã sao chép liên kết',
+  copyButton: '📋 Sao chép',
+  copyButtonTitle: 'Sao chép dưới dạng Markdown và HTML',
+  copySuccess: '📋 Đã sao chép',
   placeholder: 'Dán nội dung vào đây...',
   noPreview: 'Không có nội dung để xem trước'
 };

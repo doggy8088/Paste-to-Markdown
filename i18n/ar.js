@@ -28,6 +28,9 @@ window.i18nLocales.ar = {
   shareButton: '🔗 مشاركة',
   shareButtonTitle: 'نسخ رابط المشاركة',
   shareSuccess: '🔗 تم نسخ الرابط',
+  copyButton: '📋 نسخ',
+  copyButtonTitle: 'نسخ كـ Markdown و HTML',
+  copySuccess: '📋 تم النسخ',
   placeholder: 'الصق المحتوى هنا...',
   noPreview: 'لا يوجد محتوى للمعاينة'
 };

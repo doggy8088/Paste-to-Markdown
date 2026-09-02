@@ -28,6 +28,9 @@ window.i18nLocales.en = {
   shareButton: '🔗 Share',
   shareButtonTitle: 'Copy shareable URL',
   shareSuccess: '🔗 Link copied',
+  copyButton: '📋 Copy',
+  copyButtonTitle: 'Copy as Markdown and HTML',
+  copySuccess: '📋 Copied',
   placeholder: 'Paste content here...',
   noPreview: 'No content to preview'
 };

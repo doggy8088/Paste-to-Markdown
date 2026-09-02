@@ -594,7 +594,15 @@
             color: var(--accent-strong);
         }
 
-        .share-button {
+        .topbar-actions {
+            align-items: center;
+            display: flex;
+            gap: 8px;
+            margin-left: auto;
+        }
+
+        .share-button,
+        .copy-button {
             background: var(--surface-subtle);
             border: 1px solid var(--border);
             border-radius: 8px;
@@ -602,16 +610,24 @@
             cursor: pointer;
             font-size: 13px;
             font-weight: 700;
-            margin: 0 0 0 auto;
+            margin: 0;
             padding: 8px 12px;
             transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
         }
 
         .share-button:hover,
-        .share-button:focus-visible {
+        .share-button:focus-visible,
+        .copy-button:hover,
+        .copy-button:focus-visible {
             background: var(--accent-soft);
             border-color: var(--accent);
             color: var(--accent-strong);
+        }
+
+        .share-button:disabled,
+        .copy-button:disabled {
+            cursor: not-allowed;
+            opacity: 0.6;
         }
 
         .tab-content {
@@ -702,7 +718,7 @@
             margin: 0;
         }
 
-        [dir="rtl"] .share-button {
+        [dir="rtl"] .topbar-actions {
             margin: 0 auto 0 0;
         }
 
@@ -786,8 +802,14 @@
                 flex: 1;
             }
 
-            .share-button {
+            .topbar-actions {
                 margin: 0;
+                width: 100%;
+            }
+
+            .topbar-actions .share-button,
+            .topbar-actions .copy-button {
+                flex: 1;
             }
         }
 
@@ -877,7 +899,10 @@
                     <button class="tab-button active" type="button" role="tab" aria-selected="true" aria-controls="edit-tab" data-tab="edit" data-i18n="tabEdit">✏️ Edit</button>
                     <button class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="preview-tab" data-tab="preview" data-i18n="tabPreview">👀 Preview</button>
                 </div>
-                <button id="share-button" class="share-button" type="button" data-i18n="shareButton">🔗 Share</button>
+                <div class="topbar-actions">
+                    <button id="copy-button" class="copy-button" type="button" data-i18n="copyButton">📋 Copy</button>
+                    <button id="share-button" class="share-button" type="button" data-i18n="shareButton">🔗 Share</button>
+                </div>
             </div>
             <div class="tab-content active" id="edit-tab" role="tabpanel">
                 <textarea id="output" data-i18n-placeholder="placeholder"></textarea>

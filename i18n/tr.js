@@ -28,6 +28,9 @@ window.i18nLocales.tr = {
   shareButton: '🔗 Paylaş',
   shareButtonTitle: 'Paylaşılabilir URL\'yi kopyala',
   shareSuccess: '🔗 Bağlantı kopyalandı',
+  copyButton: '📋 Kopyala',
+  copyButtonTitle: 'Markdown ve HTML olarak kopyala',
+  copySuccess: '📋 Kopyalandı',
   placeholder: 'İçeriği buraya yapıştırın...',
   noPreview: 'Önizlenecek içerik yok'
 };

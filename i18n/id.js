@@ -28,6 +28,9 @@ window.i18nLocales.id = {
   shareButton: '🔗 Bagikan',
   shareButtonTitle: 'Salin URL yang bisa dibagikan',
   shareSuccess: '🔗 Tautan disalin',
+  copyButton: '📋 Salin',
+  copyButtonTitle: 'Salin sebagai Markdown dan HTML',
+  copySuccess: '📋 Disalin',
   placeholder: 'Tempel konten di sini...',
   noPreview: 'Tidak ada konten untuk pratinjau'
 };
