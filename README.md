@@ -2,7 +2,7 @@
 
 # Paste to Markdown
 
-[![Version](https://img.shields.io/badge/version-v1.0.1-blue.svg)](https://github.com/doggy8088/Paste-to-Markdown)
+[![Version](https://img.shields.io/badge/version-v1.0.2-blue.svg)](https://github.com/doggy8088/Paste-to-Markdown)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/doggy8088/Paste-to-Markdown/blob/main/LICENSE)
 [![Client-Side Only](https://img.shields.io/badge/privacy-100%25%20client--side-brightgreen.svg)](#privacy--security)
 
@@ -121,7 +121,6 @@ make check
 - Based on [to-markdown](https://github.com/domchristie/to-markdown) by Dom Christie.
 - Markdown conversion powered by [Turndown](https://github.com/mixmark-io/turndown) and [Marked](https://github.com/markedjs/marked).
 - Math rendering powered by [KaTeX](https://katex.org/).
-- Style and concept adapted from [Paste to Markdown](https://euangoddard.github.io/clipboard2markdown/) by Euan Goddard.
 - Designed, developed, and maintained by [Will 保哥的技術交流中心](https://www.facebook.com/will.fans/).
 
 ---
