@@ -72,6 +72,12 @@ Currently, this project does **not** use a package manager (npm/yarn) or a build
 - **Bootstrap Integration**: The sanitizer also adds Bootstrap classes (`table-striped`, `img-responsive`, etc.) to the rendered HTML to ensure consistent styling.
 - Never use `innerHTML` with unsanitized user input.
 
+### Version Management
+- **Automatic Patch Version Bump**: Whenever ANY change or modification is made to the codebase (features, bug fixes, UI adjustments, or refactoring), agents **MUST** automatically bump the patch version (e.g., `v1.0.0` -> `v1.0.1`).
+- **Update Footer Version**: Always update the displayed version in `index.html` inside the footer (`<span class="app-version" title="Version vX.Y.Z">vX.Y.Z</span>`).
+- **Update Schema Version**: Keep the `"softwareVersion"` field in the JSON-LD schema inside `index.html` synchronized with the current version.
+- **Cache-Busting Query Strings**: When modifying JavaScript or CSS files, also update the query string version (e.g., `?v=...`) on the corresponding script or stylesheet tags in `index.html` to avoid browser cache issues.
+
 ## Key Implementation Details
 
 ### Paste Handling
@@ -126,7 +132,12 @@ Conversion is primarily handled by `TurndownService` with the GFM tables plugin.
 ### Common Tasks and Troubleshooting
 - **Fixing Table Alignment**: Check `turndown-plugin-gfm.js` and the `tr` rule in `clipboard2markdown.js`.
 - **Handling New Clipboard Sources**: Log `event.clipboardData.types` in the `paste` event handler to see what formats the new source provides.
-- **Regex Debugging**: When adding regex-based cleanup in `escape()` or `plainTextRules`, use non-greedy matches where appropriate and test with varied input.
+### Version Bumping and Pre-commit Checklist
+Before finalizing changes, testing, or committing:
+1. **Bump Patch Version**: Increment the patch version following Semantic Versioning (e.g., `v1.0.0` -> `v1.0.1`).
+2. **Update Footer in `index.html`**: Ensure `<span class="app-version" title="Version vX.Y.Z">vX.Y.Z</span>` matches the new version.
+3. **Update Schema in `index.html`**: Ensure `"softwareVersion": "X.Y.Z"` in JSON-LD is updated.
+4. **Update Cache Query Strings**: If any JS/CSS assets were changed, bump their `?v=...` query string parameter in `index.html`.
 
 ### Verification and Testing
 Since there are no automated tests:
