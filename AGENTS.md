@@ -9,7 +9,7 @@ This repository contains a simple, client-side web application for converting cl
   - `clipboard2markdown.js`: Main application logic, handles paste events and UI updates.
   - `to-markdown.js`: Custom conversion logic and utilities.
   - `bootstrap.css`: Styling (Bootstrap 3 based).
-- `vendor/`: Third-party libraries (Turndown, Marked, GFM plugin).
+- `vendor/`: Third-party libraries (Turndown, Marked, GFM plugin, KaTeX).
 - `assets/background.svg`: Background image for the application.
 
 ## Build, Lint, and Test Commands
@@ -98,6 +98,10 @@ Conversion is primarily handled by `TurndownService` with the GFM tables plugin.
 
 ### Preview and Theming
 - **Marked**: Used to render the Markdown back to HTML in the "Preview" tab.
+- **Math Rendering (KaTeX)**:
+  - Custom `marked` extensions (`blockMath` and `inlineMath`) intercept `$$...$$`, `$...$`, and ````math```` code blocks.
+  - Math is rendered locally offline using KaTeX (`vendor/katex/`).
+  - Preprocesses pasted HTML (KaTeX, MathJax, MathML, Wikipedia math, and data attributes) into clean Markdown math syntax.
 - **Sanitization**: All output from `marked.parse()` MUST pass through `sanitizeHtml()`.
 - **Theming**:
   - UI components use Bootstrap 3 classes.

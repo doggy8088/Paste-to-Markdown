@@ -42,6 +42,133 @@
 
   turndownService.remove('style');
 
+  // Custom rules: preserve math placeholder blocks and inlines
+  turndownService.addRule('p2mMathBlock', {
+    filter: function (node) {
+      return node.classList && node.classList.contains('p2m-math-block');
+    },
+    replacement: function (content) {
+      return '\n\n' + content.trim() + '\n\n';
+    }
+  });
+
+  turndownService.addRule('p2mMathInline', {
+    filter: function (node) {
+      return node.classList && node.classList.contains('p2m-math-inline');
+    },
+    replacement: function (content) {
+      return content.trim();
+    }
+  });
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // Marked extensions for LaTeX math expressions ($...$ and $$...$$)
+  var blockMath = {
+    name: 'blockMath',
+    level: 'block',
+    start: function (src) {
+      var idx = src.indexOf('$$');
+      return idx === -1 ? undefined : idx;
+    },
+    tokenizer: function (src) {
+      var match = /^(?:[ \t]*\n)?\$\$([\s\S]+?)\$\$(?:[ \t]*(?:\n|$))/.exec(src);
+      if (match) {
+        return {
+          type: 'blockMath',
+          raw: match[0],
+          text: match[1].trim()
+        };
+      }
+    },
+    renderer: function (token) {
+      if (window.katex) {
+        try {
+          return '<div class="katex-display">' + window.katex.renderToString(token.text, {
+            displayMode: true,
+            throwOnError: false
+          }) + '</div>\n';
+        } catch (e) {
+          console.error('KaTeX block rendering error:', e);
+        }
+      }
+      return '<div class="katex-display katex-error"><code>' + escapeHtml(token.text) + '</code></div>\n';
+    }
+  };
+
+  var inlineMath = {
+    name: 'inlineMath',
+    level: 'inline',
+    start: function (src) {
+      var index = -1;
+      while ((index = src.indexOf('$', index + 1)) !== -1) {
+        if (src[index + 1] === '$') {
+          index++;
+          continue;
+        }
+        if (index > 0 && src[index - 1] === '\\') {
+          continue;
+        }
+        return index;
+      }
+      return -1;
+    },
+    tokenizer: function (src) {
+      var match = /^\$([^\s$](?:[\s\S]*?[^\s$])?)\$(?!\d)/.exec(src);
+      if (match) {
+        return {
+          type: 'inlineMath',
+          raw: match[0],
+          text: match[1].trim()
+        };
+      }
+    },
+    renderer: function (token) {
+      if (window.katex) {
+        try {
+          return window.katex.renderToString(token.text, {
+            displayMode: false,
+            throwOnError: false
+          });
+        } catch (e) {
+          console.error('KaTeX inline rendering error:', e);
+        }
+      }
+      return '<span class="katex-inline katex-error"><code>' + escapeHtml(token.text) + '</code></span>';
+    }
+  };
+
+  if (typeof marked !== 'undefined' && marked.use) {
+    marked.use({
+      extensions: [blockMath, inlineMath],
+      renderer: {
+        code: function (code, infostring) {
+          if (infostring === 'math') {
+            if (window.katex) {
+              try {
+                return '<div class="katex-display">' + window.katex.renderToString(code.trim(), {
+                  displayMode: true,
+                  throwOnError: false
+                }) + '</div>\n';
+              } catch (e) {
+                console.error('KaTeX code block rendering error:', e);
+              }
+            }
+            return '<div class="katex-display katex-error"><code>' + escapeHtml(code) + '</code></div>\n';
+          }
+          return false;
+        }
+      }
+    });
+  }
+
   // http://pandoc.org/README.html#pandocs-markdown
   var pandoc = [
     {
@@ -160,6 +287,24 @@
 
         return prefix + content;
       }
+    },
+
+    {
+      filter: function (node) {
+        return node.classList && node.classList.contains('p2m-math-block');
+      },
+      replacement: function (content) {
+        return '\n\n' + content.trim() + '\n\n';
+      }
+    },
+
+    {
+      filter: function (node) {
+        return node.classList && node.classList.contains('p2m-math-inline');
+      },
+      replacement: function (content) {
+        return content.trim();
+      }
     }
   ];
 
@@ -185,8 +330,292 @@
       .replace(/[\u200B\uFEFF]/g, '');
   };
 
-  var convert = function (str) {
+  function convertMathMLToLatex(node) {
+    if (!node) return '';
+    var tag = node.nodeName.toLowerCase();
+    if (tag === 'mn' || tag === 'mi' || tag === 'mo') {
+      return node.textContent.trim();
+    }
+    if (tag === 'mtext') {
+      return '\\text{' + node.textContent + '}';
+    }
+    if (tag === 'mfrac') {
+      var fChildren = Array.from(node.children);
+      if (fChildren.length >= 2) {
+        return '\\frac{' + convertMathMLToLatex(fChildren[0]) + '}{' + convertMathMLToLatex(fChildren[1]) + '}';
+      }
+    }
+    if (tag === 'msup') {
+      var supChildren = Array.from(node.children);
+      if (supChildren.length >= 2) {
+        return convertMathMLToLatex(supChildren[0]) + '^{' + convertMathMLToLatex(supChildren[1]) + '}';
+      }
+    }
+    if (tag === 'msub') {
+      var subChildren = Array.from(node.children);
+      if (subChildren.length >= 2) {
+        return convertMathMLToLatex(subChildren[0]) + '_{' + convertMathMLToLatex(subChildren[1]) + '}';
+      }
+    }
+    if (tag === 'msubsup') {
+      var subSupChildren = Array.from(node.children);
+      if (subSupChildren.length >= 3) {
+        return convertMathMLToLatex(subSupChildren[0]) + '_{' + convertMathMLToLatex(subSupChildren[1]) + '}^{' + convertMathMLToLatex(subSupChildren[2]) + '}';
+      }
+    }
+    if (tag === 'msqrt') {
+      return '\\sqrt{' + Array.from(node.children).map(convertMathMLToLatex).join(' ') + '}';
+    }
+    if (tag === 'mroot') {
+      var rootChildren = Array.from(node.children);
+      if (rootChildren.length >= 2) {
+        return '\\sqrt[' + convertMathMLToLatex(rootChildren[1]) + ']{' + convertMathMLToLatex(rootChildren[0]) + '}';
+      }
+    }
+    return Array.from(node.childNodes).map(function (child) {
+      if (child.nodeType === 1) return convertMathMLToLatex(child);
+      if (child.nodeType === 3) return child.textContent.trim();
+      return '';
+    }).filter(Boolean).join(' ').trim();
+  }
+
+  function preprocessMathInDom(doc, mathRegistry) {
+    if (!doc || !mathRegistry) return;
+
+    function registerMath(tex, isBlock) {
+      var cleanTex = (tex || '').trim();
+      if (!cleanTex) return null;
+      cleanTex = cleanTex.replace(/^\$\$([\s\S]*)\$\$$/, '$1')
+                         .replace(/^\$([\s\S]*)\$$/, '$1')
+                         .replace(/^\{\\displaystyle\s*([\s\S]*)\}$/, '$1')
+                         .replace(/^\\displaystyle\s*/, '')
+                         .trim();
+      if (!cleanTex) return null;
+
+      var id = mathRegistry.length;
+      mathRegistry.push({
+        id: id,
+        type: isBlock ? 'block' : 'inline',
+        tex: cleanTex
+      });
+      return {
+        id: id,
+        token: isBlock ? ('%%P2M_MATH_BLOCK_' + id + '%%') : ('%%P2M_MATH_INLINE_' + id + '%%')
+      };
+    }
+
+    function replaceWithPlaceholder(el, tex, isBlock) {
+      var item = registerMath(tex, isBlock);
+      if (!item) {
+        if (el.parentNode) el.parentNode.removeChild(el);
+        return;
+      }
+      var replacementNode;
+      if (isBlock) {
+        replacementNode = doc.createElement('div');
+        replacementNode.className = 'p2m-math-block';
+        replacementNode.textContent = item.token;
+      } else {
+        replacementNode = doc.createElement('span');
+        replacementNode.className = 'p2m-math-inline';
+        replacementNode.textContent = item.token;
+      }
+      if (el.parentNode) {
+        el.parentNode.replaceChild(replacementNode, el);
+      }
+    }
+
+    // 1. KaTeX display math: .katex-display
+    var katexDisplays = Array.from(doc.querySelectorAll('.katex-display'));
+    for (var i = 0; i < katexDisplays.length; i++) {
+      var kd = katexDisplays[i];
+      var ann = kd.querySelector('annotation');
+      var tex = ann ? ann.textContent : (kd.getAttribute('data-tex') || kd.getAttribute('data-latex') || '');
+      if (tex) {
+        replaceWithPlaceholder(kd, tex, true);
+      }
+    }
+
+    // 2. KaTeX inline math: .katex (that was not inside .katex-display)
+    var katexInlines = Array.from(doc.querySelectorAll('.katex'));
+    for (var j = 0; j < katexInlines.length; j++) {
+      var ki = katexInlines[j];
+      if (!ki.parentNode) continue;
+      var annInline = ki.querySelector('annotation');
+      var texInline = annInline ? annInline.textContent : (ki.getAttribute('data-tex') || ki.getAttribute('data-latex') || '');
+      if (texInline) {
+        replaceWithPlaceholder(ki, texInline, false);
+      }
+    }
+
+    // 3. MathJax 3: mjx-container
+    var mjxContainers = Array.from(doc.querySelectorAll('mjx-container'));
+    for (var m = 0; m < mjxContainers.length; m++) {
+      var mjx = mjxContainers[m];
+      if (!mjx.parentNode) continue;
+      var isDisplay = mjx.hasAttribute('display') && mjx.getAttribute('display') !== 'false';
+      var mjxAnn = mjx.querySelector('annotation');
+      var mjxTex = mjxAnn ? mjxAnn.textContent : (
+        mjx.getAttribute('data-latex') ||
+        mjx.getAttribute('data-tex') ||
+        mjx.getAttribute('data-formula') ||
+        ''
+      );
+      if (mjxTex) {
+        replaceWithPlaceholder(mjx, mjxTex, isDisplay);
+      }
+    }
+
+    // 4. MathJax 2: script[type^="math/tex"]
+    var mathjaxScripts = Array.from(doc.querySelectorAll('script[type^="math/tex"]'));
+    for (var s = 0; s < mathjaxScripts.length; s++) {
+      var script = mathjaxScripts[s];
+      if (!script.parentNode) continue;
+      var type = script.getAttribute('type') || '';
+      var isDisplayScript = /mode=display/.test(type);
+      var scriptTex = script.textContent;
+
+      var prev = script.previousElementSibling;
+      if (prev && (prev.classList.contains('MathJax') || prev.classList.contains('MathJax_Preview') || prev.classList.contains('MathJax_Display'))) {
+        if (prev.parentNode) prev.parentNode.removeChild(prev);
+      }
+      var nextEl = script.nextElementSibling;
+      if (nextEl && (nextEl.classList.contains('MathJax') || nextEl.classList.contains('MathJax_Preview') || nextEl.classList.contains('MathJax_Display'))) {
+        if (nextEl.parentNode) nextEl.parentNode.removeChild(nextEl);
+      }
+
+      replaceWithPlaceholder(script, scriptTex, isDisplayScript);
+    }
+
+    // 5. Wikipedia Math: .mwe-math-element
+    var wikiMaths = Array.from(doc.querySelectorAll('.mwe-math-element'));
+    for (var w = 0; w < wikiMaths.length; w++) {
+      var wm = wikiMaths[w];
+      if (!wm.parentNode) continue;
+      var wikiAnn = wm.querySelector('annotation');
+      var wikiImg = wm.querySelector('img');
+      var wikiTex = '';
+      var isWikiDisplay = false;
+      if (wikiAnn && wikiAnn.textContent.trim()) {
+        wikiTex = wikiAnn.textContent.trim();
+        if (/display=block/i.test(wm.innerHTML) || wm.querySelector('math[display="block"]')) {
+          isWikiDisplay = true;
+        }
+      } else if (wikiImg && wikiImg.getAttribute('alt')) {
+        var alt = wikiImg.getAttribute('alt').trim();
+        if (alt.startsWith('{\\displaystyle') && alt.endsWith('}')) {
+          wikiTex = alt.slice(14, -1).trim();
+          isWikiDisplay = true;
+        } else {
+          wikiTex = alt;
+          if (wikiImg.classList.contains('mwe-math-fallback-image-display')) {
+            isWikiDisplay = true;
+          }
+        }
+      }
+      if (wikiTex) {
+        replaceWithPlaceholder(wm, wikiTex, isWikiDisplay);
+      }
+    }
+
+    // 6. Generic MathML: <math> (not already handled)
+    var mathElements = Array.from(doc.querySelectorAll('math'));
+    for (var k = 0; k < mathElements.length; k++) {
+      var mathEl = mathElements[k];
+      if (!mathEl.parentNode) continue;
+      var mathAnn = mathEl.querySelector('annotation');
+      var mTex = mathAnn ? mathAnn.textContent.trim() : '';
+      var isMathBlock = (mathEl.getAttribute('display') === 'block') || (mathEl.getAttribute('mode') === 'display');
+      if (mTex) {
+        replaceWithPlaceholder(mathEl, mTex, isMathBlock);
+      } else {
+        var fallbackTex = convertMathMLToLatex(mathEl);
+        if (fallbackTex) {
+          replaceWithPlaceholder(mathEl, fallbackTex, isMathBlock);
+        }
+      }
+    }
+
+    // 7. Elements with data-latex or data-tex or data-math
+    var dataTexEls = Array.from(doc.querySelectorAll('[data-latex], [data-tex], [data-math]'));
+    for (var d = 0; d < dataTexEls.length; d++) {
+      var dtEl = dataTexEls[d];
+      if (!dtEl.parentNode) continue;
+      if (dtEl.classList.contains('p2m-math-block') || dtEl.classList.contains('p2m-math-inline')) continue;
+      var dTex = dtEl.getAttribute('data-latex') || dtEl.getAttribute('data-tex') || dtEl.getAttribute('data-math');
+      if (dTex) {
+        var isDBlock = (dtEl.tagName.toLowerCase() === 'div') || dtEl.classList.contains('math-display');
+        replaceWithPlaceholder(dtEl, dTex, isDBlock);
+      }
+    }
+
+    // 8. Math images (e.g. codecogs or images with class math/latex)
+    var mathImages = Array.from(doc.querySelectorAll('img.math, img.latex, img[src*="latex.codecogs.com"]'));
+    for (var mi = 0; mi < mathImages.length; mi++) {
+      var mImg = mathImages[mi];
+      if (!mImg.parentNode) continue;
+      var imgAlt = (mImg.getAttribute('alt') || '').trim();
+      if (imgAlt) {
+        replaceWithPlaceholder(mImg, imgAlt, false);
+      }
+    }
+  }
+
+  function restoreMathPlaceholders(markdown, mathRegistry) {
+    if (!markdown || !mathRegistry || !mathRegistry.length) return markdown;
+
+    var mathMap = {};
+    for (var i = 0; i < mathRegistry.length; i++) {
+      mathMap[mathRegistry[i].id] = mathRegistry[i];
+    }
+
+    markdown = markdown.replace(/%%P2M_MATH_BLOCK_(\d+)%%/g, function (match, id) {
+      var item = mathMap[+id];
+      if (!item) return match;
+      var tex = item.tex.trim();
+      if (tex.indexOf('\n') !== -1) {
+        return '$$\n' + tex + '\n$$';
+      }
+      return '$$' + tex + '$$';
+    });
+
+    markdown = markdown.replace(/%%P2M_MATH_INLINE_(\d+)%%/g, function (match, id) {
+      var item = mathMap[+id];
+      if (!item) return match;
+      return '$' + item.tex.trim() + '$';
+    });
+
+    return markdown;
+  }
+
+  var convert = function (str, mathRegistry) {
+    mathRegistry = mathRegistry || [];
+
+    // If str appears to be HTML containing math elements and no registry was supplied:
+    if ((!mathRegistry.length) && typeof DOMParser !== 'undefined' && /<(?:math|span|div|mjx)[^>]*\b(?:katex|math|mjx)/i.test(str)) {
+      try {
+        var inlineDoc = new DOMParser().parseFromString(str, 'text/html');
+        preprocessMathInDom(inlineDoc, mathRegistry);
+        str = inlineDoc.body.innerHTML;
+      } catch (e) {
+        // Fallback to raw string
+      }
+    }
+
+    // Protect any literal block math syntax ($$...$$) in str before escape/markdown processing
+    var rawMathBlocks = [];
+    str = str.replace(/\$\$([\s\S]+?)\$\$/g, function (match) {
+      var rawId = rawMathBlocks.length;
+      rawMathBlocks.push(match);
+      return '%%P2M_RAW_MATH_' + rawId + '%%';
+    });
+
     var markdown = escape(toMarkdown(str, { converters: pandoc, gfm: true }));
+
+    // Restore literal raw math blocks
+    markdown = markdown.replace(/%%P2M_RAW_MATH_(\d+)%%/g, function (match, id) {
+      return rawMathBlocks[+id] || match;
+    });
 
     // Parentheses normalization next to Chinese text
     markdown = markdown.replace(/([\u4e00-\u9fa5]+)\s*\(([^)]+)\)\s*(?=[\u4e00-\u9fa5]|\*)/g, '$1（$2）');
@@ -210,6 +639,9 @@
 
     // Add separator before tags section (non-global to only replace the first occurrence)
     markdown = markdown.replace(/\n+\[(人工智慧|Cybersecurity)\]\(/, '\n\n---\n\n[$1](');
+
+    // Restore DOM-extracted math placeholders at the very end
+    markdown = restoreMathPlaceholders(markdown, mathRegistry);
 
     return markdown;
   };
@@ -1399,8 +1831,14 @@
             convertWordUnorderedListPlainText(wordPlainText) : null;
         }
         console.log('Both text/rtf and text/html:', html);
-        var markdown = plainTextList !== null ? plainTextList : turndownService.turndown(normalizeWordHtmlLists(html)).trim();
+        var wordMathRegistry = [];
+        var wordDoc = new DOMParser().parseFromString(normalizeWordHtmlLists(html), 'text/html');
+        preprocessMathInDom(wordDoc, wordMathRegistry);
+        var preprocessedWordHtml = wordDoc.querySelector('body').innerHTML;
+
+        var markdown = plainTextList !== null ? plainTextList : turndownService.turndown(preprocessedWordHtml).trim();
         if (plainTextList === null) {
+          markdown = restoreMathPlaceholders(markdown, wordMathRegistry);
           markdown = markdown.replace(/ü/g, '  - ');
           markdown = markdown.replace(/\.[^\S\r\n]+/g, '. ');
           markdown = markdown.replace(/-[^\S\r\n]+/g, '- ');
@@ -1489,9 +1927,13 @@
         });
       });
 
+      // Preprocess math elements in DOM (KaTeX, MathJax, MathML, etc.)
+      var mathRegistry = [];
+      preprocessMathInDom(doc, mathRegistry);
+
       var body = doc.querySelector('body').innerHTML;
 
-      var markdown = convert(body);
+      var markdown = convert(body, mathRegistry);
 
       clearSharedHashSeedContent();
       insert(output, markdown);

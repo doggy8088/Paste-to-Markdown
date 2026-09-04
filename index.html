@@ -87,6 +87,7 @@
     </script>
     <link href="./assets/favicon.ico" rel="icon" type="image/x-icon">
     <link rel="stylesheet" href="./assets/bootstrap.css">
+    <link rel="stylesheet" href="./vendor/katex/katex.min.css">
     <style>
         :root {
             color-scheme: light;
@@ -713,6 +714,22 @@
             color: var(--code-ink);
         }
 
+        #preview .katex-display {
+            overflow-x: auto;
+            overflow-y: hidden;
+            padding: 0.5em 0;
+            margin: 1em 0;
+        }
+
+        #preview .katex {
+            font-size: 1.1em;
+            color: var(--ink);
+        }
+
+        #preview .katex-error {
+            color: #ef4444;
+        }
+
         .empty-preview {
             color: var(--ink-soft);
             margin: 0;
@@ -921,6 +938,7 @@
 <script src="vendor/turndown/dist/turndown.js"></script>
 <script src="vendor/turndown-plugin-gfm/dist/turndown-plugin-gfm.js"></script>
 <script src="vendor/marked/marked.min.js"></script>
+<script src="vendor/katex/katex.min.js"></script>
 
 <script src="./i18n/en.js?v=20260601-platform"></script>
 <script src="./i18n/ar.js?v=20260601-platform"></script>
@@ -945,7 +963,7 @@
 </script>
 
 <script src="./assets/to-markdown.js"></script>
-<script src="./assets/clipboard2markdown.js?v=20260601-platform"></script>
+<script src="./assets/clipboard2markdown.js?v=20260904-math"></script>
 
 </body>
 
