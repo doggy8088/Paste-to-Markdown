@@ -893,6 +893,14 @@
     var SHARE_HASH_PREFIX = 'z:';
     var RAW_HASH_PREFIX = 'r:';
     var themeStorageKey = 'pasteToMarkdownTheme';
+    var printOutput = document.querySelector('#print-output');
+
+    // A textarea cannot grow or split across pages when printed, so print a <pre> copy instead.
+    window.addEventListener('beforeprint', function () {
+      if (printOutput) {
+        printOutput.textContent = output.value;
+      }
+    });
 
     // Tab switching functionality
     var tabButtons = document.querySelectorAll('.tab-button');

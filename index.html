@@ -733,6 +733,10 @@
             color: transparent !important;
         }
 
+        #print-output {
+            display: none;
+        }
+
         #output:hover,
         #output:focus {
             background: var(--editor-bg-hover);
@@ -903,6 +907,22 @@
                 margin: 1.5cm;
             }
 
+            :root,
+            html[data-theme],
+            body[data-theme] {
+                color-scheme: light;
+                --editor-bg: #ffffff;
+                --surface: #ffffff;
+                --surface-elevated: #f3f4f6;
+                --border: #d0d7de;
+                --border-strong: #8c959f;
+                --ink: #000000;
+                --ink-muted: #444444;
+                --code-bg: #f3f4f6;
+                --code-ink: #000000;
+            }
+
+            html,
             body {
                 background: #ffffff;
                 color: #000000;
@@ -942,7 +962,24 @@
                 display: none !important;
             }
 
-            #output,
+            #output {
+                display: none !important;
+            }
+
+            #print-output {
+                background: none;
+                border: 0;
+                color: #000000;
+                display: block;
+                font-family: Consolas, "Liberation Mono", Courier, monospace;
+                font-size: 12px;
+                line-height: 1.5;
+                margin: 0;
+                padding: 0;
+                white-space: pre-wrap;
+                word-break: break-word;
+            }
+
             #preview {
                 background: #ffffff;
                 color: #000000;
@@ -1046,6 +1083,7 @@
             </div>
             <div class="tab-content active" id="edit-tab" role="tabpanel">
                 <textarea id="output" data-i18n-placeholder="placeholder"></textarea>
+                <pre id="print-output" aria-hidden="true"></pre>
             </div>
             <div class="tab-content" id="preview-tab" role="tabpanel">
                 <div id="preview"></div>
@@ -1097,7 +1135,7 @@
 </script>
 
 <script src="./assets/to-markdown.js"></script>
-<script src="./assets/clipboard2markdown.js?v=20260904-math"></script>
+<script src="./assets/clipboard2markdown.js?v=20261009-print"></script>
 
 </body>
 
