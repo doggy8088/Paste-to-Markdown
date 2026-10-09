@@ -42,13 +42,15 @@
 
   turndownService.remove('style');
 
-  // Custom rules: preserve math placeholder blocks and inlines
+  // Custom rules: preserve math placeholder blocks and inlines.
+  // Use the raw textContent: Turndown has already escaped `content`
+  // (e.g. "%%P2M\_MATH\_INLINE\_0%%"), which restoreMathPlaceholders cannot match.
   turndownService.addRule('p2mMathBlock', {
     filter: function (node) {
       return node.classList && node.classList.contains('p2m-math-block');
     },
-    replacement: function (content) {
-      return '\n\n' + content.trim() + '\n\n';
+    replacement: function (content, node) {
+      return '\n\n' + node.textContent.trim() + '\n\n';
     }
   });
 
@@ -56,8 +58,8 @@
     filter: function (node) {
       return node.classList && node.classList.contains('p2m-math-inline');
     },
-    replacement: function (content) {
-      return content.trim();
+    replacement: function (content, node) {
+      return node.textContent.trim();
     }
   });
 
@@ -1356,16 +1358,67 @@
     }
 
     // Sanitize HTML and add Bootstrap classes
+    // Elements that can run script, embed other documents, or change how the
+    // page loads. <noscript> is parsed differently once scripting is enabled,
+    // which can turn harmless attribute text into live markup (mutation XSS).
+    const BLOCKED_ELEMENTS = [
+      'script', 'noscript', 'style', 'template', 'iframe', 'frame', 'frameset',
+      'object', 'embed', 'applet', 'base', 'link', 'meta',
+      'animate', 'animatemotion', 'animatetransform', 'set', 'foreignobject'
+    ];
+
+    // Attributes whose value is loaded or navigated to as a URL.
+    const URL_ATTRIBUTES = [
+      'href', 'src', 'xlink:href', 'action', 'formaction', 'poster',
+      'background', 'data', 'ping', 'lowsrc', 'dynsrc'
+    ];
+
+    function isSafeSrcset(srcset) {
+      return srcset.split(',').every(function (candidate) {
+        const url = candidate.trim().split(/\s+/)[0];
+        return !url || isSafeUrl(url);
+      });
+    }
+
+    function removeUnsafeMarkup(doc) {
+      Array.from(doc.body.querySelectorAll('*')).forEach(function (element) {
+        if (BLOCKED_ELEMENTS.indexOf(element.localName.toLowerCase()) !== -1) {
+          element.remove();
+          return;
+        }
+
+        Array.from(element.attributes).forEach(function (attribute) {
+          const name = attribute.name.toLowerCase();
+          const isEventHandler = name.indexOf('on') === 0;
+          const isUnsafeUrl = URL_ATTRIBUTES.indexOf(name) !== -1 && !isSafeUrl(attribute.value);
+          const isUnsafeSrcset = name === 'srcset' && !isSafeSrcset(attribute.value);
+          if (isEventHandler || isUnsafeUrl || isUnsafeSrcset) {
+            element.removeAttribute(attribute.name);
+          }
+        });
+      });
+    }
+
     function sanitizeHtml(html) {
+      // Sanitize again until the output is stable, so markup that changes
+      // meaning when parsed a second time is also cleaned in its final form.
+      let sanitized = sanitizeHtmlOnce(html);
+      for (let pass = 0; pass < 2; pass++) {
+        const resanitized = sanitizeHtmlOnce(sanitized);
+        if (resanitized === sanitized) {
+          break;
+        }
+        sanitized = resanitized;
+      }
+      return sanitized;
+    }
+
+    function sanitizeHtmlOnce(html) {
       // Use DOMParser for safer HTML parsing (doesn't execute scripts)
       var parser = new DOMParser();
       var doc = parser.parseFromString(html, 'text/html');
 
-      // Remove any script tags (convert to array first to avoid mutation issues)
-      var scripts = Array.from(doc.querySelectorAll('script'));
-      for (var i = 0; i < scripts.length; i++) {
-        scripts[i].parentNode.removeChild(scripts[i]);
-      }
+      removeUnsafeMarkup(doc);
 
       // Add Bootstrap classes to tables
       var tables = Array.from(doc.querySelectorAll('table'));
