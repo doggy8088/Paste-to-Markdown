@@ -699,33 +699,19 @@ test.describe('Copy - Clipboard Unavailable', function () {
 });
 
 test.describe('Copy - Real Clipboard (Integration)', function () {
-  test.skip('copies to real clipboard when permissions granted', async function ({ page, context }) {
-    // Check if platform supports clipboard in headless
-    const isHeadless = await page.evaluate(() => {
-      return /HeadlessChrome|headless/i.test(navigator.userAgent);
-    });
-
-    if (isHeadless) {
-      test.skip();
-      return;
-    }
-
-    // Request clipboard permissions
+  test('writes Markdown and rendered HTML to the system clipboard', async function ({ page, context }) {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-
     await gotoApp(page);
-    await setMarkdown(page, 'Real clipboard test');
+    await setMarkdown(page, '# Real clipboard');
 
-    // Click copy button
-    const copyButton = page.locator('#copy-button');
-    await copyButton.click();
+    await page.locator('#copy-button').click();
 
-    // Wait for button to be re-enabled (indicates clipboard write completed)
-    await expect(copyButton).toBeEnabled({ timeout: 2000 });
-
-    // Read from actual clipboard
-    const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
-    expect(clipboardText).toBe('Real clipboard test');
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('# Real clipboard');
+    const html = await page.evaluate(async () => {
+      const items = await navigator.clipboard.read();
+      return (await items[0].getType('text/html')).text();
+    });
+    expect(html).toContain('<h1>Real clipboard</h1>');
   });
 });
 
@@ -754,19 +740,19 @@ test.describe('Copy - Guard Conditions', function () {
     await gotoApp(page);
     await setMarkdown(page, 'Test refresh when button missing');
 
-    // Dispatch a language change event
-    // This triggers the app's event listener which calls refreshCopyButtonLabel
-    // Since #copy-button never existed, copyButton will be null
-    // The guard at line 1717 should return early and not error
-    await page.evaluate(() => {
-      const event = new Event('languageChange', { bubbles: true });
-      document.dispatchEvent(event);
+    // Dispatch languageChange, whose listener calls refreshCopyButtonLabel while
+    // #copy-button is missing. Listener errors are reported synchronously to
+    // window 'error' handlers during dispatchEvent, so capture them in place.
+    const listenerErrors = await page.evaluate(() => {
+      const captured = [];
+      const onError = (event) => captured.push(event.message);
+      window.addEventListener('error', onError);
+      document.dispatchEvent(new Event('languageChange', { bubbles: true }));
+      window.removeEventListener('error', onError);
+      return captured;
     });
 
-    // Wait a bit to ensure any errors would have been thrown
-    await page.waitForTimeout(100);
-
-    // The guard at line 1717 should have prevented accessing null copyButton
+    expect(listenerErrors).toEqual([]);
     expect(pageErrorOccurred).toBe(false);
   });
 });

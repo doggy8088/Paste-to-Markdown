@@ -1055,3 +1055,52 @@ test.describe('Word paste line breaks outside table cells', function () {
     expect(markdown).toBe('<table><caption>Top<br>Note</caption><tbody><tr><td>a</td></tr></tbody></table>');
   });
 });
+
+test.describe('Word list levels and table line breaks', function () {
+  const RTF = '{\\rtf1 x}';
+
+  function wordListItem(style, text) {
+    return '<p class=MsoListParagraph style="' + style + '"><![if !supportLists]>' +
+      '<span style="mso-list:Ignore">·<span> </span></span><![endif]>' + text + '</p>';
+  }
+
+  test.beforeEach(async function ({ page }) {
+    await gotoApp(page);
+  });
+
+  test('keeps a line break inside a Word table cell as <br>', async function ({ page }) {
+    const markdown = await convertPaste(page, {
+      rtf: RTF,
+      html: '<table><tr><th>Head</th></tr><tr><td>a<br>b</td></tr></table>'
+    });
+    expect(markdown).toBe('| Head |\n| --- |\n| a<br>b |');
+  });
+
+  test('returns to the top level when the left margin goes back', async function ({ page }) {
+    const markdown = await convertPaste(page, {
+      rtf: RTF,
+      html: wordListItem('mso-list:l0 level1 lfo1;margin-left:24.0pt', 'One') +
+        wordListItem('mso-list:l0 level2 lfo1;margin-left:48.0pt', 'Two') +
+        wordListItem('mso-list:l0 level1 lfo1;margin-left:24.0pt', 'Three')
+    });
+    expect(markdown).toBe('- One\n    - Two\n- Three');
+  });
+
+  test('treats a list paragraph without a level as top level', async function ({ page }) {
+    const markdown = await convertPaste(page, {
+      rtf: RTF,
+      html: wordListItem('mso-list:l0 level1 lfo1', 'First') + wordListItem('mso-list:l0 lfo1', 'Second')
+    });
+    expect(markdown).toBe('- First\n- Second');
+  });
+});
+
+test.describe('Copilot CLI detection boundary', function () {
+  test('requires three-space continuation lines', async function ({ page }) {
+    await gotoApp(page);
+    // Two-space continuation is not Copilot CLI output, so only the common
+    // one-space indent is removed by the generic plain-text rule.
+    const markdown = await convertPaste(page, { text: ' ● Title\n  detail' });
+    expect(markdown).toBe('● Title\n detail');
+  });
+});

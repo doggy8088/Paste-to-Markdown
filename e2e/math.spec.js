@@ -878,7 +878,7 @@ test.describe('math conversion', function () {
       // Stub katex.renderToString to throw for block math
       await page.evaluate(function () {
         if (window.katex) {
-          var originalRender = window.katex.renderToString;
+          const originalRender = window.katex.renderToString;
           window.katex.renderToString = function (tex, options) {
             if (options && options.displayMode && tex.includes('intentional_error')) {
               throw new Error('Intentional KaTeX block render error');
@@ -902,7 +902,7 @@ test.describe('math conversion', function () {
       // Stub katex.renderToString to throw for inline math
       await page.evaluate(function () {
         if (window.katex) {
-          var originalRender = window.katex.renderToString;
+          const originalRender = window.katex.renderToString;
           window.katex.renderToString = function (tex, options) {
             if (options && !options.displayMode && tex.includes('inline_fail')) {
               throw new Error('Intentional KaTeX inline render error');
@@ -925,7 +925,7 @@ test.describe('math conversion', function () {
       // Stub katex.renderToString to throw for code block math
       await page.evaluate(function () {
         if (window.katex) {
-          var originalRender = window.katex.renderToString;
+          const originalRender = window.katex.renderToString;
           window.katex.renderToString = function (tex, options) {
             if (tex.includes('fence_fail')) {
               throw new Error('Intentional KaTeX fence render error');
@@ -948,7 +948,7 @@ test.describe('math conversion', function () {
       // Stub katex.renderToString to throw with special characters
       await page.evaluate(function () {
         if (window.katex) {
-          var originalRender = window.katex.renderToString;
+          const originalRender = window.katex.renderToString;
           window.katex.renderToString = function () {
             throw new Error('KaTeX render error');
           };

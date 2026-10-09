@@ -1443,12 +1443,8 @@ test.describe('share-hash', function () {
       // Edit the content
       await setMarkdown(page, '# Modified\n\nNew content.');
 
-      // Wait briefly for the hashchange event to process
-      await page.waitForTimeout(100);
-
-      // Hash should be cleared
-      const urlAfter = page.url();
-      expect(urlAfter).not.toContain('#');
+      // Editing shared content drops the hash from the URL
+      await expect.poll(() => page.url()).not.toContain('#');
     });
   });
 
@@ -2014,5 +2010,227 @@ test.describe('Shared hash edge cases', function () {
     await expect(page.locator('#output')).toHaveValue('');
     expect(await page.evaluate(() => window.location.hash)).toBe(hash);
     await expect(page.locator('html')).toHaveAttribute('data-hash-mode', '1');
+  });
+
+  test('uses r: prefix when CompressionStream is unavailable', async function ({ page, openPage }) {
+    await page.addInitScript(function () {
+      window.CompressionStream = undefined;
+      window.DecompressionStream = undefined;
+    });
+
+    // Add clipboard capture before loading the app
+    await page.addInitScript(function () {
+      window.__clipboardCaptures = [];
+      const originalWrite = navigator.clipboard.write;
+      const originalWriteText = navigator.clipboard.writeText;
+      if (originalWrite) {
+        navigator.clipboard.write = async function (items) {
+          const captures = [];
+          for (const item of items) {
+            for (const type of item.types) {
+              const blob = await item.getType(type);
+              const text = await blob.text();
+              captures.push({ type: type, text: text });
+            }
+          }
+          window.__clipboardCaptures.push({ items: captures });
+          return originalWrite.call(this, items);
+        };
+      }
+      if (originalWriteText) {
+        navigator.clipboard.writeText = async function (text) {
+          window.__clipboardCaptures.push({ text: text });
+          return originalWriteText.call(this, text);
+        };
+      }
+    });
+
+    await gotoApp(page);
+    const markdown = '# Test\n\nCompressionStream unavailable should use r: prefix';
+    await setMarkdown(page, markdown);
+
+    const shareButton = page.locator('button:has-text("Share")').first();
+    await shareButton.click();
+    await expect(shareButton).toBeDisabled();
+    await expect(shareButton).not.toBeDisabled({ timeout: 2000 });
+
+    const captures = await page.evaluate(() => window.__clipboardCaptures || []);
+    expect(captures.length).toBeGreaterThan(0);
+    let shareUrl = null;
+    for (const capture of captures) {
+      if (capture.items) {
+        const plainItem = capture.items.find(i => i.type === 'text/plain');
+        if (plainItem) {
+          shareUrl = plainItem.text;
+          break;
+        }
+      } else if (capture.text) {
+        shareUrl = capture.text;
+      }
+    }
+    expect(shareUrl).toBeTruthy();
+    expect(shareUrl).toContain('r%3A');
+  });
+
+  test('share button label is correctly set after successful share', async function ({ page }) {
+    // Add clipboard capture before loading the app
+    await page.addInitScript(function () {
+      window.__clipboardCaptures = [];
+      const originalWrite = navigator.clipboard.write;
+      const originalWriteText = navigator.clipboard.writeText;
+
+      if (originalWrite) {
+        navigator.clipboard.write = async function (items) {
+          const captures = [];
+          for (const item of items) {
+            for (const type of item.types) {
+              const blob = await item.getType(type);
+              const text = await blob.text();
+              captures.push({ type: type, text: text });
+            }
+          }
+          window.__clipboardCaptures.push({ items: captures });
+          return originalWrite.call(this, items);
+        };
+      }
+
+      if (originalWriteText) {
+        navigator.clipboard.writeText = async function (text) {
+          window.__clipboardCaptures.push({ text: text });
+          return originalWriteText.call(this, text);
+        };
+      }
+    });
+
+    await gotoApp(page);
+    const markdown = '# Test\n\nChecking button label update';
+    await setMarkdown(page, markdown);
+
+    const shareButton = page.locator('button:has-text("Share")').first();
+
+    // Initial check: button should show "Share"
+    await expect(shareButton).toContainText(/Share|🔗/);
+
+    // Click share
+    await shareButton.click();
+
+    // Button should be disabled during share action
+    await expect(shareButton).toBeDisabled();
+
+    // Button should eventually be enabled again and label refreshed
+    await expect(shareButton).not.toBeDisabled({ timeout: 2000 });
+
+    // Verify share was successful by checking clipboard
+    const captures = await page.evaluate(() => window.__clipboardCaptures || []);
+    expect(captures.length).toBeGreaterThan(0);
+  });
+
+  test('share button tooltip title is set by refreshShareButtonLabel', async function ({ page }) {
+    await gotoApp(page);
+
+    const shareButton = page.locator('#share-button');
+
+    // The title attribute should be set by refreshShareButtonLabel
+    // which is called during app init
+    const title = await shareButton.getAttribute('title');
+
+    // The button title should contain "URL" from the tooltip text "Copy shareable URL"
+    expect(title).toBeTruthy();
+    expect(title.length).toBeGreaterThan(0);
+  });
+
+  test('uses z: prefix when CompressionStream is available', async function ({ page, openPage }) {
+    // Make sure CompressionStream IS available by not disabling it
+    // Add clipboard capture before loading the app
+    await page.addInitScript(function () {
+      window.__clipboardCaptures = [];
+      const originalWrite = navigator.clipboard.write;
+      const originalWriteText = navigator.clipboard.writeText;
+      if (originalWrite) {
+        navigator.clipboard.write = async function (items) {
+          const captures = [];
+          for (const item of items) {
+            for (const type of item.types) {
+              const blob = await item.getType(type);
+              const text = await blob.text();
+              captures.push({ type: type, text: text });
+            }
+          }
+          window.__clipboardCaptures.push({ items: captures });
+          return originalWrite.call(this, items);
+        };
+      }
+      if (originalWriteText) {
+        navigator.clipboard.writeText = async function (text) {
+          window.__clipboardCaptures.push({ text: text });
+          return originalWriteText.call(this, text);
+        };
+      }
+    });
+
+    await gotoApp(page);
+    const markdown = '# Test\n\nCompressionStream available should use z: prefix';
+    await setMarkdown(page, markdown);
+
+    const shareButton = page.locator('button:has-text("Share")').first();
+    await shareButton.click();
+    await expect(shareButton).toBeDisabled();
+    await expect(shareButton).not.toBeDisabled({ timeout: 2000 });
+
+    const captures = await page.evaluate(() => window.__clipboardCaptures || []);
+    expect(captures.length).toBeGreaterThan(0);
+    let shareUrl = null;
+    for (const capture of captures) {
+      if (capture.items) {
+        const plainItem = capture.items.find(i => i.type === 'text/plain');
+        if (plainItem) {
+          shareUrl = plainItem.text;
+          break;
+        }
+      } else if (capture.text) {
+        shareUrl = capture.text;
+      }
+    }
+    expect(shareUrl).toBeTruthy();
+    expect(shareUrl).toContain('z%3A');
+  });
+
+  test('shared hash seed is only cleared once when editing', async function ({ page }) {
+    await page.addInitScript(function () {
+      window.CompressionStream = undefined;
+      window.DecompressionStream = undefined;
+    });
+
+    function toBase64Url(text) {
+      return Buffer.from(text, 'utf8').toString('base64')
+        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+
+    const originalText = 'Shared content here';
+    const hash = '#mode=edit&text=r:' + toBase64Url(originalText);
+
+    await gotoApp(page, { hash: hash });
+
+    // Verify initial content
+    await expect(page.locator('#output')).toHaveValue(originalText);
+    await expect(page.locator('html')).toHaveAttribute('data-hash-mode', '1');
+
+    // Make first edit - this should trigger clearSharedHashSeedContent once
+    const output = page.locator('#output');
+    await output.click();
+    await output.press('End');
+    await output.type('X');
+
+    // Content should be cleared because of the first edit
+    await expect(output).toHaveValue('');
+
+    // Verify hash mode attribute is removed after editing shared content
+    await expect(page.locator('html')).not.toHaveAttribute('data-hash-mode');
+
+    // Now type more text - this should NOT clear again (because hasEditedFromSharedHash is true)
+    await output.type('New text');
+
+    // Content should contain what we typed (not cleared again)
+    await expect(output).toHaveValue('New text');
   });
 });

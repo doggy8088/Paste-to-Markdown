@@ -82,7 +82,7 @@ test.describe('preview-sanitize', function () {
 
       // Edit using evaluate + fire input event (textarea is hidden in preview tab)
       await page.evaluate(function () {
-        var output = document.querySelector('#output');
+        const output = document.querySelector('#output');
         output.value = '# Updated';
         output.dispatchEvent(new Event('input', { bubbles: true }));
       });
@@ -100,7 +100,7 @@ test.describe('preview-sanitize', function () {
 
       // Clear the markdown
       await page.evaluate(function () {
-        var output = document.querySelector('#output');
+        const output = document.querySelector('#output');
         output.value = '';
         output.dispatchEvent(new Event('input', { bubbles: true }));
       });
@@ -122,7 +122,7 @@ test.describe('preview-sanitize', function () {
 
       // Try to fire input event
       await page.evaluate(function () {
-        var output = document.querySelector('#output');
+        const output = document.querySelector('#output');
         output.value = '# B';
         output.dispatchEvent(new Event('input', { bubbles: true }));
       });
@@ -145,7 +145,7 @@ test.describe('preview-sanitize', function () {
       // Rapid edits
       for (const char of ['B', 'C', 'D']) {
         await page.evaluate(function (c) {
-          var output = document.querySelector('#output');
+          const output = document.querySelector('#output');
           output.value = '# ' + c;
           output.dispatchEvent(new Event('input', { bubbles: true }));
         }, char);
@@ -661,7 +661,7 @@ test.describe('preview-sanitize', function () {
       const result = await page.evaluate(function () {
         // The function is in IIFE scope, but we can verify it handles null gracefully
         // by testing the app's normal operation doesn't crash
-        var testHash = '#mode=edit&text=r%3A';  // Empty payload
+        const testHash = '#mode=edit&text=r%3A';  // Empty payload
         window.location.hash = testHash;
         return 'test-complete';
       });

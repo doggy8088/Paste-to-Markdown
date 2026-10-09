@@ -749,7 +749,7 @@ test.describe('UI Shell - Integration Scenarios', function () {
     // Wait for action to complete (button re-enabled after ~1200ms)
     // Use polling to wait for the button to be enabled again
     await page.waitForFunction(function () {
-      var btn = document.querySelector('#share-button');
+      const btn = document.querySelector('#share-button');
       return btn && !btn.disabled;
     }, { timeout: 2000 });
 
@@ -773,7 +773,7 @@ test.describe('UI Shell - Integration Scenarios', function () {
     // Wait for action to complete (button re-enabled after ~1200ms)
     // Use polling to wait for the button to be enabled again
     await page.waitForFunction(function () {
-      var btn = document.querySelector('#copy-button');
+      const btn = document.querySelector('#copy-button');
       return btn && !btn.disabled;
     }, { timeout: 2000 });
 
@@ -881,7 +881,7 @@ test.describe('UI Shell - getActiveTab', function () {
     const activeTab = await page.evaluate(function () {
       // Call the private function via the global scope if available
       // Since getActiveTab is not exposed, we check the DOM directly
-      var activeButton = document.querySelector('.tab-button.active');
+      const activeButton = document.querySelector('.tab-button.active');
       return activeButton ? activeButton.getAttribute('data-tab') : 'edit';
     });
 
@@ -893,7 +893,7 @@ test.describe('UI Shell - getActiveTab', function () {
     await switchTab(page, 'preview');
 
     const activeTab = await page.evaluate(function () {
-      var activeButton = document.querySelector('.tab-button.active');
+      const activeButton = document.querySelector('.tab-button.active');
       return activeButton ? activeButton.getAttribute('data-tab') : 'edit';
     });
 
@@ -914,8 +914,8 @@ test.describe('UI Shell - activateTab', function () {
     await page.evaluate(function () {
       // The activateTab function defaults anything that's not 'preview' to 'edit'
       // This simulates calling it with an invalid value
-      var buttons = document.querySelectorAll('.tab-button');
-      var editButton = document.querySelector('.tab-button[data-tab="edit"]');
+      const buttons = document.querySelectorAll('.tab-button');
+      const editButton = document.querySelector('.tab-button[data-tab="edit"]');
       // Simulate what activateTab does: if target is not 'preview', use 'edit'
       if (editButton) {
         editButton.classList.add('active');
@@ -1034,8 +1034,8 @@ test.describe('UI Shell - activateTab Early Return', function () {
     // This way, when tabButtons is captured, it will be empty
     // But the actual buttons still exist in the DOM for other queries
     await page.addInitScript(function () {
-      var originalQSA = Element.prototype.querySelectorAll;
-      var tabButtonQueryCount = 0;
+      const originalQSA = Element.prototype.querySelectorAll;
+      let tabButtonQueryCount = 0;
       Element.prototype.querySelectorAll = function(selector) {
         // Count how many times '.tab-button' is queried
         if (selector === '.tab-button') {
@@ -1049,7 +1049,7 @@ test.describe('UI Shell - activateTab Early Return', function () {
         return originalQSA.call(this, selector);
       };
       // Also patch document.querySelectorAll
-      var docQSA = document.querySelectorAll;
+      const docQSA = document.querySelectorAll;
       document.querySelectorAll = function(selector) {
         if (selector === '.tab-button') {
           tabButtonQueryCount++;
@@ -1092,7 +1092,7 @@ test.describe('UI Shell - activateTab Early Return', function () {
 
     // Remove all tab buttons
     await page.evaluate(function () {
-      var buttons = document.querySelectorAll('.tab-button');
+      const buttons = document.querySelectorAll('.tab-button');
       buttons.forEach(function (btn) {
         btn.remove();
       });
@@ -1215,7 +1215,7 @@ test.describe('UI Shell - Mutation Test Coverage', function () {
 
     // Remove the active class from all buttons
     await page.evaluate(function () {
-      var buttons = document.querySelectorAll('.tab-button');
+      const buttons = document.querySelectorAll('.tab-button');
       buttons.forEach(function(btn) {
         btn.classList.remove('active');
       });

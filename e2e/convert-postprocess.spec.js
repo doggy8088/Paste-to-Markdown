@@ -45,12 +45,28 @@ test.describe('convert-postprocess', function () {
       expect(markdown).toContain('\n\n---\n\n');
     });
 
+    test('ensures hr has exactly double newlines before and after', async function ({ page }) {
+      const markdown = await convertPaste(page, {
+        html: '<p>A</p><hr><p>B</p>'
+      });
+      // Exact format: should be "A\n\n---\n\nB"
+      expect(markdown).toBe('A\n\n---\n\nB');
+    });
+
     test('converts <h1> with proper spacing', async function ({ page }) {
       const markdown = await convertPaste(page, {
         html: '<h1>Main Title</h1><p>Content</p>'
       });
       // h1 should have newlines after it
       expect(markdown).toContain('# Main Title\n\n');
+    });
+
+    test('ensures h1 has exactly double newlines after', async function ({ page }) {
+      const markdown = await convertPaste(page, {
+        html: '<h1>Title</h1><p>Body</p>'
+      });
+      // Exact format: should be "# Title\n\nBody"
+      expect(markdown).toBe('# Title\n\nBody');
     });
 
     test('converts <h2> with proper spacing', async function ({ page }) {
@@ -362,6 +378,15 @@ test.describe('convert-postprocess', function () {
       expect(markdown).not.toMatch(/\n{3,}/);
       // Check: at least some double newlines for paragraph separation
       expect(markdown).toMatch(/\n\n/);
+    });
+
+    test('removes trailing spaces at line ends in multiline content', async function ({ page }) {
+      const markdown = await convertPaste(page, {
+        html: '<p>Line with spaces at end   </p><p>Another line   </p>'
+      });
+      // Verify no line ends with spaces (multiline content)
+      // This should be exact: "Line with spaces at end\n\nAnother line"
+      expect(markdown).toBe('Line with spaces at end\n\nAnother line');
     });
   });
 
@@ -841,5 +866,20 @@ test.describe('convert-postprocess', function () {
       expect(markdown).toContain('Before');
       expect(markdown).toContain('After');
     });
+  });
+});
+
+test.describe('block spacing around unwrapped text', function () {
+  test.beforeEach(async function ({ page }) {
+    await gotoApp(page);
+  });
+
+  test('separates a horizontal rule from surrounding text with blank lines', async function ({ page }) {
+    // Without the blank line, "above\n---" would render as a setext heading.
+    expect(await convertPaste(page, { html: 'above<hr>below' })).toBe('above\n\n---\n\nbelow');
+  });
+
+  test('separates a heading from following unwrapped text', async function ({ page }) {
+    expect(await convertPaste(page, { html: '<h1>Title</h1>text' })).toBe('# Title\n\ntext');
   });
 });
