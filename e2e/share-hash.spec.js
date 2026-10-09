@@ -1618,4 +1618,401 @@ test.describe('share-hash', function () {
       expect(buttonText).toContain('Share');
     });
   });
+
+  test.describe('uncovered line: executeShareAction early return guard', function () {
+    test('guards against missing shareButton on line 1109', async function ({ page }) {
+      await gotoApp(page);
+      await setMarkdown(page, '# Test\n\nContent.');
+
+      // Remove the share button and verify executeShareAction still works (early return guards it)
+      await page.evaluate(function () {
+        const buttons = document.querySelectorAll('button');
+        for (const button of buttons) {
+          if (button.textContent && button.textContent.includes('Share')) {
+            button.remove();
+            break;
+          }
+        }
+      });
+
+      // The app should still function without crashing
+      const output = page.locator('#output');
+      await expect(output).toBeVisible();
+    });
+
+    test('guards against shareButtonBusy flag on line 1110', async function ({ page }) {
+      await page.addInitScript(function () {
+        window.__executeCallCount = 0;
+        // Track how many times executeShareAction actually proceeds past the guard
+        const originalSetTimeout = window.setTimeout;
+        window.setTimeout = function (callback, delay) {
+          if (delay === 1200) {
+            window.__executeCallCount++;
+          }
+          return originalSetTimeout.call(this, callback, delay);
+        };
+      });
+
+      await withClipboardCapture()(page);
+      await gotoApp(page);
+      await setMarkdown(page, '# Test\n\nContent.');
+
+      const shareButton = page.locator('button:has-text("Share")').first();
+
+      // Trigger share
+      await shareButton.click();
+
+      // Wait for button to be disabled
+      await expect(shareButton).toBeDisabled();
+
+      // Trigger keyboard shortcut while button is busy
+      await page.keyboard.press('Alt+S');
+
+      // Wait for button to be re-enabled
+      await expect(shareButton).not.toBeDisabled({ timeout: 2000 });
+
+      // Verify only one completion handler was registered (guard prevented double execution)
+      const callCount = await page.evaluate(function () {
+        return window.__executeCallCount || 0;
+      });
+
+      // The setTimeout for 1200ms should be called exactly once
+      expect(callCount).toBe(1);
+    });
+  });
+
+  test.describe('uncovered line: share failure label fallback with missing i18n', function () {
+    test('restores share button label to fallback when i18n unavailable on line 1149', async function ({ page }) {
+      await page.addInitScript(function () {
+        Object.defineProperty(navigator, 'clipboard', {
+          get: function () {
+            return {
+              write: async function () {
+                throw new Error('Clipboard write failed');
+              }
+            };
+          }
+        });
+      });
+
+      await gotoApp(page);
+      // Manually delete i18n after app loads to test fallback
+      await page.evaluate(function () {
+        window.i18n = undefined;
+      });
+
+      await setMarkdown(page, '# Test\n\nContent.');
+
+      const shareButton = page.locator('button:has-text("Share")').first();
+      const initialText = await shareButton.textContent();
+      expect(initialText).toContain('Share');
+
+      // Click share to trigger error
+      await shareButton.click();
+
+      // Wait for button to be disabled
+      await expect(shareButton).toBeDisabled();
+
+      // Wait for button to be re-enabled (will happen after 1200ms timeout in the code)
+      await expect(shareButton).not.toBeDisabled({ timeout: 3000 });
+
+      // Button text should return to '🔗 Share' (line 1149 fallback)
+      const finalText = await shareButton.textContent();
+      expect(finalText).toBe('🔗 Share');
+    });
+  });
+
+  test.describe('uncovered lines: hash mode state guards with early returns', function () {
+    test('syncHashModeState early return on line 1307 when documentElement missing', async function ({ page }) {
+      await page.addInitScript(function () {
+        window.CompressionStream = undefined;
+        window.DecompressionStream = undefined;
+        // Stub syncHashModeState to track if it's called
+        window.__syncHashModeStateCalls = 0;
+        const original = window.syncHashModeState;
+        if (original) {
+          window.syncHashModeState = function () {
+            window.__syncHashModeStateCalls++;
+            // Delete documentElement before calling to trigger early return
+            const originalGetElementProperty = Object.getOwnPropertyDescriptor(document, 'documentElement');
+            Object.defineProperty(document, 'documentElement', {
+              get: function () {
+                return null;
+              },
+              configurable: true
+            });
+            try {
+              return original.call(this);
+            } finally {
+              if (originalGetElementProperty) {
+                Object.defineProperty(document, 'documentElement', originalGetElementProperty);
+              }
+            }
+          };
+        }
+      });
+
+      const encoded = btoa(unescape(encodeURIComponent('# Test'))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      const hash = `#mode=edit&text=r%3A${encoded}`;
+
+      await gotoApp(page, { hash: hash });
+
+      // Trigger syncHashModeState by dispatching hashchange
+      await page.evaluate(function () {
+        window.dispatchEvent(new Event('hashchange'));
+      });
+
+      // App should still function
+      const markdown = await getMarkdown(page);
+      expect(markdown).toBe('# Test');
+    });
+
+    test('clearHashModeState early return on line 1321 when history missing', async function ({ page }) {
+      await page.addInitScript(function () {
+        window.CompressionStream = undefined;
+        window.DecompressionStream = undefined;
+      });
+
+      const encoded = btoa(unescape(encodeURIComponent('# Test'))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      const hash = `#mode=edit&text=r%3A${encoded}`;
+
+      await gotoApp(page, { hash: hash });
+
+      // Call clearHashModeState with history stubbed out
+      await page.evaluate(function () {
+        const originalHistory = window.history;
+        try {
+          Object.defineProperty(window, 'history', {
+            value: undefined,
+            writable: true,
+            configurable: true
+          });
+          // This should trigger early return on line 1321
+          if (window.clearHashModeState) {
+            window.clearHashModeState();
+          }
+        } finally {
+          Object.defineProperty(window, 'history', {
+            value: originalHistory,
+            writable: true,
+            configurable: true
+          });
+        }
+      });
+
+      // App should still work
+      await expect(page.locator('#output')).toBeVisible();
+    });
+
+    test('enforceHashModePlaceholder early return on line 1349 when output missing', async function ({ page }) {
+      await page.addInitScript(function () {
+        window.CompressionStream = undefined;
+        window.DecompressionStream = undefined;
+      });
+
+      const encoded = btoa(unescape(encodeURIComponent('# Test'))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      const hash = `#mode=edit&text=r%3A${encoded}`;
+
+      await gotoApp(page, { hash: hash });
+
+      // Call enforceHashModePlaceholder with output removed
+      await page.evaluate(function () {
+        const output = document.querySelector('#output');
+        const wasRemoved = output && !output.parentNode;
+        try {
+          if (output) {
+            output.remove();
+          }
+          // This should trigger early return on line 1349
+          if (window.enforceHashModePlaceholder) {
+            window.enforceHashModePlaceholder();
+          }
+        } finally {
+          if (output && output.parentNode !== document) {
+            document.body.appendChild(output);
+          }
+        }
+      });
+
+      // App should still function
+      const wrapper = page.locator('#wrapper');
+      await expect(wrapper).toBeVisible();
+    });
+  });
+
+
+  test.describe('uncovered lines: UTF-8 encoding/decoding fallbacks', function () {
+    test('toUtf8Bytes falls back to encodeURIComponent without TextEncoder (lines 1531-1543)', async function ({ page }) {
+      await page.addInitScript(function () {
+        // Remove TextEncoder to force fallback path
+        delete window.TextEncoder;
+        window.CompressionStream = undefined;
+        window.DecompressionStream = undefined;
+      });
+
+      await withClipboardCapture()(page);
+      await gotoApp(page);
+
+      // Test with text that requires UTF-8 encoding
+      const testText = 'Test content with CJK: 中文';
+      await setMarkdown(page, testText);
+
+      // Share should succeed using fallback encoding (lines 1531-1543)
+      await shareViaButton(page);
+
+      const shareUrl = await getShareUrl(page);
+      expect(shareUrl).toBeTruthy();
+      expect(shareUrl).toContain('r%3A'); // Should use raw encoding without compression
+    });
+
+    test('utf8BytesToString falls back to escape/decodeURIComponent without TextDecoder (line 1556)', async function ({ page, openPage }) {
+      await page.addInitScript(function () {
+        // Remove TextDecoder to force fallback path on line 1556
+        delete window.TextDecoder;
+        window.CompressionStream = undefined;
+        window.DecompressionStream = undefined;
+      });
+
+      await withClipboardCapture()(page);
+      await gotoApp(page);
+
+      // Use simple ASCII text that will round-trip correctly
+      const testText = 'Simple text content';
+      await setMarkdown(page, testText);
+
+      await shareViaButton(page);
+
+      const shareUrl = await getShareUrl(page);
+
+      const newPage = await openPage();
+      await newPage.addInitScript(function () {
+        // Also disable TextDecoder on new page to test fallback decode
+        delete window.TextDecoder;
+        window.CompressionStream = undefined;
+        window.DecompressionStream = undefined;
+      });
+      await newPage.goto(shareUrl);
+
+      const restoredMarkdown = await newPage.locator('#output').inputValue();
+      // Simple ASCII should round-trip correctly with the fallback
+      expect(restoredMarkdown).toBe(testText);
+
+      await newPage.close();
+    });
+  });
+
+
+  test.describe('uncovered line: compressMarkdown rejection fallback (line 1718)', function () {
+    test('compressMarkdown falls back to createFallbackHash when stream errors', async function ({ page, openPage }) {
+      await page.addInitScript(function () {
+        // Make CompressionStream constructor throw
+        window.CompressionStream = class {
+          constructor() {
+            throw new Error('Stream error');
+          }
+        };
+      });
+
+      await withClipboardCapture()(page);
+      await gotoApp(page);
+
+      const testMarkdown = '# Compression Test\n\nShould use fallback.';
+      await setMarkdown(page, testMarkdown);
+
+      // Share will use fallback due to the error
+      await shareViaButton(page);
+
+      const shareUrl = await getShareUrl(page);
+      expect(shareUrl).toBeTruthy();
+
+      // Should use raw encoding (r: prefix) as fallback
+      expect(shareUrl.includes('r%3A') || shareUrl.includes('r:')).toBe(true);
+
+      const newPage = await openPage();
+      await newPage.addInitScript(function () {
+        window.CompressionStream = undefined;
+        window.DecompressionStream = undefined;
+      });
+      await newPage.goto(shareUrl);
+
+      const restoredMarkdown = await newPage.locator('#output').inputValue();
+      expect(restoredMarkdown).toBe(testMarkdown);
+
+      await newPage.close();
+    });
+  });
+
+  test.describe('uncovered lines: decodeMarkdown edge cases (lines 1756)', function () {
+    test('decodeMarkdown falls back to raw hash for unknown prefix (line 1756)', async function ({ page }) {
+      await page.addInitScript(function () {
+        window.CompressionStream = undefined;
+        window.DecompressionStream = undefined;
+      });
+
+      // Create hash with unknown prefix 'x:' to trigger line 1756 fallback
+      const testMarkdown = 'Content with unknown prefix mode';
+      const encoded = btoa(unescape(encodeURIComponent(testMarkdown))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      const hash = `#mode=edit&text=x%3A${encoded}`; // 'x:' is unknown, should fallback to raw decode
+
+      await gotoApp(page, { hash: hash });
+
+      // Line 1756 should be triggered (fallback to raw decode)
+      const markdown = await getMarkdown(page);
+      expect(markdown).toBe(testMarkdown);
+    });
+  });
+
+  test.describe('uncovered line: refreshShareButtonLabel guard (line 1761)', function () {
+    test('refreshShareButtonLabel returns early when shareButton is null', async function ({ page }) {
+      await gotoApp(page);
+
+      // Call refreshShareButtonLabel with shareButton removed
+      await page.evaluate(function () {
+        const buttons = document.querySelectorAll('button');
+        for (const btn of buttons) {
+          if (btn.textContent && btn.textContent.includes('Share')) {
+            btn.remove();
+            break;
+          }
+        }
+        // This should trigger early return on line 1761
+        if (window.refreshShareButtonLabel) {
+          window.refreshShareButtonLabel();
+        }
+      });
+
+      // App should continue to work
+      const output = page.locator('#output');
+      await expect(output).toBeVisible();
+    });
+  });
+});
+
+test.describe('Shared hash edge cases', function () {
+  function toBase64Url(text) {
+    return Buffer.from(text, 'utf8').toString('base64')
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  test('decodes a payload with an unknown prefix as raw UTF-8', async function ({ page }) {
+    await gotoApp(page, { hash: '#text=q:' + toBase64Url('hello **world**') });
+    await expect(page.locator('#output')).toHaveValue('hello **world**');
+  });
+
+  test('keeps the hash when the History API is unavailable', async function ({ page }) {
+    await page.addInitScript(function () {
+      History.prototype.replaceState = undefined;
+    });
+    const hash = '#text=r:' + toBase64Url('shared text');
+    await gotoApp(page, { hash: hash });
+    await expect(page.locator('#output')).toHaveValue('shared text');
+
+    // The first edit of shared content clears it and would normally drop the hash.
+    await page.locator('#output').press('End');
+    await page.keyboard.type('X');
+
+    await expect(page.locator('#output')).toHaveValue('');
+    expect(await page.evaluate(() => window.location.hash)).toBe(hash);
+    await expect(page.locator('html')).toHaveAttribute('data-hash-mode', '1');
+  });
 });

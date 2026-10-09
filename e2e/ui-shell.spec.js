@@ -1117,3 +1117,179 @@ test.describe('UI Shell - activateTab Early Return', function () {
     expect(markdown).toBe('# Heading');
   });
 });
+
+test.describe('UI Shell - Mutation Test Coverage', function () {
+  test('getStoredThemeChoice error fallback returns system not dark', async function ({ page }) {
+    await page.addInitScript(function () {
+      Storage.prototype.getItem = function () {
+        throw new Error('Storage error');
+      };
+    });
+
+    await gotoApp(page);
+
+    // When localStorage throws, theme should be system (no data-theme)
+    const htmlTheme = await page.locator('html').getAttribute('data-theme');
+    expect(htmlTheme).toBeNull();
+
+    // Verify system theme button is active
+    const systemButton = page.locator('.theme-button[data-theme-choice="system"]');
+    const ariaPressed = await systemButton.getAttribute('aria-pressed');
+    expect(ariaPressed).toBe('true');
+  });
+
+  test('beforeprint uses textContent not innerHTML for security', async function ({ page }) {
+    await gotoApp(page);
+
+    // Set markdown with potential HTML that should be escaped
+    const testContent = '<script>alert("xss")</script>Content';
+    await setMarkdown(page, testContent);
+
+    // Dispatch beforeprint event
+    await page.evaluate(function () {
+      window.dispatchEvent(new Event('beforeprint'));
+    });
+
+    // Check that print-output contains the raw text (textContent not innerHTML)
+    const printOutput = await page.locator('#print-output').textContent();
+    expect(printOutput).toBe(testContent);
+
+    // Verify no script tags in print-output
+    const printElement = await page.locator('#print-output');
+    const innerHTML = await printElement.innerHTML();
+    expect(innerHTML).not.toContain('<script>');
+  });
+
+  test('hash mode preload with single character hash still sets data-hash-mode', async function ({ page }) {
+    // Load with single character hash (e.g., #a)
+    await gotoApp(page, { hash: '#a' });
+
+    const htmlHashMode = await page.locator('html').getAttribute('data-hash-mode');
+    expect(htmlHashMode).toBe('1');
+  });
+
+  test('setThemeChoice sets data-theme on both html and body', async function ({ page }) {
+    await gotoApp(page);
+
+    const lightButton = page.locator('.theme-button[data-theme-choice="light"]');
+    await lightButton.click();
+
+    // Check html element
+    const htmlTheme = await page.locator('html').getAttribute('data-theme');
+    expect(htmlTheme).toBe('light');
+
+    // Check body element (this catches if setAttribute is missing on body)
+    const bodyTheme = await page.locator('body').getAttribute('data-theme');
+    expect(bodyTheme).toBe('light');
+  });
+
+  test('matchesTabShortcut requires altKey to be true', async function ({ page }) {
+    await gotoApp(page);
+    await setMarkdown(page, '# Test');
+
+    // Verify Preview is not active initially
+    let previewButton = page.locator('.tab-button[data-tab="preview"]');
+    const notActive = await previewButton.evaluate(el => !el.classList.contains('active'));
+    expect(notActive).toBe(true);
+
+    // Try Alt+2 (should work)
+    await page.keyboard.press('Alt+2');
+    previewButton = page.locator('.tab-button[data-tab="preview"]');
+    let isActive = await previewButton.evaluate(el => el.classList.contains('active'));
+    expect(isActive).toBe(true);
+
+    // Try just 2 without Alt (should not switch back)
+    await page.keyboard.press('2');
+    isActive = await previewButton.evaluate(el => el.classList.contains('active'));
+    expect(isActive).toBe(true); // Should stay on preview
+
+    // Try Alt+1 to go back to edit
+    await page.keyboard.press('Alt+1');
+    const editButton = page.locator('.tab-button[data-tab="edit"]');
+    isActive = await editButton.evaluate(el => el.classList.contains('active'));
+    expect(isActive).toBe(true);
+  });
+
+  test('getActiveTab returns edit when no button has active class', async function ({ page }) {
+    await gotoApp(page);
+
+    // Remove the active class from all buttons
+    await page.evaluate(function () {
+      var buttons = document.querySelectorAll('.tab-button');
+      buttons.forEach(function(btn) {
+        btn.classList.remove('active');
+      });
+    });
+
+    // getActiveTab should return 'edit' as default
+    // Verify by checking what happens when we press Alt+1
+    await page.keyboard.press('Alt+1');
+    const editButton = page.locator('.tab-button[data-tab="edit"]');
+    const isActive = await editButton.evaluate(el => el.classList.contains('active'));
+    expect(isActive).toBe(true);
+  });
+
+  test('platform detection uses lowercase for comparison', async function ({ page }) {
+    await page.addInitScript(function () {
+      Object.defineProperty(navigator, 'userAgentData', {
+        value: { platform: 'MacOS' }, // uppercase
+        configurable: true
+      });
+    });
+    await gotoApp(page);
+
+    // Should still detect as Mac and show Option modifier
+    const editButton = page.locator('.tab-button[data-tab="edit"]');
+    const editTitle = await editButton.getAttribute('title');
+    expect(editTitle).toContain('Option+1');
+  });
+
+  test('updateTabShortcutHints creates correct shortcut format', async function ({ page }) {
+    await page.addInitScript(function () {
+      Object.defineProperty(navigator, 'userAgentData', {
+        value: { platform: 'Linux' },
+        configurable: true
+      });
+    });
+    await gotoApp(page);
+
+    const editButton = page.locator('.tab-button[data-tab="edit"]');
+    const previewButton = page.locator('.tab-button[data-tab="preview"]');
+
+    const editTitle = await editButton.getAttribute('title');
+    const previewTitle = await previewButton.getAttribute('title');
+
+    // Shortcuts should include +1 and +2 specifically, not +0 or +3
+    expect(editTitle).toContain('+1');
+    expect(previewTitle).toContain('+2');
+    expect(editTitle).not.toContain('+0');
+    expect(previewTitle).not.toContain('+3');
+  });
+
+  test('hash mode preload with empty hash string does not set mode', async function ({ page }) {
+    // Navigate with empty hash
+    await gotoApp(page, { hash: '' });
+
+    const htmlHashMode = await page.locator('html').getAttribute('data-hash-mode');
+    expect(htmlHashMode).toBeNull();
+  });
+
+  test('resetOutputView restores default preview placeholder', async function ({ page }) {
+    await gotoApp(page);
+
+    // Add some content
+    await setMarkdown(page, 'test');
+
+    // Press escape to reset
+    await page.keyboard.press('Escape');
+
+    // Output should be cleared
+    const markdown = await getMarkdown(page);
+    expect(markdown).toBe('');
+
+    // Check that placeholder is visible (means hash mode is cleared)
+    const placeholder = await page.locator('#output').getAttribute('placeholder');
+    expect(placeholder).toBeTruthy();
+    expect(placeholder.length).toBeGreaterThan(0);
+  });
+});

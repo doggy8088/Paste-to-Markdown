@@ -1894,5 +1894,90 @@ test.describe('to-markdown core converters', function () {
       });
       expect(markdown).toBe('*only*');
     });
+
+    test('strikethrough uses double tildes not single', async function ({ page }) {
+      const markdown = await convertPaste(page, { html: '<del>struck</del>' });
+      expect(markdown).toBe('~~struck~~');
+    });
+
+    test('strikethrough with s tag uses double tildes', async function ({ page }) {
+      const markdown = await convertPaste(page, { html: '<s>text</s>' });
+      expect(markdown).toBe('~~text~~');
+    });
+
+    test('checkbox with [x] exactly for checked', async function ({ page }) {
+      const markdown = await convertPaste(page, {
+        html: '<ul><li><input type="checkbox" checked> task</li></ul>'
+      });
+      expect(markdown).toContain('- [x]');
+      expect(markdown).not.toContain('[X]');
+    });
+
+    test('checkbox with [ ] exactly for unchecked', async function ({ page }) {
+      const markdown = await convertPaste(page, {
+        html: '<ul><li><input type="checkbox"> task</li></ul>'
+      });
+      expect(markdown).toContain('- [ ]');
+    });
+
+    test('table cell separator has space after pipe', async function ({ page }) {
+      const markdown = await convertPaste(page, {
+        html: '<table><tr><td>Cell</td><td>Data</td></tr></table>'
+      });
+      expect(markdown).toContain('| Cell |');
+      expect(markdown).toContain('| Data |');
+    });
+
+    test('table header separator uses three dashes', async function ({ page }) {
+      const markdown = await convertPaste(page, {
+        html: '<table><thead><tr><th>Header</th></tr></thead><tbody><tr><td>Data</td></tr></tbody></table>'
+      });
+      expect(markdown).toContain('---');
+      expect(markdown).not.toContain(' -- ');
+    });
+
+    test('table alignment left uses colon-dash pattern', async function ({ page }) {
+      const markdown = await convertPaste(page, {
+        html: '<table><tr><th align="left">Left</th></tr><tr><td>Data</td></tr></table>'
+      });
+      expect(markdown).toContain(':--');
+    });
+
+    test('table alignment right uses dash-colon pattern', async function ({ page }) {
+      const markdown = await convertPaste(page, {
+        html: '<table><tr><th align="right">Right</th></tr><tr><td>Data</td></tr></table>'
+      });
+      expect(markdown).toContain('--:');
+    });
+
+    test('table alignment center uses colon-dash-colon pattern', async function ({ page }) {
+      const markdown = await convertPaste(page, {
+        html: '<table><tr><th align="center">Center</th></tr><tr><td>Data</td></tr></table>'
+      });
+      expect(markdown).toContain(':-:');
+    });
+
+    test('blank node detection removes only fully empty content', async function ({ page }) {
+      const markdown = await convertPaste(page, {
+        html: '<p>   </p><p>Text</p>'
+      });
+      expect(markdown).toBe('Text');
+      expect(markdown).not.toContain('   ');
+    });
+
+    test('whitespace flanking adds spaces correctly on strong', async function ({ page }) {
+      const markdown = await convertPaste(page, {
+        html: '<p>Text<strong>bold</strong>more</p>'
+      });
+      // Should have proper spacing around bold
+      expect(markdown).toBe('Text**bold**more');
+    });
+
+    test('whitespace flanking with newlines in inline elements', async function ({ page }) {
+      const markdown = await convertPaste(page, {
+        html: '<p>Text <strong>\nBold\n</strong> more</p>'
+      });
+      expect(markdown).toContain('**Bold**');
+    });
   });
 });

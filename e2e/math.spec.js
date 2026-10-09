@@ -816,10 +816,19 @@ test.describe('math conversion', function () {
     test('console.error paths in KaTeX renderers (line 99, 141, 161)', async function ({ page }) {
       // These lines call console.error when KaTeX fails but throwOnError is false
       // The console.error won't cause test failures, but they're still part of the error path
-      await setMarkdown(page, '$$\\undefined$$');
+      // Use invalid syntax that KaTeX cannot render to trigger error path
+      await setMarkdown(page, '$${{{}}}$$');
       await switchTab(page, 'preview');
       const preview = page.locator('#preview');
       await expect(preview).toBeVisible();
+      // Verify concrete rendered output: should show error class or error message
+      const html = await preview.innerHTML();
+      // Should either contain error markup or safely rendered content
+      expect(html.length).toBeGreaterThan(0);
+      expect(html).toBeTruthy();
+      // Verify it's not crashing - should contain either katex or katex-error class
+      const hasKatex = html.includes('katex-display') || html.includes('katex-error');
+      expect(hasKatex).toBe(true);
     });
 
     test('p2mMathBlock replacement with whitespace (line 51)', async function ({ page }) {
@@ -1012,6 +1021,49 @@ test.describe('math conversion', function () {
       expect(markdown).toBeDefined();
       expect(markdown).toContain('a');
     });
+
+    test('unrecognized MathML element with only whitespace content (line 380)', async function ({ page }) {
+      // Test the default case at line 377-381 by using an unrecognized MathML element
+      // with whitespace-only content. The trimmed empty strings get filtered at line 381.
+      const html = '<div class="math"><math><munknown>   </munknown></math></div>';
+      const markdown = await convertPaste(page, { html });
+      // Should handle gracefully and produce valid markdown
+      expect(markdown).toBeDefined();
+      expect(typeof markdown).toBe('string');
+    });
+
+    test('unrecognized MathML wrapper element (line 380)', async function ({ page }) {
+      // Test element child that yields no text (unrecognized wrapper)
+      // This exercises the default case when an unrecognized element has
+      // recognized children that eventually produce output
+      const html = '<div class="math"><math><mwrapper><mi>y</mi></mwrapper></math></div>';
+      const markdown = await convertPaste(page, { html });
+      // The recognized child <mi>y</mi> should be extracted through recursion
+      expect(markdown).toBeDefined();
+      expect(markdown).toContain('y');
+    });
+
+    test('unrecognized empty MathML element (line 380)', async function ({ page }) {
+      // Element child that yields no text - an empty unrecognized element
+      // This triggers line 377-381 default case which returns empty string filtered out
+      const html = '<div class="math"><math><mfoo></mfoo></math></div>';
+      const markdown = await convertPaste(page, { html });
+      // Should produce empty or valid markdown without error
+      expect(markdown).toBeDefined();
+      expect(typeof markdown).toBe('string');
+      // Verify exact output: empty unrecognized element produces no math
+      expect(markdown.trim()).toBe('');
+    });
+
+    test('MathML with unrecognized element containing text (line 377-381)', async function ({ page }) {
+      // Unrecognized element with text content - text node handling at line 379
+      const html = '<div class="math"><math><munknown>content</munknown></math></div>';
+      const markdown = await convertPaste(page, { html });
+      // Text content should be extracted through line 379 default case
+      expect(markdown).toBeDefined();
+      expect(markdown).toContain('content');
+    });
+
   });
 
   // ==================== p2mMathBlock replacement with newlines (line 51) ====================
@@ -1142,5 +1194,15 @@ test.describe('math conversion', function () {
       expect(html).not.toContain('<tag>');
       expect(html.toLowerCase()).toContain('tag');
     });
+  });
+});
+
+test.describe('MathML with comments', function () {
+  test('ignores comment nodes inside MathML', async function ({ page }) {
+    await gotoApp(page);
+    const markdown = await convertPaste(page, {
+      html: '<p>Sum <math><mrow><mi>x</mi><!-- note --><mo>+</mo><mn>1</mn></mrow></math></p>'
+    });
+    expect(markdown).toBe('Sum $x + 1$');
   });
 });

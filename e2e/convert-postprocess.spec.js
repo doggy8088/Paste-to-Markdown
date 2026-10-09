@@ -37,6 +37,30 @@ test.describe('convert-postprocess', function () {
       expect(markdown).toContain('---');
     });
 
+    test('adds proper spacing around hr', async function ({ page }) {
+      const markdown = await convertPaste(page, {
+        html: '<p>Before</p><hr><p>After</p>'
+      });
+      // hr should have newlines on both sides for proper markdown rendering
+      expect(markdown).toContain('\n\n---\n\n');
+    });
+
+    test('converts <h1> with proper spacing', async function ({ page }) {
+      const markdown = await convertPaste(page, {
+        html: '<h1>Main Title</h1><p>Content</p>'
+      });
+      // h1 should have newlines after it
+      expect(markdown).toContain('# Main Title\n\n');
+    });
+
+    test('converts <h2> with proper spacing', async function ({ page }) {
+      const markdown = await convertPaste(page, {
+        html: '<h2>Subtitle</h2><p>Content</p>'
+      });
+      // h2 should have newlines after it
+      expect(markdown).toContain('## Subtitle\n\n');
+    });
+
     test('converts <em> to *...*', async function ({ page }) {
       const markdown = await convertPaste(page, {
         html: '<p>This is <em>emphasized</em> text</p>'
@@ -254,6 +278,15 @@ test.describe('convert-postprocess', function () {
       expect(markdown).not.toMatch(/Text\s+\\\n/);
     });
 
+    test('includes backslash in br line breaks', async function ({ page }) {
+      const markdown = await convertPaste(page, {
+        html: '<p>Line 1<br>Line 2</p>'
+      });
+      // Exact test: br must convert to backslash-newline, not just newline
+      expect(markdown).toContain('\\\n');
+      expect(markdown).toBe('Line 1\\\nLine 2');
+    });
+
     test('normalizes consecutive backslash newlines', async function ({ page }) {
       const markdown = await convertPaste(page, {
         html: '<p>Line1<br><br>Line2</p>'
@@ -270,6 +303,15 @@ test.describe('convert-postprocess', function () {
         html: '<p>Text with trailing spaces   </p>'
       });
       expect(markdown).not.toMatch(/   $/m);
+    });
+
+    test('strictly removes trailing spaces with exact assertion', async function ({ page }) {
+      const markdown = await convertPaste(page, {
+        html: '<p>Exact text   </p>'
+      });
+      // Should not have trailing spaces
+      expect(markdown.trimEnd()).toBe('Exact text');
+      expect(markdown).not.toContain('Exact text   ');
     });
 
     test('replaces non-breaking spaces with regular spaces', async function ({ page }) {
@@ -310,6 +352,16 @@ test.describe('convert-postprocess', function () {
       // Paragraphs should be separated by double newlines, not more
       const matches = markdown.match(/\n\n\n+/);
       expect(matches).toBeNull();
+    });
+
+    test('ensures maximum two consecutive newlines', async function ({ page }) {
+      const markdown = await convertPaste(page, {
+        html: '<p>Paragraph 1</p><p>Paragraph 2</p><p>Paragraph 3</p>'
+      });
+      // Check: no more than 2 consecutive newlines anywhere
+      expect(markdown).not.toMatch(/\n{3,}/);
+      // Check: at least some double newlines for paragraph separation
+      expect(markdown).toMatch(/\n\n/);
     });
   });
 
@@ -526,6 +578,34 @@ test.describe('convert-postprocess', function () {
         html: '<ul><li class="active"><p>Item</p></li></ul>'
       });
       expect(markdown).toContain('- Item');
+    });
+
+    test('extracts text when <p> is inside <li>', async function ({ page }) {
+      const markdown = await convertPaste(page, {
+        html: '<ul><li><p>Item content</p></li></ul>'
+      });
+      // The p unwrap must extract content correctly
+      const match = markdown.match(/- Item content/);
+      expect(match).not.toBeNull();
+      // Make sure there are no p tags in the output
+      expect(markdown.toLowerCase()).not.toContain('<p>');
+    });
+
+    test('handles multiple nested p tags in li', async function ({ page }) {
+      const markdown = await convertPaste(page, {
+        html: '<ul><li><p>First</p><p>Second</p></li></ul>'
+      });
+      expect(markdown).toContain('- First');
+      expect(markdown).toContain('Second');
+    });
+
+    test('ensures p content is on same line as li bullet', async function ({ page }) {
+      const markdown = await convertPaste(page, {
+        html: '<ul><li><p>Text here</p></li></ul>'
+      });
+      // If p is not unwrapped, the text would be on multiple lines
+      // With unwrap, it should be: "- Text here" on one line
+      expect(markdown).toBe('- Text here');
     });
   });
 

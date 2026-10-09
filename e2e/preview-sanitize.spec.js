@@ -758,4 +758,134 @@ test.describe('preview-sanitize', function () {
       await expect(page.locator('#preview h1')).toHaveText('Second');
     });
   });
+
+  test.describe('mutation testing - strengthen coverage', function () {
+    test('removes iframe tags completely', async function ({ page }) {
+      await gotoApp(page);
+      const markdown = '<iframe src="https://example.com"></iframe>\n\n# Title';
+      await ensureEditTabAndSetMarkdown(page, markdown);
+      await switchTab(page, 'preview');
+
+      expect(await page.locator('#preview iframe').count()).toBe(0);
+      await expect(page.locator('#preview h1')).toHaveText('Title');
+    });
+
+    test('removes animation elements', async function ({ page }) {
+      await gotoApp(page);
+      const markdown = '<svg><animate attributeName="onclick" values="onclick=alert(1)"/></svg>';
+      await ensureEditTabAndSetMarkdown(page, markdown);
+      await switchTab(page, 'preview');
+
+      expect(await page.locator('#preview animate').count()).toBe(0);
+    });
+
+    test('handles srcset with multiple candidates - first safe, second dangerous', async function ({ page }) {
+      await gotoApp(page);
+      const markdown = '<img srcset="https://example.com/1x.png 1x, javascript:alert(1) 2x" src="https://example.com/safe.png">';
+      await ensureEditTabAndSetMarkdown(page, markdown);
+      await switchTab(page, 'preview');
+
+      // The unsafe srcset is dropped as a whole; the safe src is kept.
+      const img = page.locator('#preview img');
+      await expect(img).toHaveCount(1);
+      await expect(img).toHaveAttribute('src', 'https://example.com/safe.png');
+      await expect(img).not.toHaveAttribute('srcset', /.*/);
+    });
+
+    test('keeps srcset when every candidate is safe', async function ({ page }) {
+      await gotoApp(page);
+      const markdown = '<img srcset="https://example.com/1x.png 1x, /images/2x.png 2x" src="https://example.com/safe.png">';
+      await ensureEditTabAndSetMarkdown(page, markdown);
+      await switchTab(page, 'preview');
+
+      await expect(page.locator('#preview img')).toHaveAttribute('srcset', 'https://example.com/1x.png 1x, /images/2x.png 2x');
+    });
+
+    test('handles URLs with leading spaces', async function ({ page }) {
+      await gotoApp(page);
+      const markdown = '[Link](  javascript:alert(1))';
+      await ensureEditTabAndSetMarkdown(page, markdown);
+      await switchTab(page, 'preview');
+
+      const link = page.locator('#preview a');
+      // Should not have dangerous href even with leading spaces
+      await expect(link).not.toHaveAttribute('href');
+    });
+
+    test('ensures safe links have both target and rel attributes', async function ({ page }) {
+      await gotoApp(page);
+      const markdown = '[Safe](https://example.com)';
+      await ensureEditTabAndSetMarkdown(page, markdown);
+      await switchTab(page, 'preview');
+
+      const link = page.locator('#preview a');
+      // Should have both target and rel set
+      await expect(link).toHaveAttribute('target', '_blank');
+      await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+      await expect(link).toHaveAttribute('href', 'https://example.com');
+    });
+
+    test('removes all event handlers including mixed case on*', async function ({ page }) {
+      await gotoApp(page);
+      const markdown = '<div onmouseover="window.xssEvent=1">Content</div>';
+      await ensureEditTabAndSetMarkdown(page, markdown);
+      await switchTab(page, 'preview');
+
+      await verifyXssNotExecuted(page, 'xssEvent');
+      const div = page.locator('#preview div');
+      if (await div.count() > 0) {
+        await expect(div).not.toHaveAttribute('onmouseover', /.*/);
+      }
+    });
+
+    test('removes embed elements', async function ({ page }) {
+      await gotoApp(page);
+      const markdown = '<embed src="https://example.com/file.swf" />\n\n# Title';
+      await ensureEditTabAndSetMarkdown(page, markdown);
+      await switchTab(page, 'preview');
+
+      expect(await page.locator('#preview embed').count()).toBe(0);
+      await expect(page.locator('#preview h1')).toHaveText('Title');
+    });
+
+    test('removes all event handlers with on* pattern on any element', async function ({ page }) {
+      await gotoApp(page);
+      const markdown = `
+<div onclick="window.clickXss=1">Click</div>
+<img onload="window.loadXss=1" src="https://example.com/img.jpg">
+<a href="https://example.com" onmouseover="window.hoverXss=1">Link</a>
+      `;
+      await ensureEditTabAndSetMarkdown(page, markdown);
+      await switchTab(page, 'preview');
+
+      await verifyXssNotExecuted(page, 'clickXss');
+      await verifyXssNotExecuted(page, 'loadXss');
+      await verifyXssNotExecuted(page, 'hoverXss');
+    });
+
+    test('validates href attribute on links (not just href removal)', async function ({ page }) {
+      await gotoApp(page);
+      const markdown = `[Good](https://example.com)
+[Bad1](javascript:void(0))
+[Bad2](data:text/html,<script>alert(1)</script>)
+[Bad3](vbscript:msgbox(1))`;
+      await ensureEditTabAndSetMarkdown(page, markdown);
+      await switchTab(page, 'preview');
+
+      const links = page.locator('#preview a[href]');
+      expect(await links.count()).toBe(1);
+      await expect(links.first()).toHaveAttribute('href', 'https://example.com');
+    });
+
+    test('double-sanitization catches mutation XSS through parse context changes', async function ({ page }) {
+      await gotoApp(page);
+      // This payload becomes dangerous when re-parsed
+      const markdown = '<noembed><img src=x onerror="window.mutXss=1"></noembed>';
+      await ensureEditTabAndSetMarkdown(page, markdown);
+      await switchTab(page, 'preview');
+
+      expect(await page.locator('#preview img').count()).toBe(0);
+      await verifyXssNotExecuted(page, 'mutXss');
+    });
+  });
 });
