@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const MCR = require('monocart-coverage-reports');
-const { options, THRESHOLDS } = require('./coverage-options');
+const { options, THRESHOLDS, listExpectedSources } = require('./coverage-options');
 
 function findShortfalls(label, summary) {
   return Object.keys(THRESHOLDS)
@@ -29,7 +29,9 @@ module.exports = async function globalTeardown(config) {
   // Gate on the Istanbul-style summary, the same numbers lcov tools report.
   const summaryPath = path.join(options.outputDir, 'coverage-summary.json');
   const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
-  const shortfalls = [];
+  const shortfalls = listExpectedSources()
+    .filter(function (file) { return !summary[file]; })
+    .map(function (file) { return file + ': no coverage collected (never loaded by any test)'; });
   Object.keys(summary).forEach(function (file) {
     shortfalls.push.apply(shortfalls, findShortfalls(file, summary[file]));
   });
