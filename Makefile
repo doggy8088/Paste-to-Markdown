@@ -12,7 +12,7 @@ SERVER_LOG_FILE := .make/server.log
 
 JS_FILES := assets/clipboard2markdown.js assets/to-markdown.js
 
-.PHONY: help serve server serve-bg stop open status check test clean restart
+.PHONY: help serve server serve-bg stop open status check test test-coverage clean restart
 
 help:
 	@echo "Paste to Markdown - Makefile tasks"
@@ -26,7 +26,8 @@ help:
 	@echo "  make open       開啟本機網址"
 	@echo "  make status     顯示背景伺服器狀態"
 	@echo "  make check      檢查 JS 語法"
-	@echo "  make test       執行快速本機健康檢查"
+	@echo "  make test       執行 JS 語法檢查與 Playwright E2E 測試"
+	@echo "  make test-coverage 執行 E2E 測試並檢查覆蓋率門檻（90%）"
 	@echo "  make clean      清除本機服務啟動檔案"
 	@echo "  make restart    重啟背景伺服器"
 	@echo ""
@@ -99,11 +100,14 @@ status:
 check:
 	@node --check $(JS_FILES)
 
-# 目前專案無自動化測試框架
-# 這裡保留 test 任務，方便日後接入
-# 並提供最小一致的快速驗證流程
+# Playwright E2E 測試（需先執行 npm install 與 npx playwright install chromium）
 test: check
-	@echo "目前沒有自動化測試，請用 make serve 開啟本機後手動驗證（貼上來源與預覽輸出）。"
+	@[ -d node_modules ] || { echo "請先執行 npm install 與 npx playwright install chromium"; exit 1; }
+	@npm test
+
+test-coverage: check
+	@[ -d node_modules ] || { echo "請先執行 npm install 與 npx playwright install chromium"; exit 1; }
+	@npm run test:coverage
 
 clean:
 	@rm -rf .make

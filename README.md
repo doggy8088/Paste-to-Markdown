@@ -76,7 +76,9 @@ A fast, private, and client-side web application for converting clipboard conten
 ```text
 Paste-to-Markdown/
 ├── index.html                   # Main entry point, layout, and styling
-├── Makefile                     # Local server management and syntax check tasks
+├── Makefile                     # Local server management, syntax check, and test tasks
+├── package.json                 # Dev-only dependencies for the E2E tests (the app needs none)
+├── playwright.config.js         # Playwright E2E test configuration
 ├── assets/
 │   ├── clipboard2markdown.js    # Core app logic, clipboard handling, and KaTeX extensions
 │   ├── to-markdown.js           # Custom HTML-to-Markdown conversion utilities
@@ -88,14 +90,17 @@ Paste-to-Markdown/
 │   ├── turndown-plugin-gfm/     # GFM table and task list plugin
 │   ├── marked/                  # Markdown parser and renderer
 │   └── katex/                   # Local offline KaTeX library, fonts, and stylesheets
-└── i18n/                        # Localization dictionaries (15 languages)
+├── i18n/                        # Localization dictionaries (15 languages)
+├── e2e/                         # Playwright end-to-end tests and coverage tooling
+├── tests/                       # Golden HTML-to-Markdown fixtures used by the E2E tests
+└── .github/workflows/e2e.yml    # Runs the E2E tests and coverage gate on every pull request
 ```
 
 ---
 
 ## Local Development
 
-No build tools, npm packages, or bundlers are required. You can serve the project using any static web server:
+No build tools, npm packages, or bundlers are required to run the app. You can serve the project using any static web server:
 
 ```bash
 # Start local server and automatically open the browser
@@ -113,6 +118,30 @@ make stop
 # Verify JavaScript syntax
 make check
 ```
+
+### End-to-End Tests
+
+The E2E tests use [Playwright](https://playwright.dev/) with Chromium and measure JavaScript coverage of the app's own code (`assets/clipboard2markdown.js`, `assets/to-markdown.js`, `i18n/*.js`, and the inline scripts in `index.html`; vendor libraries are excluded). Node.js 22.12 or later is required for the tests only.
+
+```bash
+# Install test dependencies and the Chromium browser (first time only)
+npm install
+npx playwright install chromium
+
+# Run all E2E tests
+npm test
+
+# Run all E2E tests and fail if coverage is below 90% (lines, statements, functions)
+npm run test:coverage
+
+# Run a single spec file
+npx playwright test e2e/convert-core.spec.js
+
+# List uncovered lines of a file from the last run
+node e2e/support/uncovered.js clipboard2markdown
+```
+
+The coverage report is written to `coverage/` (open `coverage/index.html`). Every pull request runs `npm run test:coverage` in GitHub Actions.
 
 ---
 

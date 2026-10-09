@@ -1,0 +1,10 @@
+# Local server (make serve-bg)
+.make/
+
+# E2E tests
+node_modules/
+test-results/
+playwright-report/
+blob-report/
+coverage/
+.e2e-tmp/
