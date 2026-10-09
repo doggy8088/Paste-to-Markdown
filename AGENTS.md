@@ -11,16 +11,19 @@ This repository contains a simple, client-side web application for converting cl
   - `bootstrap.css`: Styling (Bootstrap 3 based).
 - `vendor/`: Third-party libraries (Turndown, Marked, GFM plugin, KaTeX).
 - `assets/background.svg`: Background image for the application.
+- `e2e/`: Playwright end-to-end tests (`*.spec.js`) and their harness in `e2e/support/`.
+- `tests/`: Golden fixtures (`tcN-source.html` → `tcN-perfect.md`) asserted by the E2E tests.
 
 ## Build, Lint, and Test Commands
 
-Currently, this project does **not** use a package manager (npm/yarn) or a build system.
+The app itself has no build system and no runtime npm dependencies. npm is used only for the dev-only E2E test tooling in `package.json`.
 
 - **Build**: No build step is required. Changes to JS/CSS/HTML are reflected immediately upon browser refresh.
-- **Lint**: No automated linter is configured. Adhere to existing styles.
-- **Test**: No automated tests exist.
-  - **Manual Testing**: Open `index.html` in a browser and test different clipboard sources (Web, VS Code, Word, Excel, Plain Text).
-  - **Single Test**: To test a specific conversion rule, you can use the browser console to call `turndownService.turndown(html)` or `convert(html)`.
+- **Lint**: No automated linter is configured. Adhere to existing styles. `make check` runs `node --check` on the app scripts.
+- **Test**: Playwright E2E tests (Chromium) in `e2e/`. Setup once with `npm install && npx playwright install chromium`.
+  - `npm test` runs every spec; `npx playwright test e2e/<name>.spec.js` runs one.
+  - `npm run test:coverage` also fails the run when lines, statements or functions drop below 90%, checked per file and in total, for first-party code (`assets/clipboard2markdown.js`, `assets/to-markdown.js`, `i18n/*.js`, inline scripts in `index.html`). This is what CI runs on every pull request (`.github/workflows/e2e.yml`).
+  - `node e2e/support/uncovered.js <file-substring> [--from N --to N]` lists uncovered lines from the last run.
 
 ## Code Style Guidelines
 
@@ -32,7 +35,7 @@ Currently, this project does **not** use a package manager (npm/yarn) or a build
 - Line length: Aim for a reasonable line length (under 100-120 characters).
 
 ### Imports and Dependencies
-- Dependencies are managed manually in the `vendor/` directory.
+- Runtime dependencies are managed manually in the `vendor/` directory; `package.json` holds dev-only test tooling.
 - Add new scripts to `index.html` before the application scripts.
 - Order of scripts:
   1. Vendor libraries (Turndown, Marked, etc.)
@@ -122,6 +125,7 @@ Conversion is primarily handled by `TurndownService` with the GFM tables plugin.
    - `filter`: A string (tag name), array of strings, or a function that returns true for matching nodes.
    - `replacement`: A function that returns the Markdown string for that node.
 4. If it's a plain text rule (for when no HTML is available), add it to the `plainTextRules` object with a detection function and a transformation function.
+5. Add an E2E test for the new rule in the matching `e2e/*.spec.js` file that pastes realistic input and asserts the exact Markdown.
 
 ### Modifying the UI
 1. Edit `index.html` for HTML structure changes.
@@ -140,9 +144,8 @@ Before finalizing changes, testing, or committing:
 4. **Update Cache Query Strings**: If any JS/CSS assets were changed, bump their `?v=...` query string parameter in `index.html`.
 
 ### Verification and Testing
-Since there are no automated tests:
-1. Open `index.html` in a local browser (Chrome/Edge/Firefox).
-2. Copy content from various sources:
+1. Run `npm run test:coverage` and keep it green; add or update E2E tests for every behavior change.
+2. For clipboard sources the synthetic paste cannot reproduce, also verify manually: open `index.html` in a local browser (Chrome/Edge/Firefox) and copy content from various sources:
    - Web pages (tables, lists, headings).
    - VS Code (code blocks).
    - Microsoft Word (formatted text, lists).
@@ -151,6 +154,15 @@ Since there are no automated tests:
 3. Paste into the app and verify the Markdown output in the "Edit" tab.
 4. Switch to the "Preview" tab to ensure it renders correctly, follows Bootstrap styling, and is properly sanitized.
 5. Check the browser console for any errors or "Matched" logs from `plainTextRules`.
+
+### Writing E2E Tests
+- Import `test`/`expect` from `e2e/support/fixtures.js`, which records coverage for `page` and for extra pages opened with the `openPage` fixture.
+- Drive the app through `e2e/support/app.js`: `pasteContent()` dispatches a synthetic `paste` event on `#pastebin` with `html`/`text`/`rtf`/`vscode` data, the same entry point a real paste uses.
+- Stub `navigator.userAgentData`/`navigator.platform` with `page.addInitScript` whenever shortcuts or their labels are involved; headless Chromium reports the host OS, and CI runs on Linux.
+- Stub `navigator.clipboard` with `page.addInitScript` to assert what Copy/Share write.
+- Assert exact Markdown with `toBe`, and wait with web-first assertions or `page.clock`.
+- When a test exposes a real app bug, keep the test asserting the correct output and mark it `test.fail(true, 'Known bug: ...')` so the suite stays green and flags the fix.
+- Parallel runs on one machine need distinct `E2E_PORT`, `E2E_OUTPUT_DIR` and `E2E_COVERAGE_DIR` values.
 
 ---
 *Note: This file is intended for agentic consumption. Keep it updated as the project evolves.*
