@@ -1359,13 +1359,18 @@
 
     // Sanitize HTML and add Bootstrap classes
     // Elements that can run script, embed other documents, or change how the
-    // page loads. <noscript> is parsed differently once scripting is enabled,
-    // which can turn harmless attribute text into live markup (mutation XSS).
+    // page loads. Raw-text elements (noscript, noembed, noframes, xmp,
+    // plaintext, style, script, iframe) serialize their content unescaped, so
+    // text inside them can turn into live markup when parsed again (mutation XSS).
     const BLOCKED_ELEMENTS = [
-      'script', 'noscript', 'style', 'template', 'iframe', 'frame', 'frameset',
-      'object', 'embed', 'applet', 'base', 'link', 'meta',
-      'animate', 'animatemotion', 'animatetransform', 'set', 'foreignobject'
+      'script', 'noscript', 'noembed', 'noframes', 'xmp', 'plaintext', 'style',
+      'template', 'iframe', 'frame', 'frameset', 'object', 'embed', 'applet',
+      'base', 'link', 'meta', 'animate', 'animatemotion', 'animatetransform',
+      'set', 'foreignobject'
     ];
+
+    // Upper bound for the sanitize-until-stable loop in sanitizeHtml.
+    const MAX_SANITIZE_PASSES = 10;
 
     // Attributes whose value is loaded or navigated to as a URL.
     const URL_ATTRIBUTES = [
@@ -1401,16 +1406,17 @@
 
     function sanitizeHtml(html) {
       // Sanitize again until the output is stable, so markup that changes
-      // meaning when parsed a second time is also cleaned in its final form.
+      // meaning when parsed again is also cleaned in the form the preview
+      // finally parses. If it never stabilizes, fail closed and show text only.
       let sanitized = sanitizeHtmlOnce(html);
-      for (let pass = 0; pass < 2; pass++) {
+      for (let pass = 1; pass < MAX_SANITIZE_PASSES; pass++) {
         const resanitized = sanitizeHtmlOnce(sanitized);
         if (resanitized === sanitized) {
-          break;
+          return sanitized;
         }
         sanitized = resanitized;
       }
-      return sanitized;
+      return escapeHtml(new DOMParser().parseFromString(sanitized, 'text/html').body.textContent || '');
     }
 
     function sanitizeHtmlOnce(html) {

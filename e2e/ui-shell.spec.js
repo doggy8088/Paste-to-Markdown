@@ -3,6 +3,24 @@
 const { test, expect } = require('./support/fixtures');
 const { gotoApp, pasteContent, convertPaste, getMarkdown, setMarkdown, switchTab, readFixture } = require('./support/app');
 
+// On Linux and Windows, Control+V also runs the browser's native paste. The
+// test clipboard is empty, and the app's paste handler would immediately undo
+// prepareForPaste, so block that native paste to observe the keydown behavior
+// the same way on every platform.
+async function pressPasteShortcut(page) {
+  await page.evaluate(function () {
+    window.__blockNativePaste = function (event) {
+      event.stopImmediatePropagation();
+      event.preventDefault();
+    };
+    document.addEventListener('paste', window.__blockNativePaste, true);
+  });
+  await page.keyboard.press('Control+V');
+  await page.evaluate(function () {
+    document.removeEventListener('paste', window.__blockNativePaste, true);
+  });
+}
+
 test.describe('UI Shell - Platform & Shortcuts', function () {
   test('detects macOS platform and shows Option modifier', async function ({ page }) {
     await page.addInitScript(function () {
@@ -339,7 +357,7 @@ test.describe('UI Shell - Keyboard Shortcuts', function () {
     await expect(page.locator('#info')).not.toHaveClass(/hidden/);
 
     // Simulate Ctrl+V
-    await page.keyboard.press('Control+V');
+    await pressPasteShortcut(page);
 
     // info and wrapper should be hidden
     await expect(page.locator('#info')).toHaveClass(/hidden/);
@@ -357,7 +375,7 @@ test.describe('UI Shell - Keyboard Shortcuts', function () {
     await setMarkdown(page, 'test content');
 
     // Hide info/wrapper first
-    await page.keyboard.press('Control+V');
+    await pressPasteShortcut(page);
 
     // Press Escape
     await page.keyboard.press('Escape');
@@ -545,7 +563,7 @@ test.describe('UI Shell - prepareForPaste', function () {
     });
 
     // Trigger Ctrl+V to call prepareForPaste
-    await page.keyboard.press('Control+V');
+    await pressPasteShortcut(page);
 
     // pastebin should be empty
     const pastebinHTML = await page.evaluate(function () {
@@ -562,7 +580,7 @@ test.describe('UI Shell - prepareForPaste', function () {
     await expect(page.locator('#wrapper')).not.toHaveClass(/hidden/);
 
     // Trigger prepareForPaste
-    await page.keyboard.press('Control+V');
+    await pressPasteShortcut(page);
 
     // Both should be hidden
     await expect(page.locator('#info')).toHaveClass(/hidden/);
@@ -578,7 +596,7 @@ test.describe('UI Shell - resetOutputView', function () {
     await setMarkdown(page, 'Some test content');
 
     // Hide info/wrapper
-    await page.keyboard.press('Control+V');
+    await pressPasteShortcut(page);
 
     // Press Escape to trigger resetOutputView
     await page.keyboard.press('Escape');
@@ -902,36 +920,23 @@ test.describe('UI Shell - getActiveTab', function () {
 });
 
 test.describe('UI Shell - activateTab', function () {
-  test('activateTab defaults invalid tab to edit', async function ({ page }) {
+  test('activateTab defaults an unknown tab to edit', async function ({ page }) {
     await gotoApp(page);
     await switchTab(page, 'preview');
+    await expect(page.locator('.tab-button[data-tab="preview"]')).toHaveClass(/active/);
 
-    // Verify preview is active
+    // The click listener passes the button's data-tab to activateTab, which
+    // treats anything other than "preview" as "edit".
     const previewButton = page.locator('.tab-button[data-tab="preview"]');
-    await expect(previewButton).toHaveClass(/active/);
-
-    // Call activateTab with invalid target - should default to edit
-    await page.evaluate(function () {
-      // The activateTab function defaults anything that's not 'preview' to 'edit'
-      // This simulates calling it with an invalid value
-      const buttons = document.querySelectorAll('.tab-button');
-      const editButton = document.querySelector('.tab-button[data-tab="edit"]');
-      // Simulate what activateTab does: if target is not 'preview', use 'edit'
-      if (editButton) {
-        editButton.classList.add('active');
-        editButton.setAttribute('aria-selected', 'true');
-      }
-      buttons.forEach(function(b) {
-        if (b.getAttribute('data-tab') !== 'edit') {
-          b.classList.remove('active');
-          b.setAttribute('aria-selected', 'false');
-        }
-      });
+    await previewButton.evaluate(function (button) {
+      button.setAttribute('data-tab', 'unknown');
     });
+    await page.locator('.tab-button[data-tab="unknown"]').click();
 
-    // Edit tab should now be active
-    const editButton = page.locator('.tab-button[data-tab="edit"]');
-    await expect(editButton).toHaveClass(/active/);
+    await expect(page.locator('.tab-button[data-tab="edit"]')).toHaveClass(/active/);
+    await expect(page.locator('.tab-button[data-tab="edit"]')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('#edit-tab')).toHaveClass(/active/);
+    await expect(page.locator('#preview-tab')).not.toHaveClass(/active/);
   });
 
   test('activateTab updates preview when switching to preview', async function ({ page }) {
@@ -1029,92 +1034,26 @@ test.describe('UI Shell - Storage Error Handling', function () {
 });
 
 test.describe('UI Shell - activateTab Early Return', function () {
-  test('activateTab returns early when no tab button matches the requested tab', async function ({ page }) {
-    // Use a pre-init script to patch querySelectorAll BEFORE the app initializes
-    // This way, when tabButtons is captured, it will be empty
-    // But the actual buttons still exist in the DOM for other queries
-    await page.addInitScript(function () {
-      const originalQSA = Element.prototype.querySelectorAll;
-      let tabButtonQueryCount = 0;
-      Element.prototype.querySelectorAll = function(selector) {
-        // Count how many times '.tab-button' is queried
-        if (selector === '.tab-button') {
-          tabButtonQueryCount++;
-          // Return empty list only on the FIRST call (during app initialization)
-          // Subsequent calls will use the real querySelectorAll
-          if (tabButtonQueryCount === 1) {
-            return document.createDocumentFragment().querySelectorAll(selector);
-          }
-        }
-        return originalQSA.call(this, selector);
-      };
-      // Also patch document.querySelectorAll
-      const docQSA = document.querySelectorAll;
-      document.querySelectorAll = function(selector) {
-        if (selector === '.tab-button') {
-          tabButtonQueryCount++;
-          if (tabButtonQueryCount === 1) {
-            // Return an empty NodeList-like object
-            return [];
-          }
-        }
-        return docQSA.call(this, selector);
-      };
-    });
-
-    await gotoApp(page);
-
-    // Now tabButtons in the app was set to an empty list during initialization
-    // But the buttons still exist in the DOM for subsequent queries
-    // Verify buttons still exist in DOM (queries after the first one work normally)
-    const buttonCount = await page.evaluate(function () {
-      return document.querySelectorAll('.tab-button').length;
-    });
-    expect(buttonCount).toBeGreaterThan(0);
-
-    // Press Alt+1 to trigger the keydown handler
-    // This will find the edit button (fresh querySelector) and click it
-    // Which calls activateTab, but since tabButtons was empty, it returns early at line 1177
-    await page.keyboard.press('Alt+1');
-
-    // The app should still be functional
-    await expect(page.locator('.app-shell')).toBeVisible();
-  });
-
-  test('activateTab returns early and does not update tab state when buttons missing', async function ({ page }) {
+  test('Escape leaves the panels unchanged when no tab button is for Edit', async function ({ page }) {
     await gotoApp(page);
     await setMarkdown(page, '# Heading');
+    await switchTab(page, 'preview');
 
-    // Verify we're on the edit tab initially
-    let editButton = page.locator('.tab-button[data-tab="edit"]');
-    const editActiveInitial = await editButton.getAttribute('aria-selected');
-    expect(editActiveInitial).toBe('true');
-
-    // Remove all tab buttons
+    // With no button whose data-tab is "edit", activateTab('edit') clears the
+    // button highlight, finds no target, and returns before touching the panels.
     await page.evaluate(function () {
-      const buttons = document.querySelectorAll('.tab-button');
-      buttons.forEach(function (btn) {
-        btn.remove();
+      document.querySelectorAll('.tab-button').forEach(function (button) {
+        button.setAttribute('data-tab', 'missing');
       });
     });
+    await page.keyboard.press('Escape');
 
-    // Verify buttons are gone
-    const buttonCount = await page.evaluate(function () {
-      return document.querySelectorAll('.tab-button').length;
-    });
-    expect(buttonCount).toBe(0);
-
-    // Try to press Alt+1 to switch to edit tab
-    // Since the buttons are removed, activateTab will be called but will return early
-    // because tabButtons (at the point activateTab is called) won't have any elements
-    await page.keyboard.press('Alt+1');
-
-    // The app should still be functional
-    await expect(page.locator('.app-shell')).toBeVisible();
-
-    // Content should still be there (activateTab didn't run its full logic)
-    const markdown = await getMarkdown(page);
-    expect(markdown).toBe('# Heading');
+    await expect(page.locator('.tab-button.active')).toHaveCount(0);
+    await expect(page.locator('.tab-button[aria-selected="true"]')).toHaveCount(0);
+    await expect(page.locator('#preview-tab')).toHaveClass(/active/);
+    await expect(page.locator('#edit-tab')).not.toHaveClass(/active/);
+    // Escape still resets the editor after the tab switch is skipped.
+    await expect(page.locator('#output')).toHaveValue('');
   });
 });
 

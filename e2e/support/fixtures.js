@@ -7,20 +7,33 @@ const base = require('@playwright/test');
 const MCR = require('monocart-coverage-reports');
 const { options } = require('./coverage-options');
 
+// Pages whose coverage has not been collected yet.
+const pendingCoverage = new WeakSet();
+
+async function stopCoverage(page) {
+  if (!pendingCoverage.has(page) || page.isClosed()) {
+    return;
+  }
+  pendingCoverage.delete(page);
+  const coverage = await page.coverage.stopJSCoverage();
+  await MCR(options).add(coverage);
+}
+
 async function startCoverage(page, browserName) {
   if (browserName !== 'chromium') {
     return false;
   }
   await page.coverage.startJSCoverage({ resetOnNavigation: false });
-  return true;
-}
+  pendingCoverage.add(page);
 
-async function stopCoverage(page) {
-  if (page.isClosed()) {
-    return;
-  }
-  const coverage = await page.coverage.stopJSCoverage();
-  await MCR(options).add(coverage);
+  // Coverage can no longer be read once a page is closed, so collect it
+  // first when a test closes the page itself.
+  const close = page.close.bind(page);
+  page.close = async function (closeOptions) {
+    await stopCoverage(page);
+    return close(closeOptions);
+  };
+  return true;
 }
 
 const test = base.test.extend({

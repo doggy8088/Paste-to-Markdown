@@ -413,7 +413,12 @@ test.describe('preview-sanitize', function () {
       { name: 'svg style breakout', markdown: '<svg></p><style><a id="</style><img src=1 onerror=window.__xss=1>">', gone: '[onerror]', kept: null },
       { name: 'math table style breakout', markdown: '<math><mi><table><mi><style><a title="</style><img src=x onerror=window.__xss=1>">', gone: '[onerror]', kept: null },
       { name: 'mglyph style comment mutation', markdown: '<math><mtext><table><mglyph><style><!--</style><img title="--&gt;&lt;/mglyph&gt;&lt;img&Tab;src=1&Tab;onerror=window.__xss=1&gt;">', gone: '[onerror]', kept: null },
-      { name: 'nested form mutation', markdown: '<form><math><mtext></form><form><mglyph><style></math><img src onerror=window.__xss=1>', gone: '[onerror]', kept: null }
+      { name: 'nested form mutation', markdown: '<form><math><mtext></form><form><mglyph><style></math><img src onerror=window.__xss=1>', gone: '[onerror]', kept: null },
+      // Raw-text elements serialize their content unescaped, so they are removed outright.
+      { name: 'noembed element', markdown: '<noembed>&lt;img src=x onerror=window.__xss=1&gt;</noembed>', gone: 'noembed, img', kept: null },
+      { name: 'noframes element', markdown: '<noframes><img title="</noframes><img src=x onerror=window.__xss=1>"></noframes>', gone: 'noframes, [onerror]', kept: null },
+      { name: 'xmp element', markdown: '<xmp>&lt;img src=x onerror=window.__xss=1&gt;</xmp>', gone: 'xmp, img', kept: null },
+      { name: 'plaintext element', markdown: '<plaintext><img src=x onerror=window.__xss=1>', gone: 'plaintext, img', kept: null }
     ];
 
     PAYLOADS.forEach(function (payload) {
@@ -428,6 +433,27 @@ test.describe('preview-sanitize', function () {
         }
         expect(await page.evaluate(() => window.__xss)).toBeUndefined();
       });
+    });
+
+    test('falls back to escaped text when sanitizing never stabilizes', async function ({ page }) {
+      await gotoApp(page);
+      await setMarkdown(page, '**bold** <i>text</i>');
+      // Emulate markup that changes on every parse, so no pass is ever stable.
+      await page.evaluate(function () {
+        const parseFromString = DOMParser.prototype.parseFromString;
+        let parseCount = 0;
+        DOMParser.prototype.parseFromString = function (markup, type) {
+          const doc = parseFromString.call(this, markup, type);
+          parseCount++;
+          doc.body.appendChild(doc.createElement('span')).textContent = ' #' + parseCount;
+          return doc;
+        };
+      });
+      await switchTab(page, 'preview');
+
+      const preview = page.locator('#preview');
+      await expect(preview).toContainText('bold text');
+      await expect(preview.locator('*')).toHaveCount(0);
     });
 
     test('keeps the KaTeX SVG and MathML output of a rendered formula', async function ({ page }) {

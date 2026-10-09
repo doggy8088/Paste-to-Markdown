@@ -68,9 +68,9 @@ The app itself has no build system and no runtime npm dependencies. npm is used 
 - Log errors to the console for debugging during development.
 
 ### Security
-- **XSS Prevention**: When rendering Markdown to the preview, use the `sanitizeHtml` function.
-- The `sanitizeHtml` function uses `DOMParser` to parse HTML safely and removes `<script>` tags.
-- It also validates URLs in `<a>` and `<img>` tags using `isSafeUrl`.
+- **XSS Prevention**: When rendering Markdown to the preview, use the `sanitizeHtml` function. Shared links (`#mode=preview&text=...`) render attacker-controlled Markdown on open, so treat every sanitizer change as security-critical and extend the XSS payload tests in `e2e/preview-sanitize.spec.js`.
+- `sanitizeHtml` parses with `DOMParser`, removes every element in `BLOCKED_ELEMENTS` (script, raw-text elements such as `noscript`/`xmp`, embedded documents, SVG animation), strips all `on*` attributes, and drops URL attributes (`URL_ATTRIBUTES`, `srcset`) that fail `isSafeUrl`.
+- It sanitizes again until the output is stable (mutation XSS) and falls back to escaped text if it never stabilizes.
 - **URL Validation**: `isSafeUrl` blocks `javascript:`, `data:`, and other dangerous protocols.
 - **Bootstrap Integration**: The sanitizer also adds Bootstrap classes (`table-striped`, `img-responsive`, etc.) to the rendered HTML to ensure consistent styling.
 - Never use `innerHTML` with unsanitized user input.

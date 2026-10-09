@@ -610,65 +610,26 @@ test.describe('Copy - Markdown to HTML Rendering', function () {
 });
 
 test.describe('Copy - Shortcut Matching', function () {
-  test('matchesCopyShortcut requires Alt key', async function ({ page }) {
-    await page.goto('/index.html');
+  // Each ignored combination is pressed first; the editor text then changes
+  // and Alt+C copies it. Only the second text may reach the clipboard.
+  const IGNORED_COMBINATIONS = ['KeyC', 'Alt+Shift+KeyC', 'Control+Alt+KeyC', 'Meta+Alt+KeyC', 'Alt+KeyV'];
 
-    const result = await page.evaluate(() => {
-      // Create mock events and test
-      function testShortcut(altKey, ctrlKey, metaKey, shiftKey, key) {
-        const event = {
-          altKey, ctrlKey, metaKey, shiftKey, key, code: 'KeyC'
-        };
+  IGNORED_COMBINATIONS.forEach(function (combination) {
+    test('does not copy on ' + combination, async function ({ page }) {
+      await setupClipboardStubs(page);
+      await gotoApp(page);
+      await setMarkdown(page, 'ignored');
+      const copyButton = page.locator('#copy-button');
 
-        // This tests the logic of matchesCopyShortcut
-        return event.altKey &&
-          !event.ctrlKey &&
-          !event.metaKey &&
-          !event.shiftKey &&
-          (event.key === 'c' || event.key === 'C' || event.code === 'KeyC');
-      }
+      await page.locator('#output').press(combination);
+      await expect(copyButton).toBeEnabled();
+      await setMarkdown(page, 'copied');
+      await page.keyboard.press('Alt+KeyC');
 
-      return {
-        valid: testShortcut(true, false, false, false, 'c'),
-        noAlt: testShortcut(false, false, false, false, 'c'),
-        withCtrl: testShortcut(true, true, false, false, 'c'),
-        withMeta: testShortcut(true, false, true, false, 'c'),
-        withShift: testShortcut(true, false, false, true, 'c')
-      };
+      await expect.poll(() => page.evaluate(() => window.__clipboardWrites.length)).toBe(1);
+      const writes = await page.evaluate(() => window.__clipboardWrites);
+      expect(writes.map((write) => write['text/plain'])).toEqual(['copied']);
     });
-
-    expect(result.valid).toBe(true);
-    expect(result.noAlt).toBe(false);
-    expect(result.withCtrl).toBe(false);
-    expect(result.withMeta).toBe(false);
-    expect(result.withShift).toBe(false);
-  });
-
-  test('matchesCopyShortcut accepts uppercase and lowercase c', async function ({ page }) {
-    await page.goto('/index.html');
-
-    const result = await page.evaluate(() => {
-      function testShortcut(key, code) {
-        const event = {
-          altKey: true, ctrlKey: false, metaKey: false, shiftKey: false, key, code
-        };
-        return event.altKey &&
-          !event.ctrlKey &&
-          !event.metaKey &&
-          !event.shiftKey &&
-          (event.key === 'c' || event.key === 'C' || event.code === 'KeyC');
-      }
-
-      return {
-        lowercase: testShortcut('c', 'KeyC'),
-        uppercase: testShortcut('C', 'KeyC'),
-        keyCode: testShortcut('x', 'KeyC')
-      };
-    });
-
-    expect(result.lowercase).toBe(true);
-    expect(result.uppercase).toBe(true);
-    expect(result.keyCode).toBe(true);
   });
 });
 

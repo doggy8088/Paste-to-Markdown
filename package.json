@@ -4,6 +4,9 @@
   "private": true,
   "description": "End-to-end tests for Paste to Markdown. The app itself is static and needs no build step.",
   "license": "MIT",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "test": "playwright test",
     "test:coverage": "playwright test --config=playwright.coverage.config.js",

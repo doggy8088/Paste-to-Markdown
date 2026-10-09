@@ -121,7 +121,7 @@ make check
 
 ### End-to-End Tests
 
-The E2E tests use [Playwright](https://playwright.dev/) with Chromium and measure JavaScript coverage of the app's own code (`assets/clipboard2markdown.js`, `assets/to-markdown.js`, `i18n/*.js`, and the inline scripts in `index.html`; vendor libraries are excluded). Node.js 20 or later is required for the tests only.
+The E2E tests use [Playwright](https://playwright.dev/) with Chromium and measure JavaScript coverage of the app's own code (`assets/clipboard2markdown.js`, `assets/to-markdown.js`, `i18n/*.js`, and the inline scripts in `index.html`; vendor libraries are excluded). Node.js 22.12 or later is required for the tests only.
 
 ```bash
 # Install test dependencies and the Chromium browser (first time only)
