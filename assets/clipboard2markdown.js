@@ -840,7 +840,7 @@
 
       const HTML_RAW_TAG_RE = /^ {0,3}<(script|pre|style|textarea)(?=[\s>])/i;
       const HTML_TYPE6_TAG_RE = /^ {0,3}<\/?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|meta|nav|noframes|ol|optgroup|option|p|param|section|source|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?: +|$|\/?>)/i;
-      const HTML_TYPE7_TAG_RE = /^ {0,3}(?:<[A-Za-z][\w-]*(?: +[A-Za-z:_][\w.:-]*(?: *= *"[^"\n]*"| *= *'[^'\n]*'| *= *[^\s"'=<>`]+)?)*? *\/?>|<\/[A-Za-z][\w-]*\s*>)[ \t]*$/;
+      const HTML_TYPE7_TAG_RE = /^ {0,3}(?:<(?!script|pre|style|textarea)[A-Za-z][\w-]*(?: +[A-Za-z:_][\w.:-]*(?: *= *"[^"\n]*"| *= *'[^'\n]*'| *= *[^\s"'=<>`]+)?)*? *\/?>|<\/(?!script|pre|style|textarea)[A-Za-z][\w-]*\s*>)[ \t]*$/i;
       const HTML_SPECIAL_OPEN_RE = /^ {0,3}(<!--|<\?|<![A-Za-z]|<!\[CDATA\[)/;
       const THEMATIC_BREAK_RE = /^[ \t]{0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$/;
       const TABLE_DELIMITER_REST_RE = /^[ \t]*\|?(?:[ \t]*:?-+:?[ \t]*\|)+[ \t]*:?-+:?[ \t]*\|?[ \t]*$/;
@@ -1238,7 +1238,7 @@
           !inProseTable &&
           qBefore.depth <= prevT.depth &&
           isTableRowCandidate(currentProseLines[currentProseLines.length - 1]) &&
-          isTableDelimiterLine(line, qBefore.depth < prevT.depth ? Infinity : (prevT.depth ? 0 : (listContentIndent || prevListIndent))) &&
+          isTableDelimiterLine(line, qBefore.depth < prevT.depth ? Infinity : (listContentIndent || prevListIndent)) &&
           splitTableCells(currentProseLines[currentProseLines.length - 1]).length === splitTableCells(line, true).length;
         if (!activeFence && !isTableStartDelim) {
           updateListIndent(line, false, allowAnyOrdered);
@@ -1486,7 +1486,7 @@
           lineIndex + 1 < normalizedLines.length &&
           isTableRowCandidate(currentLine) &&
           getQuotePrefix(normalizedLines[lineIndex + 1]).depth <= tableQuoteDepth &&
-          isTableDelimiterLine(normalizedLines[lineIndex + 1], getQuotePrefix(normalizedLines[lineIndex + 1]).depth < tableQuoteDepth ? Infinity : tableListIndent) &&
+          isTableDelimiterLine(normalizedLines[lineIndex + 1], getQuotePrefix(normalizedLines[lineIndex + 1]).depth < tableQuoteDepth ? Infinity : (listContentIndent || prevListIndent)) &&
           splitTableCells(currentLine).length === splitTableCells(normalizedLines[lineIndex + 1], true).length &&
           splitTableCells(restoreSpans(currentLine)).length === splitTableCells(normalizedLines[lineIndex + 1], true).length
         ) {
