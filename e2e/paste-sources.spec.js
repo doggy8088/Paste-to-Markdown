@@ -1537,7 +1537,7 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     expect(malformed).toBe('const msg = "測試（值）";\nconsole.log(msg);');
   });
 
-  test('handles four-backtick and tilde fences without premature close or table formatting', async function ({ page }) {
+  test('handles four-backtick, tilde, blockquote, list, and over-indented fences without premature close or table formatting', async function ({ page }) {
     await gotoApp(page);
     const input = [
       '````markdown',
@@ -1546,10 +1546,17 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '```',
       '````',
       '~~~text',
+      '    ~~~',
       '| A | B |',
       '| --- | --- |',
       '| 1（一） | 2 |',
-      '~~~'
+      '~~~',
+      '> ~~~',
+      '> 引用區塊（程式碼）',
+      '> ~~~',
+      '- ```',
+      '  清單（程式碼）',
+      '  ```'
     ].join('\n');
     const expected = [
       '````markdown',
@@ -1558,10 +1565,17 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '```',
       '````',
       '~~~text',
+      '    ~~~',
       '| A | B |',
       '| --- | --- |',
       '| 1(一) | 2 |',
-      '~~~'
+      '~~~',
+      '> ~~~',
+      '> 引用區塊(程式碼)',
+      '> ~~~',
+      '- ```',
+      '  清單(程式碼)',
+      '  ```'
     ].join('\n');
     const markdown = await convertPaste(page, { text: input });
     expect(markdown).toBe(expected);
@@ -1587,19 +1601,21 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     expect(markdown).toBe(expected);
   });
 
-  test('handles optional boundary pipes, nested table indentation, even backslashes, and header column schema', async function ({ page }) {
+  test('handles optional boundary pipes, nested table indentation, even backslashes, header column schema, and stops at following list', async function ({ page }) {
     await gotoApp(page);
     const input = [
       '- 清單內表格：',
       '  Name | Value',
       '  --- | ---',
-      '  A \\\\| B | 多餘欄位 | 忽略'
+      '  A \\\\| B | 多餘欄位 | 忽略',
+      '- 選項 A | 選項 B'
     ].join('\n');
     const expected = [
       '- 清單內表格：',
       '  | Name | Value |',
       '  | ---- | ----- |',
-      '  | A \\\\ | B     |'
+      '  | A \\\\ | B     |',
+      '- 選項 A | 選項 B'
     ].join('\n');
     const markdown = await convertPaste(page, { text: input });
     expect(markdown).toBe(expected);

@@ -820,14 +820,30 @@
 
       const updateFenceState = function (line, activeFence) {
         if (!activeFence) {
-          const openMatch = line.match(/^\s*(`{3,}|~{3,})(.*)$/);
-          if (openMatch && !(openMatch[1][0] === '`' && openMatch[2].includes('`'))) {
-            return { char: openMatch[1][0], length: openMatch[1].length };
+          const openMatch = line.match(/^((?:\s{0,3}>\s*)*)(\s*)((?:[-*+]|\d+[.)])\s+)?(`{3,}|~{3,})(.*)$/);
+          if (openMatch && !(openMatch[4][0] === '`' && openMatch[5].includes('`'))) {
+            const quoteDepth = (openMatch[1].match(/>/g) || []).length;
+            const listOffset = openMatch[3] ? openMatch[3].length : 0;
+            return {
+              char: openMatch[4][0],
+              length: openMatch[4].length,
+              quoteDepth: quoteDepth,
+              maxCloseIndent: openMatch[2].length + listOffset + 3
+            };
           }
           return null;
         }
-        const closeRegex = new RegExp('^\\s*' + activeFence.char + '{' + activeFence.length + ',}\\s*$');
-        return closeRegex.test(line) ? null : activeFence;
+        const closeMatch = line.match(/^((?:\s{0,3}>\s*)*)(\s*)(`{3,}|~{3,})\s*$/);
+        if (
+          closeMatch &&
+          (closeMatch[1].match(/>/g) || []).length === activeFence.quoteDepth &&
+          closeMatch[2].length <= activeFence.maxCloseIndent &&
+          closeMatch[3][0] === activeFence.char &&
+          closeMatch[3].length >= activeFence.length
+        ) {
+          return null;
+        }
+        return activeFence;
       };
 
       const splitTableCells = function (line) {
@@ -837,8 +853,16 @@
         });
       };
 
+      const isTableRowCandidate = function (line) {
+        return (
+          updateFenceState(line, null) === null &&
+          !/^\s*(?:#{1,6}\s|>|(?:[-*+]|\d+[.)])\s)/.test(line) &&
+          UNESCAPED_PIPE_RE.test(line)
+        );
+      };
+
       const isTableDelimiterLine = function (line) {
-        return UNESCAPED_PIPE_RE.test(line) && splitTableCells(line).every(function (cell) {
+        return isTableRowCandidate(line) && splitTableCells(line).every(function (cell) {
           return /^:?-+:?$/.test(cell);
         });
       };
@@ -861,11 +885,11 @@
             currentProseLines = [];
           }
           activeFence = nextFence;
-          segments.push({ fenced: true, line: line, isBoundary: true });
+          segments.push({ fenced: true, line: line });
           return;
         }
         if (activeFence) {
-          segments.push({ fenced: true, line: line.replace(/（/g, '(').replace(/）/g, ')'), isBoundary: false });
+          segments.push({ fenced: true, line: line.replace(/（/g, '(').replace(/）/g, ')') });
           return;
         }
         currentProseLines.push(line);
@@ -934,15 +958,14 @@
         if (
           !activeFence &&
           lineIndex + 1 < normalizedLines.length &&
-          UNESCAPED_PIPE_RE.test(currentLine) &&
+          isTableRowCandidate(currentLine) &&
           isTableDelimiterLine(normalizedLines[lineIndex + 1]) &&
           splitTableCells(currentLine).length === splitTableCells(normalizedLines[lineIndex + 1]).length
         ) {
           const tableLines = [];
           while (
             lineIndex < normalizedLines.length &&
-            updateFenceState(normalizedLines[lineIndex], null) === null &&
-            UNESCAPED_PIPE_RE.test(normalizedLines[lineIndex])
+            isTableRowCandidate(normalizedLines[lineIndex])
           ) {
             tableLines.push(normalizedLines[lineIndex]);
             lineIndex++;
