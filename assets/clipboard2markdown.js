@@ -817,18 +817,26 @@
       const lines = text.split('\n');
       const UNESCAPED_PIPE_RE = /(?<=(?:^|[^\\])(?:\\\\)*)\|/;
 
+      const countIndentCols = function (ws) {
+        let cols = 0;
+        for (let i = 0; i < ws.length; i++) {
+          cols += ws[i] === '\t' ? 4 - (cols % 4) : 1;
+        }
+        return cols;
+      };
+
       let listContentIndent = 0;
       const updateListIndent = function (line) {
-        const listMatch = line.match(/^(\s*(?:[-*+]|\d+[.)])\s+)/);
+        const listMatch = line.match(/^([ \t]*(?:[-*+]|\d+[.)])[ \t]+)/);
         if (listMatch) {
-          listContentIndent = listMatch[1].length;
-        } else if (line.trim() !== '' && line.match(/^\s*/)[0].length < listContentIndent) {
+          listContentIndent = countIndentCols(listMatch[1]);
+        } else if (line.trim() !== '' && countIndentCols(line.match(/^[ \t]*/)[0]) < listContentIndent) {
           listContentIndent = 0;
         }
       };
 
       const getQuotePrefix = function (line) {
-        const match = line.match(/^((?:\s{0,3}> ?)+)(.*)$/);
+        const match = line.match(/^((?: {0,3}> ?)+)(.*)$/);
         if (!match) {
           return { depth: 0, rest: line };
         }
@@ -844,13 +852,13 @@
         }
         const q = getQuotePrefix(line);
         if (activeFence.quoteDepth > 0 && q.depth < activeFence.quoteDepth) {
-          return true;
+          return q.rest.trim() === '' || /^[ \t]*(?:#{1,6}[ \t]|(?:[-*+]|\d+[.)])[ \t])/.test(q.rest);
         }
         if (
           activeFence.quoteDepth === 0 &&
           activeFence.containerIndent > 0 &&
           line.trim() !== '' &&
-          line.match(/^\s*/)[0].length < activeFence.containerIndent
+          countIndentCols(line.match(/^[ \t]*/)[0]) < activeFence.containerIndent
         ) {
           return true;
         }
@@ -860,12 +868,13 @@
       const updateFenceState = function (line, activeFence) {
         const q = getQuotePrefix(line);
         if (!activeFence) {
-          const openMatch = q.rest.match(/^(\s*)((?:[-*+]|\d+[.)])\s+)?(`{3,}|~{3,})(.*)$/);
+          const openMatch = q.rest.match(/^([ \t]*)((?:[-*+]|\d+[.)])[ \t]+)?(`{3,}|~{3,})(.*)$/);
           if (openMatch && !(openMatch[3][0] === '`' && openMatch[4].includes('`'))) {
-            const listOffset = openMatch[2] ? openMatch[2].length : 0;
-            const containerIndent = q.depth > 0 ? 0 : (listOffset > 0 ? openMatch[1].length + listOffset : listContentIndent);
+            const openIndent = countIndentCols(openMatch[1]);
+            const listOffset = openMatch[2] ? countIndentCols(openMatch[1] + openMatch[2]) - openIndent : 0;
+            const containerIndent = q.depth > 0 ? 0 : (listOffset > 0 ? openIndent + listOffset : listContentIndent);
             const maxOpenIndent = (q.depth > 0 || listOffset > 0) ? 3 : listContentIndent + 3;
-            if (openMatch[1].length > maxOpenIndent) {
+            if (openIndent > maxOpenIndent) {
               return null;
             }
             return {
@@ -878,11 +887,11 @@
           }
           return null;
         }
-        const closeMatch = q.rest.match(/^(\s*)(`{3,}|~{3,})\s*$/);
+        const closeMatch = q.rest.match(/^([ \t]*)(`{3,}|~{3,})[ \t]*$/);
         if (
           closeMatch &&
           q.depth === activeFence.quoteDepth &&
-          closeMatch[1].length <= activeFence.maxCloseIndent &&
+          countIndentCols(closeMatch[1]) <= activeFence.maxCloseIndent &&
           closeMatch[2][0] === activeFence.char &&
           closeMatch[2].length >= activeFence.length
         ) {
@@ -917,7 +926,8 @@
       const protectedSpans = [];
       const maskSpan = function (str, isCode) {
         const prefix = isCode ? '\uE000' : '\uE002';
-        const token = prefix + 'P2MSPAN' + protectedSpans.length + '\uE001';
+        const suffix = isCode ? '\uE001' : '\uE003';
+        const token = prefix + 'P2MSPAN' + protectedSpans.length + suffix;
         protectedSpans.push(str);
         return token;
       };
@@ -1011,11 +1021,14 @@
           return;
         }
         const codeAndHtmlMaskedBlock = seg.text
-          .replace(/<(script|style|pre|textarea)\b(?:[^>"']|"[^"]*"|'[^']*')*>[\s\S]*?<\/\1>|<!--[\s\S]*?-->/gi, function (match) {
+          .replace(/<(script|style|pre|textarea)\b(?:[^>"']|"[^"]*"|'[^']*')*>[\s\S]*?(?:<\/\1>|$)|<!--[\s\S]*?(?:-->|$)/gi, function (match) {
             return maskSpan(match, false);
           })
           .replace(/(?<=(?:^|[^\\])(?:\\\\)*)(`+)(?!`)(?:[\s\S]*?[^`])?\1(?!`)/g, function (match) {
             return maskSpan(match, true);
+          })
+          .replace(/\$\$[\s\S]+?\$\$|(?<!\\|\$)\$(?:[^\s$\\]|\\.)(?:[^\n$]*?(?:[^\s$\\]|\\.))?\$(?!\d|\$)/g, function (match) {
+            return maskSpan(match, !match.startsWith('$$'));
           })
           .replace(/<\/?[A-Za-z](?:[^>"'\r\n]|"[^"\r\n]*"|'[^'\r\n]*')*>/gi, function (match) {
             return maskSpan(match, false);
@@ -1042,19 +1055,19 @@
                 if (delim[0] === '_' && (/[\p{L}\p{N}]/u.test(prevChar) || /^[\p{L}\p{N}]/u.test(rest))) {
                   return match;
                 }
-                if (!inner.endsWith('）')) {
+                if (!inner.endsWith('）') && !rest.startsWith('（')) {
                   return match;
                 }
-                const updatedInner = inner.slice(0, -1) + ')';
-                const needsSpace = /^[\p{L}\p{N}`*_\[\uE000]/u.test(rest);
+                const updatedInner = inner.endsWith('）') ? inner.slice(0, -1) + ')' : inner;
+                const needsSpace = /^[\p{L}\p{N}`*_\[\uE000（]/u.test(rest);
                 return delim + updatedInner + closeDelim + (needsSpace ? ' ' : '') + unmergedExtra;
               }
             )
-            .replace(/([\]\p{L}\p{N}])（/gu, '$1 (')
+            .replace(/([\]\p{L}\p{N}]|\uE001|\uE003\))（/gu, '$1 (')
             .replace(/（/g, '(')
             .replace(/）(?=[\p{L}\p{N}`\[\uE000]|(\*+)(?=\S)(?:(?!\1).)+?(?<=\S)\1|(_+)(?=\S)(?:(?!\2).)+?(?<=\S)\2(?![\p{L}\p{N}(（]))/gu, ') ')
             .replace(/）/g, ')');
-          normalizedLines.push(normalized.replace(/[\uE000\uE002]P2MSPAN(\d+)\uE001/g, function (match, idx) {
+          normalizedLines.push(normalized.replace(/[\uE000\uE002]P2MSPAN(\d+)[\uE001\uE003]/g, function (match, idx) {
             const original = protectedSpans[Number(idx)];
             return original.includes('\n') ? match : original;
           }));
@@ -1085,14 +1098,14 @@
           !activeFence &&
           lineIndex + 1 < normalizedLines.length &&
           isTableRowCandidate(currentLine) &&
-          getQuotePrefix(normalizedLines[lineIndex + 1]).depth === tableQuoteDepth &&
+          getQuotePrefix(normalizedLines[lineIndex + 1]).depth <= tableQuoteDepth &&
           isTableDelimiterLine(normalizedLines[lineIndex + 1]) &&
           splitTableCells(currentLine).length === splitTableCells(normalizedLines[lineIndex + 1]).length
         ) {
           const tableLines = [];
           while (
             lineIndex < normalizedLines.length &&
-            getQuotePrefix(normalizedLines[lineIndex]).depth === tableQuoteDepth &&
+            getQuotePrefix(normalizedLines[lineIndex]).depth <= tableQuoteDepth &&
             isTableRowCandidate(normalizedLines[lineIndex])
           ) {
             tableLines.push(normalizedLines[lineIndex]);
@@ -1114,7 +1127,7 @@
             }
           });
           rows.forEach(function (row, rIdx) {
-            const rowPrefix = tableLines[rIdx].match(/^((?:\s{0,3}> ?)*\s*)/)[0];
+            const rowPrefix = tableLines[rIdx].match(/^((?: {0,3}> ?)*[ \t]*)/)[0];
             if (rIdx === 1) {
               formattedLines.push(rowPrefix + '| ' + colWidths.map(function (width, cIdx) {
                 const rawSep = row[cIdx] || '';
@@ -1143,7 +1156,7 @@
         }
       }
 
-      const result = formattedLines.join('\n').replace(/[\uE000\uE002]P2MSPAN(\d+)\uE001/g, function (match, idx) {
+      const result = formattedLines.join('\n').replace(/[\uE000\uE002]P2MSPAN(\d+)[\uE001\uE003]/g, function (match, idx) {
         return protectedSpans[Number(idx)];
       });
       if (result === text) {

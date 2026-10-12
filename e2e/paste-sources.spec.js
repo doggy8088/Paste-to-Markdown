@@ -1558,6 +1558,9 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '> 引用縮排後文字（仍應修正）',
       '> ```',
       '> 未關閉引用（程式碼）',
+      'A | B',
+      '--- | ---',
+      'x（內） | y',
       '',
       '離開引用（仍應修正）',
       '- ```',
@@ -1569,12 +1572,16 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '頂層圍欄（程式碼）',
       '```',
       '圍欄後（散文）',
+      '\t```',
+      'Tab縮排後（散文）',
       '<pre>',
       '```',
       '原樣（保留）',
       '```',
       '</pre>',
-      '區塊後（散文）'
+      '區塊後（散文）',
+      '<pre>',
+      '未閉合（保留）'
     ].join('\n');
     const expected = [
       '````markdown',
@@ -1595,6 +1602,9 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '> 引用縮排後文字 (仍應修正)',
       '> ```',
       '> 未關閉引用(程式碼)',
+      'A | B',
+      '--- | ---',
+      'x(內) | y',
       '',
       '離開引用 (仍應修正)',
       '- ```',
@@ -1606,38 +1616,54 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '頂層圍欄(程式碼)',
       '```',
       '圍欄後 (散文)',
+      '\t```',
+      'Tab縮排後 (散文)',
       '<pre>',
       '```',
       '原樣（保留）',
       '```',
       '</pre>',
-      '區塊後 (散文)'
+      '區塊後 (散文)',
+      '<pre>',
+      '未閉合（保留）'
     ].join('\n');
     const markdown = await convertPaste(page, { text: input });
     expect(markdown).toBe(expected);
   });
 
-  test('protects deeply nested link destinations, bare/angle/reference URLs, raw HTML, and inline/multiline code while handling brackets, nested emphasis, and Unicode intraword underscores', async function ({ page }) {
+  test('protects deeply nested link destinations, bare/angle/reference URLs, raw HTML, math, and inline/multiline code while handling brackets, nested emphasis, and Unicode intraword underscores', async function ({ page }) {
     await gotoApp(page);
     const input = [
-      '請參考 [文件（一）](foo(a(b（c）))\\))、[未閉合](foo 與 [標籤]（測試）及 `呼叫（值）` 以及 `跨行（',
+      '請參考 [文件（一）](foo(a(b（c）))\\))（連結）、[未閉合](foo 與 [標籤]（測試）及 `呼叫（值）`（參數）以及 `跨行（',
       '測試）` 範例，並顯示 \\`符號（test）\\` 後文與 foo_bar（baz）_qux、foo_テスト（x）_bar、foo_（x）_bar、_（x）_bar 識別字。',
       '裸網址 https://example.com/foo（bar） 與 <https://example.com/auto（link）> 皆保持不變。',
       'HTML <a title="1 > 0" href="page（test）.html">連結（一）</a> 與 <pre>原樣（保留）</pre> 屬性不變。',
       '[ref]: https://example.com/ref（目標）',
       '[cont]:',
       '  page（目標）',
-      '公司（Cisco）**產品**與**思科**公司（Cisco）**設備**、**交換器（switch）**主要功能、***路由器（router）***主要用途、**甲（x）**__乙__ 與 *丙 **丁（x）***後。'
+      '公式 $x（1）$（說明）與區塊：',
+      '$$',
+      'a | b（1）',
+      '--- | ---',
+      'c | d',
+      '$$',
+      '**公司**（Cisco）產品與**思科**公司（Cisco）**設備**、**交換器（switch）**主要功能、***路由器（router）***主要用途、**甲（x）**__乙__ 與 *丙 **丁（x）***後。'
     ].join('\n');
     const expected = [
-      '請參考 [文件 (一)](foo(a(b（c）))\\))、[未閉合](foo 與 [標籤] (測試) 及 `呼叫（值）` 以及 `跨行（',
+      '請參考 [文件 (一)](foo(a(b（c）))\\)) (連結)、[未閉合](foo 與 [標籤] (測試) 及 `呼叫（值）` (參數) 以及 `跨行（',
       '測試）` 範例，並顯示 \\`符號 (test)\\` 後文與 foo_bar (baz)_qux、foo_テスト (x)_bar、foo_(x)_bar、_(x)_bar 識別字。',
       '裸網址 https://example.com/foo（bar） 與 <https://example.com/auto（link）> 皆保持不變。',
       'HTML <a title="1 > 0" href="page（test）.html">連結 (一)</a> 與 <pre>原樣（保留）</pre> 屬性不變。',
       '[ref]: https://example.com/ref（目標）',
       '[cont]:',
       '  page（目標）',
-      '公司 (Cisco) **產品**與**思科**公司 (Cisco) **設備**、**交換器 (switch)** 主要功能、***路由器 (router)*** 主要用途、**甲 (x)** __乙__ 與 *丙 **丁 (x)*** 後。'
+      '公式 $x（1）$ (說明) 與區塊：',
+      '$$',
+      'a | b（1）',
+      '--- | ---',
+      'c | d',
+      '$$',
+      '**公司** (Cisco) 產品與**思科**公司 (Cisco) **設備**、**交換器 (switch)** 主要功能、***路由器 (router)*** 主要用途、**甲 (x)** __乙__ 與 *丙 **丁 (x)*** 後。'
     ].join('\n');
     const markdown = await convertPaste(page, { text: input });
     expect(markdown).toBe(expected);
@@ -1654,6 +1680,7 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '> | 甲 | 乙 |',
       '> | --- | --- |',
       '> | 1 | 2345 |',
+      '| 1234 | 5 |',
       '一般段落重置清單縮排',
       '    ```',
       '後段文字（仍應修正）'
@@ -1664,9 +1691,10 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '  | ---- | ----- |',
       '  | A \\\\ | B     |',
       '- 選項 A | 選項 B',
-      '> | 甲   | 乙    |',
-      '> | --- | ---- |',
-      '> | 1   | 2345 |',
+      '> | 甲    | 乙    |',
+      '> | ---- | ---- |',
+      '> | 1    | 2345 |',
+      '| 1234 | 5    |',
       '一般段落重置清單縮排',
       '    ```',
       '後段文字 (仍應修正)'
