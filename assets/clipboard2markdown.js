@@ -895,25 +895,39 @@
         }
       };
 
-      const hasFenceContainerEnded = function (line, activeFence) {
-        if (!activeFence) {
+      const hasBlockInterrupt = function (rest) {
+        return (
+          /^ {0,3}(?:#{1,6}(?:[ \t]|$)|>|(?:[-*+]|1[.)])[ \t]|(?:\*[ \t]*){3,}$|(?:-[ \t]*){3,}$|(?:_[ \t]*){3,}$|`{3,}(?=[^`]*$)|~{3,}|<!--|<(?:script|pre|style|textarea)(?=[\s/>]|$))/i.test(rest) ||
+          HTML_TYPE6_TAG_RE.test(rest)
+        );
+      };
+
+      const isHeadingOrHrLine = function (rest, beforeRest) {
+        return (
+          /^[ \t]{0,3}#{1,6}(?:[ \t]|$)/.test(rest) ||
+          THEMATIC_BREAK_RE.test(rest) ||
+          (/^[ \t]{0,3}(?:=+|-+)[ \t]*$/.test(rest) && Boolean(beforeRest && beforeRest.trim() !== '' && !/^[ \t]{0,3}#{1,6}(?:[ \t]|$)/.test(beforeRest) && !THEMATIC_BREAK_RE.test(beforeRest)))
+        );
+      };
+
+      // Intentionally allow ordinary unquoted continuation lines to stay inside an unclosed
+      // blockquote fence/HTML block unless the line is blank or starts a new block interrupt,
+      // matching the bundled Marked parser's lazy blockquote continuation behavior.
+      const hasContainerEnded = function (line, activeBlock, prevBlank) {
+        if (!activeBlock) {
           return false;
         }
         const q = getQuotePrefix(line);
-        if (activeFence.quoteDepth > 0 && q.depth < activeFence.quoteDepth) {
-          return (
-            q.rest.trim() === '' ||
-            /^ {0,3}(?:#{1,6}(?:[ \t]|$)|(?:[-*+]|1[.)])[ \t]|(?:\*[ \t]*){3,}$|(?:-[ \t]*){3,}$|(?:_[ \t]*){3,}$|`{3,}(?=[^`]*$)|~{3,}|<!--|<(?:script|pre|style|textarea)(?=[\s/>]|$))/i.test(q.rest) ||
-            HTML_TYPE6_TAG_RE.test(q.rest)
-          );
+        if (activeBlock.quoteDepth > 0 && q.depth < activeBlock.quoteDepth) {
+          return q.rest.trim() === '' || hasBlockInterrupt(q.rest);
         }
         if (
-          activeFence.quoteDepth === 0 &&
-          activeFence.containerIndent > 0 &&
+          activeBlock.quoteDepth === 0 &&
+          activeBlock.containerIndent > 0 &&
           line.trim() !== '' &&
-          countIndentCols(line.match(/^[ \t]*/)[0]) < activeFence.containerIndent
+          countIndentCols(line.match(/^[ \t]*/)[0]) < activeBlock.containerIndent
         ) {
-          return true;
+          return !activeBlock.htmlRe || prevBlank || hasBlockInterrupt(q.rest);
         }
         return false;
       };
@@ -1120,7 +1134,7 @@
       const segments = [];
       let currentProseLines = [];
       let activeFence = null;
-      let activeHtmlEnd = null;
+      let activeHtml = null;
       const flushProse = function () {
         if (currentProseLines.length > 0) {
           segments.push({ fenced: false, text: currentProseLines.join('\n') });
@@ -1133,14 +1147,18 @@
           return;
         }
         const qBefore = getQuotePrefix(line);
-        if (activeHtmlEnd) {
+        const prevLineBlank = lineIdx > 0 && lines[lineIdx - 1].trim() === '';
+        if (hasContainerEnded(line, activeHtml, prevLineBlank)) {
+          activeHtml = null;
+        }
+        if (activeHtml) {
           segments.push({ fenced: true, line: line });
-          if (activeHtmlEnd.test(qBefore.rest)) {
-            activeHtmlEnd = null;
+          if (activeHtml.htmlRe.test(qBefore.rest)) {
+            activeHtml = null;
           }
           return;
         }
-        if (hasFenceContainerEnded(line, activeFence)) {
+        if (hasContainerEnded(line, activeFence, prevLineBlank)) {
           activeFence = null;
         }
         const proseTail = (currentProseLines.length > 4 ? '\n' : '') + currentProseLines.slice(-4).map(function (l) {
@@ -1148,12 +1166,12 @@
         }).join('\n');
         const prevT = currentProseLines.length > 0 ? getTableRowParts(currentProseLines[currentProseLines.length - 1]) : null;
         const prevProse = prevT ? prevT.rest : '';
+        const beforePrevProse = currentProseLines.length > 1 ? getTableRowParts(currentProseLines[currentProseLines.length - 2]).rest : '';
         const isBlockBoundary =
           !prevT ||
           qBefore.depth > prevT.depth ||
           prevProse.trim() === '' ||
-          /^[ \t]{0,3}(?:#{1,6}(?:[ \t]|$)|(?:=+|-+)[ \t]*$)/.test(prevProse) ||
-          THEMATIC_BREAK_RE.test(prevProse) ||
+          isHeadingOrHrLine(prevProse, beforePrevProse) ||
           /(?:^|\n[ \t]*\n)[ \t]{0,3}\[(?:\\.|[^\\\n\]])+\]:[ \t]*(?:\n[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*)(?:"[^"\n]*"|'[^'\n]*'|\([^()\n]*\)))?[ \t]*$/.test(proseTail);
         const prevListIndent = prevProse.trim() === '' ? 0 : listContentIndent;
         const allowAnyOrdered = isBlockBoundary || prevListIndent > 0;
@@ -1164,7 +1182,7 @@
         if (
           nextFence !== activeFence &&
           !(nextFence && nextFence.char === '`' && new RegExp('(?<=(?:^|[^\\\\`])(?:\\\\\\\\)*)' + '`'.repeat(nextFence.length) + '(?!`)').test(
-            currentProseLines.join('\n').split(/\n[ \t]*\n/).pop().replace(/(?<=(?:^|[^\\`])(?:\\\\)*)(`+)(?!`)(?:(?:[^\n]|\n(?![ \t]*\n))*?[^`])?\1(?!`)/g, '')
+            currentProseLines.join('\n').split(/\n[ \t]*\n/).pop().replace(/(?<=(?:^|[^\\`])(?:\\\\)*(?:\\`)?)(`+)(?!`)(?:(?:[^\n]|\n(?![ \t]*\n))*?[^`])?\1(?!`)/g, '')
           ))
         ) {
           flushProse();
@@ -1189,7 +1207,11 @@
           flushProse();
           segments.push({ fenced: true, line: line });
           if (!htmlCloseRe.test(t.rest)) {
-            activeHtmlEnd = htmlCloseRe;
+            activeHtml = {
+              htmlRe: htmlCloseRe,
+              quoteDepth: t.depth,
+              containerIndent: t.depth > 0 ? 0 : (listContentIndent || prevListIndent)
+            };
           }
           return;
         }
@@ -1210,10 +1232,13 @@
               lastIdx = openRe.lastIndex;
             }
           } else {
+            const paraBreak = str.slice(openRe.lastIndex).search(/\n[ \t]*\n/);
+            const limitIdx = paraBreak === -1 ? str.length : openRe.lastIndex + paraBreak;
             closeRe.lastIndex = openRe.lastIndex;
-            const cm = closeRe.exec(str);
+            const cm = closeRe.exec(str.slice(0, limitIdx));
             if (!cm) {
-              break;
+              openRe.lastIndex = limitIdx;
+              continue;
             }
             openRe.lastIndex = cm.index + 1;
             out += str.slice(lastIdx, m.index) + maskSpan(str.slice(m.index, openRe.lastIndex), true);
@@ -1230,30 +1255,33 @@
           return;
         }
         let validDefEnd = 0;
+        // CommonMark and the bundled Marked parser do not allow inline code spans to cross blank
+        // lines (`\n[ \t]*\n`), because paragraphs are split on blank lines before inline lexing.
         const codeAndHtmlMaskedBlock = maskLinkDestinations(
           maskMath(
             seg.text
               .replace(/(?<=(?:^|[^\\`])(?:\\\\)*(?:\\`)?)(`+)(?!`)(?:(?:[^\n]|\n(?![ \t]*\n))*?[^`])?\1(?!`)/g, function (match) {
                 return maskSpan(match, true);
               })
-              .replace(/<(script|style|pre|textarea|xmp|noscript|noembed|noframes|plaintext|iframe|code|kbd|samp|tt)\b(?:[^>"']|"(?:[^"\n]|\n(?![ \t]*\n))*"|'(?:[^'\n]|\n(?![ \t]*\n))*')*>[\s\S]*?(?:<\/\1>|$)|<!--[\s\S]*?(?:-->|$)|<\?[\s\S]*?(?:\?>|$)|<![A-Za-z][\s\S]*?(?:>|$)|<!\[CDATA\[[\s\S]*?(?:\]\]>|$)/gi, function (match) {
+              .replace(/(?<=(?:^|[^\\])(?:\\\\)*)(?:<(script|style|pre|textarea|xmp|noscript|noembed|noframes|plaintext|iframe|code|kbd|samp|tt)\b(?:[^>"']|"(?:[^"\n]|\n(?![ \t]*\n))*"|'(?:[^'\n]|\n(?![ \t]*\n))*')*>[\s\S]*?(?:<\/\1>|$)|<!--[\s\S]*?(?:-->|$)|<\?[\s\S]*?(?:\?>|$)|<![A-Za-z][\s\S]*?(?:>|$)|<!\[CDATA\[[\s\S]*?(?:\]\]>|$))/gi, function (match) {
                 return maskSpan(match, /^<(?:code|kbd|samp|tt)\b/i.test(match));
               })
           )
-            .replace(/<[A-Za-z][\w-]*(?:(?:[ \t]|\n(?![ \t]*\n))+[A-Za-z:_][\w.:-]*(?:(?:[ \t]|\n(?![ \t]*\n))*=(?:[ \t]|\n(?![ \t]*\n))*(?:"(?:[^"\n]|\n(?![ \t]*\n))*"|'(?:[^'\n]|\n(?![ \t]*\n))*'|[^\s"'=<>`]+))?)*(?:[ \t]|\n(?![ \t]*\n))*\/?>|<\/[A-Za-z][\w:-]*(?:[ \t]|\n(?![ \t]*\n))*>|<([a-zA-Z][a-zA-Z0-9+.-]{1,31}:[^\s\x00-\x1f<>]+|[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+)>/gi, function (match, autolink) {
+            .replace(/(?<=(?:^|[^\\])(?:\\\\)*)(?:<[A-Za-z][\w-]*(?:(?:[ \t]|\n(?![ \t]*\n))+[A-Za-z:_][\w.:-]*(?:(?:[ \t]|\n(?![ \t]*\n))*=(?:[ \t]|\n(?![ \t]*\n))*(?:"(?:[^"\n]|\n(?![ \t]*\n))*"|'(?:[^'\n]|\n(?![ \t]*\n))*'|[^\s"'=<>`]+))?)*(?:[ \t]|\n(?![ \t]*\n))*\/?>|<\/[A-Za-z][\w:-]*(?:[ \t]|\n(?![ \t]*\n))*>|<([a-zA-Z][a-zA-Z0-9+.-]{1,31}:[^\s\x00-\x1f<>]+|[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+)>)/gi, function (match, autolink) {
               const isAutolink = Boolean(autolink);
               return maskSpan(match, isAutolink, false, isAutolink || match.startsWith('</'));
             })
             .replace(/^([ \t]*(?:(?:>|(?:[-*+]|\d{1,9}[.)])[ \t])[ \t]*)*\[(?:\\.|[^\\\n\]])+\]:[ \t]*)((?:\n[ \t]*(?:>[ \t]*)*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*(?:>[ \t]*)*)(?:"(?:\\.|[^"\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n]|\n(?![ \t]*\n))*'|\((?:\\.|[^()\n]|\n(?![ \t]*\n))*\))[ \t]*(?=\n|$))?)/gm, function (match, prefix, destAndTitle, offset, fullStr) {
-              const prevQ = getQuotePrefix(offset > 0 ? fullStr.slice(0, offset - 1).split('\n').pop() : '');
+              const beforeLines = offset > 0 ? fullStr.slice(0, offset - 1).split('\n') : [];
+              const prevQ = getQuotePrefix(beforeLines.pop() || '');
+              const beforePrevQ = getQuotePrefix(beforeLines.pop() || '');
               if (
                 offset > 0 &&
                 offset !== validDefEnd &&
                 !/[-*+]|\d[.)]/.test(prefix.slice(0, prefix.indexOf('['))) &&
                 getQuotePrefix(prefix).depth <= prevQ.depth &&
                 prevQ.rest.trim() !== '' &&
-                !/^[ \t]{0,3}(?:#{1,6}(?:[ \t]|$)|(?:=+|-+)[ \t]*$)/.test(prevQ.rest) &&
-                !THEMATIC_BREAK_RE.test(prevQ.rest)
+                !isHeadingOrHrLine(prevQ.rest, beforePrevQ.rest)
               ) {
                 return match;
               }
@@ -1262,7 +1290,7 @@
             })
         );
         const maskedBlock = codeAndHtmlMaskedBlock.replace(
-          /(?:(?:ftp|https?):\/\/|www\.)(?:[a-zA-Z0-9-]+\.?)+[^\s<\[\]\uE000-\uE003]*/gi,
+          /(?:(?:ftp|https?):\/\/|www\.)(?:[a-zA-Z0-9-]+\.?)+(?:\\.|[^\s|<\\\[\]\uE000-\uE003])*/gi,
           function (match) {
             let fwDepth = 0;
             let hwDepth = 0;
@@ -1288,6 +1316,11 @@
             return maskSpan(match.slice(0, end), false) + match.slice(end);
           }
         );
+        // Intentionally repair CJK emphasis spans whose closing delimiter is preceded by `）` and
+        // followed by CJK/word text (e.g. `**交換器（switch）**主要` -> `**交換器 (switch)** 主要`).
+        // In CommonMark, `）` before `*`/`**` followed by non-punctuation makes the closing run
+        // left-flanking only, so converting `）` to `)` and inserting a space after the closing
+        // delimiter is required for the emphasis to render as intended by the golden fixtures.
         const normalizedBlock = maskedBlock
           .replace(/(?<=(?:^|[^\\])(?:\\\\)*\\)(?=[（）])/g, '\\')
           .replace(
