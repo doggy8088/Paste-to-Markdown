@@ -1567,15 +1567,21 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     expect(markdown).toBe(expected);
   });
 
-  test('protects link destinations and inline code while distinguishing opening vs closing emphasis', async function ({ page }) {
+  test('protects link destinations, bare/angle/reference URLs, and inline/multiline code while handling nested emphasis', async function ({ page }) {
     await gotoApp(page);
     const input = [
-      '請參考 [文件（一）](https://example.com/頁面（測試）) 與 `呼叫（值）` 範例。',
-      '公司（Cisco）**產品**與**思科**公司（Cisco）**設備**以及**交換器（switch）**主要功能。'
+      '請參考 [文件（一）](https://example.com/頁面（測試）) 與 `呼叫（值）` 以及 `跨行（',
+      '測試）` 範例。',
+      '裸網址 https://example.com/foo（bar） 與 <https://example.com/auto（link）> 皆保持不變。',
+      '[ref]: https://example.com/ref（目標）',
+      '公司（Cisco）**產品**與**思科**公司（Cisco）**設備**、**交換器（switch）**主要功能與***路由器（router）***主要用途。'
     ].join('\n');
     const expected = [
-      '請參考 [文件 (一)](https://example.com/頁面（測試）) 與 `呼叫（值）` 範例。',
-      '公司 (Cisco) **產品**與**思科**公司 (Cisco) **設備**以及**交換器 (switch)** 主要功能。'
+      '請參考 [文件 (一)](https://example.com/頁面（測試）) 與 `呼叫（值）` 以及 `跨行（',
+      '測試）` 範例。',
+      '裸網址 https://example.com/foo（bar） 與 <https://example.com/auto（link）> 皆保持不變。',
+      '[ref]: https://example.com/ref（目標）',
+      '公司 (Cisco) **產品**與**思科**公司 (Cisco) **設備**、**交換器 (switch)** 主要功能與***路由器 (router)*** 主要用途。'
     ].join('\n');
     const markdown = await convertPaste(page, { text: input });
     expect(markdown).toBe(expected);
