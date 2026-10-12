@@ -1759,7 +1759,7 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '--- | ---',
       'c | d',
       '$$',
-      '**公司**（Cisco）產品與**思科**公司（Cisco）**設備**、~~公司（Cisco）~~產品、~~**公司（x）**~~產品、~~公司~~（Cisco）~~設備~~、**交換器（switch）**主要功能、***路由器（router）***主要用途、**甲（x）****乙**、**甲（x）**__乙__、**甲（x）**~~乙~~、~~丙 **丁（x）**~~後 與 *丙 **丁（x）***後。'
+      '**公司**（Cisco）產品與**思科**公司（Cisco）**設備**、~~公司（Cisco）~~產品、~~**公司（x）**~~產品、~~公司~~（Cisco）~~設備~~、**交換器（switch）**主要功能、***路由器（router）***主要用途、**甲（x）****乙**、**甲（x）**__乙__、**甲（x）**~~乙~~、~~丙 **丁（x）**~~後 與 *丙 **丁（x）***後 與 *公司（x）*尾**（後）產品。'
     ].join('\n');
     const expected = [
       '請參考 [文件 (一)](foo(a(b（c）))\\)) (連結)、[角度連結](<./foo bar（baz）>) (說明)、[網址連結](<https://example.com/a（b）>) (說明)、[跨行連結](',
@@ -1781,7 +1781,7 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '--- | ---',
       'c | d',
       '$$',
-      '**公司** (Cisco) 產品與**思科**公司 (Cisco) **設備**、~~公司 (Cisco)~~ 產品、~~**公司 (x)**~~ 產品、~~公司~~ (Cisco) ~~設備~~、**交換器 (switch)** 主要功能、***路由器 (router)*** 主要用途、**甲 (x)** **乙**、**甲 (x)** __乙__、**甲 (x)** ~~乙~~、~~丙 **丁 (x)**~~ 後 與 *丙 **丁 (x)*** 後。'
+      '**公司** (Cisco) 產品與**思科**公司 (Cisco) **設備**、~~公司 (Cisco)~~ 產品、~~**公司 (x)**~~ 產品、~~公司~~ (Cisco) ~~設備~~、**交換器 (switch)** 主要功能、***路由器 (router)*** 主要用途、**甲 (x)** **乙**、**甲 (x)** __乙__、**甲 (x)** ~~乙~~、~~丙 **丁 (x)**~~ 後 與 *丙 **丁 (x)*** 後 與 *公司 (x)*尾** (後) 產品。'
     ].join('\n');
     const markdown = await convertPaste(page, { text: input });
     expect(markdown).toBe(expected);
@@ -1827,6 +1827,9 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '- [ ] 待辦表頭 | 欄位',
       '  --- | ---',
       '  1 | 2345',
+      '-     A | B',
+      '      --- | ---',
+      '      x（1） | y',
       '- 清單內表格：',
       '  Name | Value',
       '  --- | ---',
@@ -1853,6 +1856,12 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '--- | ---',
       'z | y',
       '# 標題後自訂標籤與縮排程式碼',
+      '<custom>',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      '</custom>',
+      '[ref-before-html]: /url',
       '<custom>',
       'A | B',
       '--- | ---',
@@ -1909,6 +1918,9 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '- [ ] | 待辦表頭 | 欄位   |',
       '  | ---- | ---- |',
       '  | 1    | 2345 |',
+      '-     A | B',
+      '      --- | ---',
+      '      x(1) | y',
       '- 清單內表格：',
       '  | Name    | Value |',
       '  | ------- | ----- |',
@@ -1940,6 +1952,12 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '--- | ---',
       'x（1） | y',
       '</custom>',
+      '[ref-before-html]: /url',
+      '<custom>',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      '</custom>',
       '',
       '    call(x)after',
       '    next(y)line',
@@ -1955,6 +1973,10 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     ].join('\n');
     const markdown = await convertPaste(page, { text: input });
     expect(markdown).toBe(expected);
+
+    const longSpanTag = 'P2MSPAN' + 'X'.repeat(5000);
+    const longSpanMarkdown = await convertPaste(page, { text: longSpanTag + ' `code` 測試（一）' });
+    expect(longSpanMarkdown).toBe(longSpanTag + ' `code` 測試 (一)');
 
     const longStars = '*'.repeat(30000);
     const longTail = 'a'.repeat(30000);

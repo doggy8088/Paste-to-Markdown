@@ -816,9 +816,10 @@
     markdownSyntax: function (text) {
       const normalizedInput = text.replace(/\r\n?/g, '\n');
       let spanTag = 'P2MSPAN';
-      while (normalizedInput.includes(spanTag)) {
-        spanTag += 'X';
-      }
+      normalizedInput.replace(/P2MSPANX*/g, function (m) {
+        spanTag = 'P2MSPAN' + 'X'.repeat(Math.max(spanTag.length, m.length + 1) - 7);
+        return m;
+      });
       const spanTokenRe = new RegExp('[\\uE000\\uE002]' + spanTag + '(\\d+)[BMS][\\uE001\\uE003]', 'g');
       const blockSpanLineRe = new RegExp('^\\uE002' + spanTag + '\\d+B\\uE003$');
       const multilineSpanRe = new RegExp('[\\uE000\\uE002]' + spanTag + '\\d+M[\\uE001\\uE003]');
@@ -877,7 +878,7 @@
 
       const updateListIndent = function (line, isProtectedBlock) {
         const q = getQuotePrefix(line);
-        const listMatch = !isProtectedBlock && !THEMATIC_BREAK_RE.test(q.rest) && line.match(/^([ \t]*)(?:>[ \t]*)*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)+/);
+        const listMatch = !isProtectedBlock && !THEMATIC_BREAK_RE.test(q.rest) && line.match(/^([ \t]*)(?:>[ \t]*)*(?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )|[ \t]))+/);
         if (listMatch && countIndentCols(listMatch[1]) <= listContentIndent + 3) {
           listContentIndent = countIndentCols(listMatch[0]);
         } else if (line.trim() !== '' && countIndentCols(line.match(/^[ \t]*/)[0]) < listContentIndent) {
@@ -911,7 +912,7 @@
       const updateFenceState = function (line, activeFence) {
         const q = getQuotePrefix(line);
         if (!activeFence) {
-          const openMatch = q.rest.match(/^([ \t]*)((?:(?:[-*+]|\d{1,9}[.)])[ \t]+)+)?(`{3,}|~{3,})(.*)$/);
+          const openMatch = q.rest.match(/^([ \t]*)((?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )|[ \t]))+)?(`{3,}|~{3,})(.*)$/);
           if (openMatch && !(openMatch[3][0] === '`' && openMatch[4].includes('`'))) {
             const openIndent = countIndentCols(openMatch[1]);
             const listOffset = openMatch[2] ? countIndentCols(openMatch[1] + openMatch[2]) - openIndent : 0;
@@ -962,7 +963,7 @@
       const getTableRowParts = function (line) {
         const q = getQuotePrefix(line);
         const maxMarkerIndent = q.depth > 0 ? 3 : listContentIndent + 3;
-        const listMatch = !THEMATIC_BREAK_RE.test(q.rest) && q.rest.match(/^([ \t]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)+(?:(?:\[[ xX]\])[ \t]+)?)(.*)$/);
+        const listMatch = !THEMATIC_BREAK_RE.test(q.rest) && q.rest.match(/^([ \t]*(?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )|[ \t]))+(?:(?:\[[ xX]\])[ \t]+)?)(.*)$/);
         if (listMatch && countIndentCols(listMatch[1].match(/^[ \t]*/)[0]) <= maxMarkerIndent) {
           return { depth: q.depth, prefix: q.prefix + listMatch[1], rest: listMatch[2], hasList: true };
         }
@@ -979,7 +980,7 @@
 
       const isTableRowCandidate = function (line) {
         const t = getTableRowParts(line);
-        const maxIndent = t.depth > 0 ? 3 : listContentIndent + 3;
+        const maxIndent = (t.depth > 0 || t.hasList) ? 3 : listContentIndent + 3;
         return (
           !multilineSpanRe.test(line) &&
           countIndentCols(t.rest.match(/^[ \t]*/)[0]) <= maxIndent &&
@@ -1145,14 +1146,18 @@
           return;
         }
         const t = getTableRowParts(line);
-        const maxProseIndent = t.depth > 0 ? 3 : listContentIndent + 3;
+        const maxProseIndent = (t.depth > 0 || t.hasList) ? 3 : listContentIndent + 3;
+        const proseTail = currentProseLines.slice(-3).map(function (l) {
+          return getTableRowParts(l).rest;
+        }).join('\n');
         const prevProse = currentProseLines.length > 0 ? getTableRowParts(currentProseLines[currentProseLines.length - 1]).rest : '';
         const atBlockStart =
           currentProseLines.length === 0 ||
           prevProse.trim() === '' ||
           /^[ \t]{0,3}(?:#{1,6}(?:[ \t]|$)|(?:=+|-+)[ \t]*$)/.test(prevProse) ||
-          THEMATIC_BREAK_RE.test(prevProse);
-        if (atBlockStart && !t.hasList && t.rest.trim() !== '' && countIndentCols(t.rest.match(/^[ \t]*/)[0]) > maxProseIndent) {
+          THEMATIC_BREAK_RE.test(prevProse) ||
+          /(?:^|\n)[ \t]{0,3}\[[^\n\]]+\]:[ \t]*(?:\n[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*)(?:"[^"\n]*"|'[^'\n]*'|\([^()\n]*\)))?[ \t]*$/.test(proseTail);
+        if ((atBlockStart || t.hasList) && t.rest.trim() !== '' && countIndentCols(t.rest.match(/^[ \t]*/)[0]) > maxProseIndent) {
           flushProse();
           segments.push({ fenced: true, line: line.replace(/（/g, '(').replace(/）/g, ')') });
           return;
@@ -1226,8 +1231,8 @@
           const normalized = maskedLine
             .replace(/(?<=(?:^|[^\\])(?:\\\\)*\\)(?=[（）])/g, '\\')
             .replace(
-              /(?<=(?:^|[^\\])(?:\\\\)*)(\*{1,3}(?!\*)|_{1,3}(?!_)|(?<!~)~~(?!~))(?=\S)((?:(?!\1).)+?)(?<=\S)\1(?:(?!(?:(\*{1,3}(?!\*)|_{1,3}(?!_)|(?<!~)~~(?!~))(?=\S)(?:(?!\3).)+?(?<=\S)\3))(\*{1,3}(?!\*)|_{1,3}(?!_)))?/g,
-              function (match, delim, inner, _nextDelim, extraClose, offset, fullStr) {
+              /(?<=(?:^|[^\\])(?:\\\\)*)(\*{1,3}(?!\*)|_{1,3}(?!_)|(?<!~)~~(?!~))(?=\S)((?:(?!\1).)+?)(?<=\S)\1((?:\*|_)?[^\s*_~]+?(?:\*|_)?\1\1|(?!(?:(\*{1,3}(?!\*)|_{1,3}(?!_)|(?<!~)~~(?!~))(?=\S)(?:(?!\4).)+?(?<=\S)\4))(?:\*{1,3}(?!\*)|_{1,3}(?!_)))?/g,
+              function (match, delim, inner, extraClose, _nextDelim, offset, fullStr) {
                 const prevChar = offset > 0 ? fullStr[offset - 1] : '';
                 const closeDelim = delim + (extraClose || '');
                 const rest = fullStr.slice(offset + match.length);
