@@ -812,6 +812,103 @@
       return lines.join('\n');
     },
 
+    // Auto-correct pasted Markdown syntax (full-width parentheses spacing & GFM table alignment)
+    markdownSyntax: function (text) {
+      const baseText = plainTextRules.genericPlainText(text);
+      const lines = baseText.split('\n');
+      let inCodeBlock = false;
+      const normalizedLines = lines.map(function (line) {
+        if (/^\s*```/.test(line)) {
+          inCodeBlock = !inCodeBlock;
+          return line;
+        }
+        if (inCodeBlock) {
+          return line.replace(/（/g, '(').replace(/）/g, ')');
+        }
+        return line
+          .replace(/([\u4e00-\u9fffA-Za-z0-9])（/g, '$1 (')
+          .replace(/（/g, '(')
+          .replace(/）(\*\*|__|\*|_)?(?=[\u4e00-\u9fffA-Za-z0-9`])/g, ')$1 ')
+          .replace(/）/g, ')');
+      });
+
+      const formattedLines = [];
+      let lineIndex = 0;
+      inCodeBlock = false;
+      while (lineIndex < normalizedLines.length) {
+        const currentLine = normalizedLines[lineIndex];
+        if (/^\s*```/.test(currentLine)) {
+          inCodeBlock = !inCodeBlock;
+          formattedLines.push(currentLine);
+          lineIndex++;
+          continue;
+        }
+        if (
+          !inCodeBlock &&
+          currentLine.trim().startsWith('|') &&
+          lineIndex + 1 < normalizedLines.length &&
+          /^\s*\|(?:\s*:?-+:?\s*\|)+\s*$/.test(normalizedLines[lineIndex + 1])
+        ) {
+          const tableLines = [];
+          while (lineIndex < normalizedLines.length && normalizedLines[lineIndex].trim().startsWith('|')) {
+            tableLines.push(normalizedLines[lineIndex]);
+            lineIndex++;
+          }
+          const rows = tableLines.map(function (tLine) {
+            return tLine.trim().replace(/^\|/, '').replace(/\|$/, '').split(/(?<!\\)\|/).map(function (cell) {
+              return cell.trim();
+            });
+          });
+          const colCount = Math.max.apply(null, rows.map(function (row) {
+            return row.length;
+          }));
+          const colWidths = new Array(colCount).fill(3);
+          rows.forEach(function (row, rIdx) {
+            if (rIdx === 1) return;
+            row.forEach(function (cell, cIdx) {
+              if (cell.length > colWidths[cIdx]) {
+                colWidths[cIdx] = cell.length;
+              }
+            });
+          });
+          rows.forEach(function (row, rIdx) {
+            if (rIdx === 1) {
+              formattedLines.push('| ' + colWidths.map(function (width, cIdx) {
+                const rawSep = row[cIdx] || '';
+                const leftColon = rawSep.startsWith(':');
+                const rightColon = rawSep.endsWith(':') && rawSep.length > 1;
+                if (leftColon && rightColon) {
+                  return ':' + '-'.repeat(Math.max(1, width - 2)) + ':';
+                }
+                if (leftColon) {
+                  return ':' + '-'.repeat(Math.max(1, width - 1));
+                }
+                if (rightColon) {
+                  return '-'.repeat(Math.max(1, width - 1)) + ':';
+                }
+                return '-'.repeat(width);
+              }).join(' | ') + ' |');
+            } else {
+              formattedLines.push('| ' + colWidths.map(function (width, cIdx) {
+                return (row[cIdx] || '').padEnd(width, ' ');
+              }).join(' | ') + ' |');
+            }
+          });
+        } else {
+          formattedLines.push(currentLine);
+          lineIndex++;
+        }
+      }
+
+      const result = formattedLines.join('\n');
+      if (result === baseText) {
+        return null;
+      }
+
+      console.log('Matched: Markdown syntax auto-correction');
+      return result;
+    },
+
     // Generic plain text: remove common leading spaces from all lines
     genericPlainText: function (text) {
       var lines = text.split('\n');
@@ -1875,6 +1972,10 @@
           return (spaces < min) ? spaces : min;
         }, Infinity);
         text = lines.map(line => line.slice(minSpaces)).join('\n');
+        const markdownCorrected = plainTextRules.markdownSyntax(text);
+        if (markdownCorrected !== null) {
+          text = markdownCorrected;
+        }
 
         console.log('Plain Text: ', text);
 

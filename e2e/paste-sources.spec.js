@@ -1104,3 +1104,427 @@ test.describe('Copilot CLI detection boundary', function () {
     expect(markdown).toBe('● Title\n detail');
   });
 });
+
+test.describe('Markdown syntax auto-correction', function () {
+  const sourceMarkdown = `## 目的與閱讀方式
+
+本文整理此儲存庫內所有網路基礎架構即程式碼（Infrastructure as Code，IaC）檔案，讓不熟悉思科（Cisco）網路設備的軟體工程師能理解：設定由哪些檔案組成、如何套用至設備，以及設定所描述的網路用途。
+
+本文只根據儲存庫中的設定推論，**沒有連線設備驗證實際狀態**。設備名稱、服務用途及設備之間的實體線路，有些只能從設定描述推測；有疑義之處列在文末。
+
+## 先建立幾個基本觀念
+
+- **交換器（switch）**主要在區域網路內轉送乙太網路封包；**路由器（router）**依照路由表，在不同網路之間轉送封包。此專案另外把核心交換器設定成具備第三層路由功能。
+- **虛擬區域網路（Virtual Local Area Network，VLAN）**是以邏輯方式切分的第二層網路。不同 VLAN 通常是不同的 IP 子網路，要互相通訊必須經過路由。
+- **交換器虛擬介面（Switched Virtual Interface，SVI）**是交換器上代表某個 VLAN 的第三層介面，可設定 IP 位址，並可能作為該 VLAN 裝置的預設閘道。
+- **存取埠（access port）**通常只承載一個 VLAN；**中繼埠（trunk port）**可用 IEEE 802.1Q（常寫作 802.1Q 或 dot1q）標記，在同一連線承載多個 VLAN。
+- **控制台設定（running-config）**是設備目前執行中的設定；**啟動設定（startup-config）**是設備重開機時載入的設定。修改執行中設定不等於已儲存，需另外寫入啟動設定。
+- **宣告式設定**描述希望設備具備的狀態。Ansible 的 \`merged\` 在此代表合併指定設定，不代表清除所有未列出的現有設定。
+- 設定中的 \`172.16.0.0/24\` 這類寫法是無類別網域間路由（Classless Inter-Domain Routing，CIDR）表示法；\`/24\` 表示網路遮罩有 24 個位元。
+
+## 專案如何執行
+
+此專案使用 Ansible，從執行指令的控制端透過安全殼層（Secure Shell，SSH）連到 Cisco 設備，再以設備專用模組下發設定。
+
+1. \`inventory.yml\` 列出三台設備的管理 IP，並指定使用 \`ansible.netcommon.network_cli\`、\`cisco.ios.ios\` 與 Paramiko SSH 傳輸。
+2. Playbook 讀取 \`secrets.yml\`，取得設備登入帳密，以及路由器要使用的遠端驗證及 VPN 金鑰。
+3. \`host_vars/<設備名稱>.yml\` 提供各設備的 VLAN、介面、路由與服務設定。
+4. \`playbooks/ping.yml\` 對設備執行 \`show version\`，用來確認可執行設備命令；它**不是**網路封包的 \`ping\` 測試。
+5. \`playbooks/configure.yml\` 先備份現有設定，再逐類套用設定，最後才把有變更的執行中設定儲存至啟動設定。
+6. \`ansible.cfg\` 啟用 SSH 主機金鑰檢查、設定連線逾時，並將 Ansible 的暫存檔放在專案目錄。
+
+專案依賴 Python 3.13 以上版本，透過 \`uv sync --locked\` 安裝；\`pyproject.toml\` 宣告 Ansible 與 Paramiko。README 提供以下命令：
+
+\`\`\`sh
+uv run ansible-playbook playbooks/ping.yml
+uv run ansible-playbook playbooks/configure.yml
+uv run ansible-playbook playbooks/configure.yml --limit sw3560_access
+uv run ansible-playbook playbooks/configure.yml --syntax-check
+\`\`\`
+
+建議首次操作先執行語法檢查與唯讀的版本查詢，再限制一台設備試跑並確認備份與差異，避免未審核就同時修改全部設備。
+
+## 檔案職責
+
+| 檔案 | 職責 |
+| --- | --- |
+| \`ansible.cfg\` | Ansible 的預設 Inventory、暫存目錄、主機金鑰檢查及 CLI 連線逾時設定。 |
+| \`inventory.yml\` | 設備名稱、管理 IP、網路連線方式與登入帳密變數的引用。 |
+| \`secrets.example.yml\` | 私密變數檔範本；複製成未追蹤的 \`secrets.yml\` 後填入帳密及共享金鑰。 |
+| \`host_vars/r2951.yml\` | R2951 路由器的 WAN/LAN、路由、NAT、VPN、驗證及管理服務設定。 |
+| \`host_vars/sw3560_core.yml\` | 核心 Catalyst 3560 的 VLAN、第三層閘道、訪客網路、路由及交換埠設定。 |
+| \`host_vars/sw3560_access.yml\` | 存取 Catalyst 3560 的 VLAN、端點埠、上行鏈路與管理介面設定。 |
+| \`playbooks/ping.yml\` | 在 Cisco 設備上執行 \`show version\`。 |
+| \`playbooks/configure.yml\` | 備份、套用設定，並在結尾儲存有變更的設定。 |
+| \`pyproject.toml\`、\`uv.lock\` | Python 專案相依套件需求及鎖定版本。 |
+| \`.gitignore\` | 排除 \`secrets.yml\`、設備設定備份及 Ansible 暫存資料。 |
+
+## 從設定推測的網路拓撲
+
+以下是**邏輯拓撲推論**。IP 位址及設定用途來自版本庫；實體線路與設備的真實連接方式仍需現場確認。
+
+\`\`\`text
+                    Internet／外部網路
+                     │               │
+             Hinet（推測）       Seednet（推測）
+                     │               │
+               R2951 GigabitEthernet0/0、GigabitEthernet0/1
+                     │
+               R2951 GigabitEthernet0/2
+               172.16.0.254/24
+                     │
+            VLAN 99「ToRouter」
+                     │
+     ┌───────────────┴────────────────┐
+核心交換器 SW3560-Core             存取交換器 SW3560-Access
+VLAN 99：172.16.0.253/24            VLAN 99：172.16.0.252/24
+VLAN 100：10.20.131.254/23          VLAN 100：10.20.131.253/23
+VLAN 110：10.20.133.254/23          VLAN 110：10.20.133.253/23
+VLAN 199：192.168.199.254/24        端點埠多數分配至 VLAN 100/110
+VLAN 100/110/199 間路由
+     │
+Port-channel1（設定推測為交換器間中繼鏈路）
+\`\`\`
+
+### 子網路與 VLAN
+
+| VLAN | 設定名稱 | 核心交換器 IP | 存取交換器 IP | 從設定推測用途 |
+| --- | --- | --- | --- | --- |
+| 99 | \`ToRouter\` | \`172.16.0.253/24\` | \`172.16.0.252/24\` | 連接路由器的網路，也承載核心與路由器之間的路由協定。 |
+| 100 | \`SRV\` | \`10.20.131.254/23\` | \`10.20.131.253/23\` | 伺服器網路；核心交換器介面設定了 DHCP 中繼位址 \`10.20.131.5\`。 |
+| 110 | \`CLT\` | \`10.20.133.254/23\` | \`10.20.133.253/23\` | 用戶端網路；核心交換器介面設定了 DHCP 中繼位址 \`10.20.131.5\`。 |
+| 199 | \`Guest\` | \`192.168.199.254/24\` | 未設定 SVI | 訪客網路；核心交換器設定 DHCP 範圍與入站存取控制清單。 |
+| 999 | \`Parketing\` | 未配置第三層 IP | 未定義 | 只在核心交換器宣告，名稱或用途需確認。 |
+
+核心交換器設定 VLAN 100、110、199 的第三層介面，並啟用 \`ip routing\`，因此它是這些網段的路由節點。核心與路由器在 VLAN 99 使用開放最短路徑優先路由協定（Open Shortest Path First，OSPF）交換路由。路由器與核心設定的 VLAN 99 介面都位於 OSPF 區域 0；核心另將 VLAN 100、110、199 放在區域 10。
+
+### 存取埠與上行鏈路
+
+- 存取交換器的實體埠 1–12 設定為 VLAN 100，埠 13–43 設定為 VLAN 110，埠 48 設定為 VLAN 99。
+- 核心交換器的埠 1–20、22、24–20?（請依設定檔逐埠檢視）大多設為 VLAN 110；埠 21 設為 VLAN 100，埠 23 設為 VLAN 199。
+- 兩台交換器皆將埠 44–47 加入通道群組 1；\`Port-channel1\` 設為中繼埠。設定推測其用途是交換器間的聚合鏈路，但各實體埠描述與實際對端未完整吻合，詳見待確認事項。
+- 生成樹（Spanning Tree Protocol，STP）用來避免第二層網路迴圈。核心交換器設定快速每 VLAN 生成樹（Rapid Per-VLAN Spanning Tree Plus，Rapid-PVST+），並將優先權設為 0；存取交換器也設定快速每 VLAN 生成樹，優先權為 4096。這看起來是要讓核心交換器成為生成樹根橋，但實際狀態尚未驗證。
+
+## 三台設備的設定用途
+
+### R2951 路由器
+
+- 兩個外部介面分別標示 \`hinet\`、\`seednet\`，並使用兩個上游下一跳設定預設路由；第一條路由由追蹤狀態控制，第二條設定較高的路由距離。
+- 網路位址轉譯（Network Address Translation，NAT）設定在內部與兩個外部介面間使用。多載模式（\`overload\`，亦常稱 PAT）讓多個內部連線共用外部介面位址；另有 TCP 80/443 與 UDP 1194 的靜態埠轉送。
+- \`NAT-ACL\` 列出可套用 NAT 的來源網段；兩個路由對映（\`route-map\`）分別依 ACL 與外部介面條件選擇 NAT 規則。這裡的 route-map 是 NAT 設定的一部分，不能只因名稱而理解為套用了策略路由。
+- 路由器的 OSPF 設定預設將介面設為被動，並將 GigabitEthernet0/2 設為參與路由協定；它還設定無論是否已學到預設路由都公告預設路由。這個設定的影響範圍應確認。
+- 網際網路協定服務等級協定（Internet Protocol Service Level Agreement，IP SLA）對 \`8.8.8.8\` 發出 ICMP Echo，來源指定為第一個外部介面；追蹤物件再用於預設路由。請確認此探測是否足以代表外部線路可用。
+- 設定有遠端驗證撥入使用者服務（Remote Authentication Dial-In User Service，RADIUS）伺服器群組 \`NPS\`，並引用網路政策伺服器（Network Policy Server，NPS）位址 \`10.20.131.5\`。這個服務用於帳號驗證與授權。
+- 設定虛擬私人網路（Virtual Private Network，VPN）相關的 L2TP/IPsec、PPP 驗證、VPN 位址池與埠轉送。L2TP 是第二層通道協定（Layer 2 Tunneling Protocol）；IPsec 是網際網路協定安全機制（Internet Protocol Security）；PPP 是點對點協定（Point-to-Point Protocol）。另外有 SSLVPN 驗證設定名稱，但此檔案片段不足以判斷其完整 VPN 實作。
+- \`secrets.yml\` 提供 RADIUS 共享密鑰與 IPsec 預共享金鑰。SSH 登入密碼和設備服務金鑰是不同類型的秘密。
+
+### SW3560-Core 核心交換器
+
+- 建立 VLAN 99、100、110、199、999，並在 VLAN 99、100、110、199 設定 SVI 位址。
+- 開啟 IP 路由，透過 OSPF 與路由器交換路由；對 VLAN 100、110、199 的用戶端廣播，設定轉送至 \`10.20.131.5\` 的 DHCP 中繼位址。
+- 建立訪客 DHCP 位址池，預設閘道為 \`192.168.199.254\`，DNS 伺服器為 \`8.8.8.8\`。
+- \`Block-Guest\` 存取控制清單（Access Control List，ACL）先允許 DHCP 封包，再允許特定來源主機，接著拒絕訪客子網路前往 \`10.20.130.0/23\` 與 \`10.20.132.0/23\`，最後允許其他 IP 流量。由於 ACL 規則依序比對，最後的允許規則代表其他未命中的目的地仍可通過。
+- 設定到 \`192.168.131.0/24\` 的靜態路由，下一跳是 \`10.20.131.252\`。
+- 設定系統記錄（syslog）與網路時間協定（Network Time Protocol，NTP）伺服器為 \`10.20.131.5\`，並設定以簡易檔案傳輸協定（Trivial File Transfer Protocol，TFTP）備份設定。
+
+### SW3560-Access 存取交換器
+
+- 建立 VLAN 99、100、110、199；端點埠主要配置在 VLAN 100 與 VLAN 110。
+- 將埠 44–47 設定為通道群組 1 的成員；\`Port-channel1\` 為中繼埠。
+- 設定 VLAN 99、100、110 的 SVI 位址，但沒有設定 \`ip routing\`；檔案中的 \`ip default-gateway\` 指向 \`10.20.131.254\`。
+- 關閉多個埠的連線狀態記錄，並設定系統時間、SSH、TFTP 來源介面、NTP 與 syslog。
+- 存取交換器設定了多條 \`line vty\` 的 SSH 存取；路由器另以 ACL 限制虛擬終端線路來源。
+
+## Playbook 套用時會發生什麼
+
+\`configure.yml\` 的順序如下：
+
+1. 備份目前設備設定至 \`backups/\`，並避免任務輸出記錄敏感資料。
+2. 視設備變數是否存在，合併 VLAN、介面、第二層交換埠、第三層介面、ACL、OSPF 與靜態路由設定。
+3. 以 \`ios_config\` 將主機名稱、全域命令及階層式設定區段寫入設備。
+4. 最後執行儲存任務；僅在設定有變更時，才將執行中設定儲存至啟動設定。
+
+\`ios_config\` 的 ACL 設定依行比對，且 Core 的拒絕命令保留了原始空白格式。Playbook 並未宣告「清除未列出設定」，所以它不是完整設備重建或完整還原工具。README 也指出，備份不涵蓋本機帳號雜湊值、啟用密碼、憑證與私鑰。
+
+## 名詞縮寫表
+
+| 縮寫 | 全名 | 本專案中的意義 |
+| --- | --- | --- |
+| ACL | Access Control List，存取控制清單 | 依規則允許或拒絕符合條件的封包。 |
+| AAA | Authentication, Authorization, and Accounting，認證、授權與記帳 | 控制登入驗證、可執行操作及活動記錄。 |
+| CIDR | Classless Inter-Domain Routing，無類別網域間路由 | 例如 \`/24\` 的網路前綴表示法。 |
+| DHCP | Dynamic Host Configuration Protocol，動態主機設定協定 | 自動提供用戶端 IP、閘道與 DNS 設定。 |
+| DNS | Domain Name System，網域名稱系統 | 將網域名稱解析為 IP 位址。 |
+| ICMP | Internet Control Message Protocol，網際網路控制訊息協定 | IP SLA 的 Echo 探測所使用的協定。 |
+| IP | Internet Protocol，網際網路協定 | 網路位址及封包轉送所依據的協定。 |
+| IPsec | Internet Protocol Security，網際網路協定安全機制 | VPN 使用的加密及驗證機制。 |
+| IP SLA | Internet Protocol Service Level Agreement，網際網路協定服務等級協定 | 用於探測目的地並供追蹤路由使用。 |
+| IaC | Infrastructure as Code，基礎架構即程式碼 | 以可追蹤的檔案管理網路設定。 |
+| L2 / L3 | Layer 2 / Layer 3，第二層／第三層 | 第二層指資料鏈結與交換；第三層指 IP 與路由。 |
+| LAN / WAN | Local Area Network / Wide Area Network，區域網路／廣域網路 | 內部網路／通往外部網路的連線。 |
+| L2TP | Layer 2 Tunneling Protocol，第二層通道協定 | 路由器設定中的 VPN 通道協定。 |
+| NAT | Network Address Translation，網路位址轉譯 | 改寫封包來源或目的 IP 位址。 |
+| NPS | Network Policy Server，網路政策伺服器 | 設定中作為 RADIUS 伺服器使用的服務名稱。 |
+| NTP | Network Time Protocol，網路時間協定 | 對時服務。 |
+| OSPF | Open Shortest Path First，開放最短路徑優先 | 路由器與核心交換器的動態路由協定。 |
+| PAT | Port Address Translation，連接埠位址轉譯 | NAT overload 讓多個連線共用位址。 |
+| PPP | Point-to-Point Protocol，點對點協定 | VPN 撥入連線使用的封裝與驗證協定。 |
+| RADIUS | Remote Authentication Dial-In User Service，遠端驗證撥入使用者服務 | 集中處理網路設備的使用者認證與授權。 |
+| SVI | Switched Virtual Interface，交換器虛擬介面 | VLAN 的第三層介面。 |
+| SSH | Secure Shell，安全殼層 | Ansible 遠端管理設備的加密連線協定。 |
+| STP | Spanning Tree Protocol，生成樹協定 | 避免第二層網路形成迴圈。 |
+| TCP / UDP | Transmission Control Protocol / User Datagram Protocol，傳輸控制協定／使用者資料包協定 | IP 網路常見的傳輸層協定。 |
+| TFTP | Trivial File Transfer Protocol，簡易檔案傳輸協定 | 設備設定封存所用的檔案傳輸方式。 |
+| VLAN | Virtual Local Area Network，虛擬區域網路 | 將交換網路切分成邏輯網段。 |
+| VPN | Virtual Private Network，虛擬私人網路 | 透過通道建立遠端或跨網路連線。 |
+| VTP | VLAN Trunking Protocol，VLAN 中繼協定 | Cisco VLAN 管理協定；此處設定為 transparent。 |
+| YAML | YAML Ain’t Markup Language，常用設定資料格式 | Inventory、Playbook 與設備變數檔的格式。 |
+
+## 待確認事項
+
+| 優先度 | 疑問 | 為什麼需要確認 |
+| --- | --- | --- |
+| 高 | 核心交換器 GigabitEthernet0/48 同時設定 \`access vlan 99\`、\`trunk\` 及 \`mode: access\`，且介面描述是 \`ToRouter\`。此埠實際應為 access 還是 trunk？ | 同一埠同時出現互相矛盾的交換模式設定，可能影響路由器連線及 VLAN 標記。 |
+| 高 | Core 與 Access 的埠 44–47 全部加入 Port-channel1，但 Core 的埠 45、46 描述為連到另一台交換器。這些線路實際對端與聚合關係是什麼？ | 聚合鏈路的各成員通常需連至同一對端，否則可能造成設定錯誤或迴圈。 |
+| 高 | 核心交換器訪客 ACL 的最終規則是 \`permit ip ... any\`。訪客網路是否只應阻擋列出的兩個內部網段？是否還需要限制其他內部網路？ | 未命中前面拒絕規則的目的地都會被允許。 |
+| 高 | 路由器設定 \`default_information.originate.always: true\`。即使路由器沒有可用的外部預設路由，是否仍應向 OSPF 公告預設路由？ | 核心可能因此把無法使用的路由當成有效的外部出口。 |
+| 高 | 路由器預設路由的追蹤物件依賴從 Hinet 介面探測 \`8.8.8.8\`；Seednet 備援路由與切換行為是否符合預期？ | 單一探測目標與特定來源介面可能無法涵蓋所有線路故障情境。 |
+| 中 | VLAN 99、100、110 的用途、實體連線位置與實際閘道是否如上述拓撲推論？ | 設定只能顯示 IP 與 VLAN，無法證明線路拓撲及業務用途。 |
+| 中 | Access 交換器有 VLAN 100、110 的 SVI IP，但未設定 \`ip routing\`；這些位址預期作管理、閘道，還是其他用途？ | 需要確認多個 SVI 與 \`ip default-gateway\` 在此設備上的預期行為。 |
+| 中 | Access 交換器的 \`ip default-gateway 10.20.131.254\` 位於 VLAN 100，而管理 IP 位於 VLAN 99。管理流量應走哪個網段？ | 管理來源與預設閘道可能不在同一子網路，需確認設備實際路由能力與管理路徑。 |
+| 中 | Core 已啟用 \`ip routing\`，同時設定 \`ip default-gateway 10.20.131.254\`。此命令是否仍需要？ | 啟用路由時，設備的預設路由通常由路由表中的路由項目控制；目前設定的用途需釐清。 |
+| 中 | VLAN 199 訪客 DHCP、ACL、允許來源 \`192.168.199.253\` 與無線設備的關係為何？ | 目前設定無法判斷 \`.253\` 是存取點、管理主機或其他設備。 |
+| 中 | Core 的靜態路由 \`192.168.131.0/24\` 下一跳 \`10.20.131.252\` 是否正確？該下一跳設備與網段用途為何？ | 下一跳位址在 VLAN 100 子網路內，但路由目的網段和其他設定的關係不明。 |
+| 中 | VLAN 999 名稱 \`Parketing\` 是否為拼字錯誤？此 VLAN 是否應建立埠配置或其他設定？ | 目前只看到核心交換器宣告 VLAN，沒有其用途說明。 |
+| 中 | R2951 的 \`Loopback0\` 與 VPN 位址池都使用 \`192.168.132.0/24\`。這是刻意設計，還是可能造成位址重疊？ | 重疊子網路可能影響 VPN 用戶端位址與路由判斷。 |
+| 中 | \`SSLVPN-Auth\` AAA 設定是否有對應的 SSL VPN 設定？ | 此儲存庫片段中未看到足以說明完整 SSL VPN 的設定。 |
+| 低 | 所有三台設備的設定是否曾在實際設備上驗證？ | 各 host-vars 註明依 running-config 建立但尚未連線驗證；模組支援與舊版 IOS 行為仍可能有差異。 |
+| 低 | \`10.20.131.5\` 上的 NPS、DHCP、TFTP、NTP、syslog 服務分別由哪些系統提供，備份與可用性要求為何？ | 多項網路服務共用此位址，但本儲存庫沒有描述服務主機或維運方式。 |
+| 低 | VLAN 100/110 的 \`/23\` 子網路、核心 OSPF 區域 10 及路由器的預設路由公告是否有網路設計文件可對照？ | 目前只能從設定推導設計意圖，缺少可核對的網路規劃文件。 |`;
+
+  const expectedMarkdown = `## 目的與閱讀方式
+
+本文整理此儲存庫內所有網路基礎架構即程式碼 (Infrastructure as Code，IaC) 檔案，讓不熟悉思科 (Cisco) 網路設備的軟體工程師能理解：設定由哪些檔案組成、如何套用至設備，以及設定所描述的網路用途。
+
+本文只根據儲存庫中的設定推論，**沒有連線設備驗證實際狀態**。設備名稱、服務用途及設備之間的實體線路，有些只能從設定描述推測；有疑義之處列在文末。
+
+## 先建立幾個基本觀念
+
+- **交換器 (switch)** 主要在區域網路內轉送乙太網路封包；**路由器 (router)** 依照路由表，在不同網路之間轉送封包。此專案另外把核心交換器設定成具備第三層路由功能。
+- **虛擬區域網路 (Virtual Local Area Network，VLAN)** 是以邏輯方式切分的第二層網路。不同 VLAN 通常是不同的 IP 子網路，要互相通訊必須經過路由。
+- **交換器虛擬介面 (Switched Virtual Interface，SVI)** 是交換器上代表某個 VLAN 的第三層介面，可設定 IP 位址，並可能作為該 VLAN 裝置的預設閘道。
+- **存取埠 (access port)** 通常只承載一個 VLAN；**中繼埠 (trunk port)** 可用 IEEE 802.1Q (常寫作 802.1Q 或 dot1q) 標記，在同一連線承載多個 VLAN。
+- **控制台設定 (running-config)** 是設備目前執行中的設定；**啟動設定 (startup-config)** 是設備重開機時載入的設定。修改執行中設定不等於已儲存，需另外寫入啟動設定。
+- **宣告式設定**描述希望設備具備的狀態。Ansible 的 \`merged\` 在此代表合併指定設定，不代表清除所有未列出的現有設定。
+- 設定中的 \`172.16.0.0/24\` 這類寫法是無類別網域間路由 (Classless Inter-Domain Routing，CIDR) 表示法；\`/24\` 表示網路遮罩有 24 個位元。
+
+## 專案如何執行
+
+此專案使用 Ansible，從執行指令的控制端透過安全殼層 (Secure Shell，SSH) 連到 Cisco 設備，再以設備專用模組下發設定。
+
+1. \`inventory.yml\` 列出三台設備的管理 IP，並指定使用 \`ansible.netcommon.network_cli\`、\`cisco.ios.ios\` 與 Paramiko SSH 傳輸。
+2. Playbook 讀取 \`secrets.yml\`，取得設備登入帳密，以及路由器要使用的遠端驗證及 VPN 金鑰。
+3. \`host_vars/<設備名稱>.yml\` 提供各設備的 VLAN、介面、路由與服務設定。
+4. \`playbooks/ping.yml\` 對設備執行 \`show version\`，用來確認可執行設備命令；它**不是**網路封包的 \`ping\` 測試。
+5. \`playbooks/configure.yml\` 先備份現有設定，再逐類套用設定，最後才把有變更的執行中設定儲存至啟動設定。
+6. \`ansible.cfg\` 啟用 SSH 主機金鑰檢查、設定連線逾時，並將 Ansible 的暫存檔放在專案目錄。
+
+專案依賴 Python 3.13 以上版本，透過 \`uv sync --locked\` 安裝；\`pyproject.toml\` 宣告 Ansible 與 Paramiko。README 提供以下命令：
+
+\`\`\`sh
+uv run ansible-playbook playbooks/ping.yml
+uv run ansible-playbook playbooks/configure.yml
+uv run ansible-playbook playbooks/configure.yml --limit sw3560_access
+uv run ansible-playbook playbooks/configure.yml --syntax-check
+\`\`\`
+
+建議首次操作先執行語法檢查與唯讀的版本查詢，再限制一台設備試跑並確認備份與差異，避免未審核就同時修改全部設備。
+
+## 檔案職責
+
+| 檔案                            | 職責                                             |
+| ----------------------------- | ---------------------------------------------- |
+| \`ansible.cfg\`                 | Ansible 的預設 Inventory、暫存目錄、主機金鑰檢查及 CLI 連線逾時設定。 |
+| \`inventory.yml\`               | 設備名稱、管理 IP、網路連線方式與登入帳密變數的引用。                   |
+| \`secrets.example.yml\`         | 私密變數檔範本；複製成未追蹤的 \`secrets.yml\` 後填入帳密及共享金鑰。      |
+| \`host_vars/r2951.yml\`         | R2951 路由器的 WAN/LAN、路由、NAT、VPN、驗證及管理服務設定。       |
+| \`host_vars/sw3560_core.yml\`   | 核心 Catalyst 3560 的 VLAN、第三層閘道、訪客網路、路由及交換埠設定。   |
+| \`host_vars/sw3560_access.yml\` | 存取 Catalyst 3560 的 VLAN、端點埠、上行鏈路與管理介面設定。       |
+| \`playbooks/ping.yml\`          | 在 Cisco 設備上執行 \`show version\`。                  |
+| \`playbooks/configure.yml\`     | 備份、套用設定，並在結尾儲存有變更的設定。                          |
+| \`pyproject.toml\`、\`uv.lock\`    | Python 專案相依套件需求及鎖定版本。                          |
+| \`.gitignore\`                  | 排除 \`secrets.yml\`、設備設定備份及 Ansible 暫存資料。         |
+
+## 從設定推測的網路拓撲
+
+以下是**邏輯拓撲推論**。IP 位址及設定用途來自版本庫；實體線路與設備的真實連接方式仍需現場確認。
+
+\`\`\`text
+                    Internet／外部網路
+                     │               │
+             Hinet(推測)       Seednet(推測)
+                     │               │
+               R2951 GigabitEthernet0/0、GigabitEthernet0/1
+                     │
+               R2951 GigabitEthernet0/2
+               172.16.0.254/24
+                     │
+            VLAN 99「ToRouter」
+                     │
+     ┌───────────────┴────────────────┐
+核心交換器 SW3560-Core             存取交換器 SW3560-Access
+VLAN 99：172.16.0.253/24            VLAN 99：172.16.0.252/24
+VLAN 100：10.20.131.254/23          VLAN 100：10.20.131.253/23
+VLAN 110：10.20.133.254/23          VLAN 110：10.20.133.253/23
+VLAN 199：192.168.199.254/24        端點埠多數分配至 VLAN 100/110
+VLAN 100/110/199 間路由
+     │
+Port-channel1(設定推測為交換器間中繼鏈路)
+\`\`\`
+
+### 子網路與 VLAN
+
+| VLAN | 設定名稱        | 核心交換器 IP             | 存取交換器 IP           | 從設定推測用途                                   |
+| ---- | ----------- | -------------------- | ------------------ | ----------------------------------------- |
+| 99   | \`ToRouter\`  | \`172.16.0.253/24\`    | \`172.16.0.252/24\`  | 連接路由器的網路，也承載核心與路由器之間的路由協定。                |
+| 100  | \`SRV\`       | \`10.20.131.254/23\`   | \`10.20.131.253/23\` | 伺服器網路；核心交換器介面設定了 DHCP 中繼位址 \`10.20.131.5\`。 |
+| 110  | \`CLT\`       | \`10.20.133.254/23\`   | \`10.20.133.253/23\` | 用戶端網路；核心交換器介面設定了 DHCP 中繼位址 \`10.20.131.5\`。 |
+| 199  | \`Guest\`     | \`192.168.199.254/24\` | 未設定 SVI            | 訪客網路；核心交換器設定 DHCP 範圍與入站存取控制清單。            |
+| 999  | \`Parketing\` | 未配置第三層 IP            | 未定義                | 只在核心交換器宣告，名稱或用途需確認。                       |
+
+核心交換器設定 VLAN 100、110、199 的第三層介面，並啟用 \`ip routing\`，因此它是這些網段的路由節點。核心與路由器在 VLAN 99 使用開放最短路徑優先路由協定 (Open Shortest Path First，OSPF) 交換路由。路由器與核心設定的 VLAN 99 介面都位於 OSPF 區域 0；核心另將 VLAN 100、110、199 放在區域 10。
+
+### 存取埠與上行鏈路
+
+- 存取交換器的實體埠 1–12 設定為 VLAN 100，埠 13–43 設定為 VLAN 110，埠 48 設定為 VLAN 99。
+- 核心交換器的埠 1–20、22、24–20?(請依設定檔逐埠檢視) 大多設為 VLAN 110；埠 21 設為 VLAN 100，埠 23 設為 VLAN 199。
+- 兩台交換器皆將埠 44–47 加入通道群組 1；\`Port-channel1\` 設為中繼埠。設定推測其用途是交換器間的聚合鏈路，但各實體埠描述與實際對端未完整吻合，詳見待確認事項。
+- 生成樹 (Spanning Tree Protocol，STP) 用來避免第二層網路迴圈。核心交換器設定快速每 VLAN 生成樹 (Rapid Per-VLAN Spanning Tree Plus，Rapid-PVST+)，並將優先權設為 0；存取交換器也設定快速每 VLAN 生成樹，優先權為 4096。這看起來是要讓核心交換器成為生成樹根橋，但實際狀態尚未驗證。
+
+## 三台設備的設定用途
+
+### R2951 路由器
+
+- 兩個外部介面分別標示 \`hinet\`、\`seednet\`，並使用兩個上游下一跳設定預設路由；第一條路由由追蹤狀態控制，第二條設定較高的路由距離。
+- 網路位址轉譯 (Network Address Translation，NAT) 設定在內部與兩個外部介面間使用。多載模式 (\`overload\`，亦常稱 PAT) 讓多個內部連線共用外部介面位址；另有 TCP 80/443 與 UDP 1194 的靜態埠轉送。
+- \`NAT-ACL\` 列出可套用 NAT 的來源網段；兩個路由對映 (\`route-map\`) 分別依 ACL 與外部介面條件選擇 NAT 規則。這裡的 route-map 是 NAT 設定的一部分，不能只因名稱而理解為套用了策略路由。
+- 路由器的 OSPF 設定預設將介面設為被動，並將 GigabitEthernet0/2 設為參與路由協定；它還設定無論是否已學到預設路由都公告預設路由。這個設定的影響範圍應確認。
+- 網際網路協定服務等級協定 (Internet Protocol Service Level Agreement，IP SLA) 對 \`8.8.8.8\` 發出 ICMP Echo，來源指定為第一個外部介面；追蹤物件再用於預設路由。請確認此探測是否足以代表外部線路可用。
+- 設定有遠端驗證撥入使用者服務 (Remote Authentication Dial-In User Service，RADIUS) 伺服器群組 \`NPS\`，並引用網路政策伺服器 (Network Policy Server，NPS) 位址 \`10.20.131.5\`。這個服務用於帳號驗證與授權。
+- 設定虛擬私人網路 (Virtual Private Network，VPN) 相關的 L2TP/IPsec、PPP 驗證、VPN 位址池與埠轉送。L2TP 是第二層通道協定 (Layer 2 Tunneling Protocol)；IPsec 是網際網路協定安全機制 (Internet Protocol Security)；PPP 是點對點協定 (Point-to-Point Protocol)。另外有 SSLVPN 驗證設定名稱，但此檔案片段不足以判斷其完整 VPN 實作。
+- \`secrets.yml\` 提供 RADIUS 共享密鑰與 IPsec 預共享金鑰。SSH 登入密碼和設備服務金鑰是不同類型的秘密。
+
+### SW3560-Core 核心交換器
+
+- 建立 VLAN 99、100、110、199、999，並在 VLAN 99、100、110、199 設定 SVI 位址。
+- 開啟 IP 路由，透過 OSPF 與路由器交換路由；對 VLAN 100、110、199 的用戶端廣播，設定轉送至 \`10.20.131.5\` 的 DHCP 中繼位址。
+- 建立訪客 DHCP 位址池，預設閘道為 \`192.168.199.254\`，DNS 伺服器為 \`8.8.8.8\`。
+- \`Block-Guest\` 存取控制清單 (Access Control List，ACL) 先允許 DHCP 封包，再允許特定來源主機，接著拒絕訪客子網路前往 \`10.20.130.0/23\` 與 \`10.20.132.0/23\`，最後允許其他 IP 流量。由於 ACL 規則依序比對，最後的允許規則代表其他未命中的目的地仍可通過。
+- 設定到 \`192.168.131.0/24\` 的靜態路由，下一跳是 \`10.20.131.252\`。
+- 設定系統記錄 (syslog) 與網路時間協定 (Network Time Protocol，NTP) 伺服器為 \`10.20.131.5\`，並設定以簡易檔案傳輸協定 (Trivial File Transfer Protocol，TFTP) 備份設定。
+
+### SW3560-Access 存取交換器
+
+- 建立 VLAN 99、100、110、199；端點埠主要配置在 VLAN 100 與 VLAN 110。
+- 將埠 44–47 設定為通道群組 1 的成員；\`Port-channel1\` 為中繼埠。
+- 設定 VLAN 99、100、110 的 SVI 位址，但沒有設定 \`ip routing\`；檔案中的 \`ip default-gateway\` 指向 \`10.20.131.254\`。
+- 關閉多個埠的連線狀態記錄，並設定系統時間、SSH、TFTP 來源介面、NTP 與 syslog。
+- 存取交換器設定了多條 \`line vty\` 的 SSH 存取；路由器另以 ACL 限制虛擬終端線路來源。
+
+## Playbook 套用時會發生什麼
+
+\`configure.yml\` 的順序如下：
+
+1. 備份目前設備設定至 \`backups/\`，並避免任務輸出記錄敏感資料。
+2. 視設備變數是否存在，合併 VLAN、介面、第二層交換埠、第三層介面、ACL、OSPF 與靜態路由設定。
+3. 以 \`ios_config\` 將主機名稱、全域命令及階層式設定區段寫入設備。
+4. 最後執行儲存任務；僅在設定有變更時，才將執行中設定儲存至啟動設定。
+
+\`ios_config\` 的 ACL 設定依行比對，且 Core 的拒絕命令保留了原始空白格式。Playbook 並未宣告「清除未列出設定」，所以它不是完整設備重建或完整還原工具。README 也指出，備份不涵蓋本機帳號雜湊值、啟用密碼、憑證與私鑰。
+
+## 名詞縮寫表
+
+| 縮寫        | 全名                                                                     | 本專案中的意義                            |
+| --------- | ---------------------------------------------------------------------- | ---------------------------------- |
+| ACL       | Access Control List，存取控制清單                                             | 依規則允許或拒絕符合條件的封包。                   |
+| AAA       | Authentication, Authorization, and Accounting，認證、授權與記帳                 | 控制登入驗證、可執行操作及活動記錄。                 |
+| CIDR      | Classless Inter-Domain Routing，無類別網域間路由                                | 例如 \`/24\` 的網路前綴表示法。                 |
+| DHCP      | Dynamic Host Configuration Protocol，動態主機設定協定                           | 自動提供用戶端 IP、閘道與 DNS 設定。             |
+| DNS       | Domain Name System，網域名稱系統                                              | 將網域名稱解析為 IP 位址。                    |
+| ICMP      | Internet Control Message Protocol，網際網路控制訊息協定                           | IP SLA 的 Echo 探測所使用的協定。            |
+| IP        | Internet Protocol，網際網路協定                                               | 網路位址及封包轉送所依據的協定。                   |
+| IPsec     | Internet Protocol Security，網際網路協定安全機制                                  | VPN 使用的加密及驗證機制。                    |
+| IP SLA    | Internet Protocol Service Level Agreement，網際網路協定服務等級協定                 | 用於探測目的地並供追蹤路由使用。                   |
+| IaC       | Infrastructure as Code，基礎架構即程式碼                                        | 以可追蹤的檔案管理網路設定。                     |
+| L2 / L3   | Layer 2 / Layer 3，第二層／第三層                                              | 第二層指資料鏈結與交換；第三層指 IP 與路由。           |
+| LAN / WAN | Local Area Network / Wide Area Network，區域網路／廣域網路                       | 內部網路／通往外部網路的連線。                    |
+| L2TP      | Layer 2 Tunneling Protocol，第二層通道協定                                     | 路由器設定中的 VPN 通道協定。                  |
+| NAT       | Network Address Translation，網路位址轉譯                                     | 改寫封包來源或目的 IP 位址。                   |
+| NPS       | Network Policy Server，網路政策伺服器                                          | 設定中作為 RADIUS 伺服器使用的服務名稱。           |
+| NTP       | Network Time Protocol，網路時間協定                                           | 對時服務。                              |
+| OSPF      | Open Shortest Path First，開放最短路徑優先                                      | 路由器與核心交換器的動態路由協定。                  |
+| PAT       | Port Address Translation，連接埠位址轉譯                                       | NAT overload 讓多個連線共用位址。            |
+| PPP       | Point-to-Point Protocol，點對點協定                                          | VPN 撥入連線使用的封裝與驗證協定。                |
+| RADIUS    | Remote Authentication Dial-In User Service，遠端驗證撥入使用者服務                 | 集中處理網路設備的使用者認證與授權。                 |
+| SVI       | Switched Virtual Interface，交換器虛擬介面                                     | VLAN 的第三層介面。                       |
+| SSH       | Secure Shell，安全殼層                                                      | Ansible 遠端管理設備的加密連線協定。             |
+| STP       | Spanning Tree Protocol，生成樹協定                                           | 避免第二層網路形成迴圈。                       |
+| TCP / UDP | Transmission Control Protocol / User Datagram Protocol，傳輸控制協定／使用者資料包協定 | IP 網路常見的傳輸層協定。                     |
+| TFTP      | Trivial File Transfer Protocol，簡易檔案傳輸協定                                | 設備設定封存所用的檔案傳輸方式。                   |
+| VLAN      | Virtual Local Area Network，虛擬區域網路                                      | 將交換網路切分成邏輯網段。                      |
+| VPN       | Virtual Private Network，虛擬私人網路                                         | 透過通道建立遠端或跨網路連線。                    |
+| VTP       | VLAN Trunking Protocol，VLAN 中繼協定                                       | Cisco VLAN 管理協定；此處設定為 transparent。 |
+| YAML      | YAML Ain’t Markup Language，常用設定資料格式                                    | Inventory、Playbook 與設備變數檔的格式。      |
+
+## 待確認事項
+
+| 優先度 | 疑問                                                                                                                 | 為什麼需要確認                                                        |
+| --- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
+| 高   | 核心交換器 GigabitEthernet0/48 同時設定 \`access vlan 99\`、\`trunk\` 及 \`mode: access\`，且介面描述是 \`ToRouter\`。此埠實際應為 access 還是 trunk？ | 同一埠同時出現互相矛盾的交換模式設定，可能影響路由器連線及 VLAN 標記。                         |
+| 高   | Core 與 Access 的埠 44–47 全部加入 Port-channel1，但 Core 的埠 45、46 描述為連到另一台交換器。這些線路實際對端與聚合關係是什麼？                            | 聚合鏈路的各成員通常需連至同一對端，否則可能造成設定錯誤或迴圈。                               |
+| 高   | 核心交換器訪客 ACL 的最終規則是 \`permit ip ... any\`。訪客網路是否只應阻擋列出的兩個內部網段？是否還需要限制其他內部網路？                                          | 未命中前面拒絕規則的目的地都會被允許。                                            |
+| 高   | 路由器設定 \`default_information.originate.always: true\`。即使路由器沒有可用的外部預設路由，是否仍應向 OSPF 公告預設路由？                             | 核心可能因此把無法使用的路由當成有效的外部出口。                                       |
+| 高   | 路由器預設路由的追蹤物件依賴從 Hinet 介面探測 \`8.8.8.8\`；Seednet 備援路由與切換行為是否符合預期？                                                      | 單一探測目標與特定來源介面可能無法涵蓋所有線路故障情境。                                   |
+| 中   | VLAN 99、100、110 的用途、實體連線位置與實際閘道是否如上述拓撲推論？                                                                          | 設定只能顯示 IP 與 VLAN，無法證明線路拓撲及業務用途。                                |
+| 中   | Access 交換器有 VLAN 100、110 的 SVI IP，但未設定 \`ip routing\`；這些位址預期作管理、閘道，還是其他用途？                                           | 需要確認多個 SVI 與 \`ip default-gateway\` 在此設備上的預期行為。                  |
+| 中   | Access 交換器的 \`ip default-gateway 10.20.131.254\` 位於 VLAN 100，而管理 IP 位於 VLAN 99。管理流量應走哪個網段？                           | 管理來源與預設閘道可能不在同一子網路，需確認設備實際路由能力與管理路徑。                           |
+| 中   | Core 已啟用 \`ip routing\`，同時設定 \`ip default-gateway 10.20.131.254\`。此命令是否仍需要？                                            | 啟用路由時，設備的預設路由通常由路由表中的路由項目控制；目前設定的用途需釐清。                        |
+| 中   | VLAN 199 訪客 DHCP、ACL、允許來源 \`192.168.199.253\` 與無線設備的關係為何？                                                            | 目前設定無法判斷 \`.253\` 是存取點、管理主機或其他設備。                                |
+| 中   | Core 的靜態路由 \`192.168.131.0/24\` 下一跳 \`10.20.131.252\` 是否正確？該下一跳設備與網段用途為何？                                              | 下一跳位址在 VLAN 100 子網路內，但路由目的網段和其他設定的關係不明。                        |
+| 中   | VLAN 999 名稱 \`Parketing\` 是否為拼字錯誤？此 VLAN 是否應建立埠配置或其他設定？                                                              | 目前只看到核心交換器宣告 VLAN，沒有其用途說明。                                     |
+| 中   | R2951 的 \`Loopback0\` 與 VPN 位址池都使用 \`192.168.132.0/24\`。這是刻意設計，還是可能造成位址重疊？                                             | 重疊子網路可能影響 VPN 用戶端位址與路由判斷。                                      |
+| 中   | \`SSLVPN-Auth\` AAA 設定是否有對應的 SSL VPN 設定？                                                                             | 此儲存庫片段中未看到足以說明完整 SSL VPN 的設定。                                  |
+| 低   | 所有三台設備的設定是否曾在實際設備上驗證？                                                                                              | 各 host-vars 註明依 running-config 建立但尚未連線驗證；模組支援與舊版 IOS 行為仍可能有差異。 |
+| 低   | \`10.20.131.5\` 上的 NPS、DHCP、TFTP、NTP、syslog 服務分別由哪些系統提供，備份與可用性要求為何？                                                  | 多項網路服務共用此位址，但本儲存庫沒有描述服務主機或維運方式。                                |
+| 低   | VLAN 100/110 的 \`/23\` 子網路、核心 OSPF 區域 10 及路由器的預設路由公告是否有網路設計文件可對照？                                                    | 目前只能從設定推導設計意圖，缺少可核對的網路規劃文件。                                    |`;
+
+  test('auto-corrects full-width parentheses spacing and aligns GFM tables on plain text paste', async function ({ page }) {
+    await gotoApp(page);
+    const markdown = await convertPaste(page, { text: sourceMarkdown });
+    expect(markdown).toBe(expectedMarkdown);
+  });
+
+  test('auto-corrects markdown syntax when pasted from VS Code', async function ({ page }) {
+    await gotoApp(page);
+    const vscodeData = { version: 1, isFromEmptySelection: false, mode: 'markdown' };
+    const markdown = await convertPaste(page, { vscode: vscodeData, text: sourceMarkdown });
+    expect(markdown).toBe(expectedMarkdown);
+  });
+
+  test('preserves GFM table alignment colons and escaped pipes when aligning columns', async function ({ page }) {
+    await gotoApp(page);
+    const tableWithAlign = [
+      '| 左對齊 | 置中對齊 | 右對齊 | 預設 |',
+      '| :--- | :---: | ---: | --- |',
+      '| A \\| B | 測試（值） | 100 | X |'
+    ].join('\n');
+    const expectedTable = [
+      '| 左對齊    | 置中對齊   | 右對齊 | 預設  |',
+      '| :----- | :----: | --: | --- |',
+      '| A \\| B | 測試 (值) | 100 | X   |'
+    ].join('\n');
+    const markdown = await convertPaste(page, { text: tableWithAlign });
+    expect(markdown).toBe(expectedTable);
+  });
+});
+
