@@ -1980,6 +1980,7 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '--- | ---',
       'https://example.com/a|b',
       '<https://example.com/a|b>',
+      '<span title="x|y">',
       '</custom>',
       '',
       'text',
@@ -2002,7 +2003,20 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '',
       '> - A | B',
       '>     --- | ---',
-      '>     x（1） | y'
+      '>     x（1） | y',
+      '',
+      '> - ```',
+      '> A | B',
+      '> --- | ---',
+      '> x（1） | y',
+      '',
+      '> intro',
+      '> A | B',
+      '> --- | ---',
+      '> x（1） | y',
+      '===',
+      '',
+      'https://example.com/a)（b）後 與 https://example.com/a(b（說明）'
     ].join('\n');
     const expected = [
       '---',
@@ -2175,6 +2189,7 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '| ---------------------- | --- |',
       '| https://example.com/a  | b   |',
       '| <https://example.com/a | b>  |',
+      '| <span title="x         | y"> |',
       '| </custom>              |     |',
       '',
       'text',
@@ -2197,7 +2212,20 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '',
       '> - | A     | B   |',
       '>     | ----- | --- |',
-      '>     | x (1) | y   |'
+      '>     | x (1) | y   |',
+      '',
+      '> - ```',
+      '> | A     | B   |',
+      '> | ----- | --- |',
+      '> | x (1) | y   |',
+      '',
+      '> intro',
+      '> A | B',
+      '> --- | ---',
+      '> x (1) | y',
+      '===',
+      '',
+      'https://example.com/a)（b）後 與 https://example.com/a(b (說明)'
     ].join('\n');
     const markdown = await convertPaste(page, { text: input });
     expect(markdown).toBe(expected);

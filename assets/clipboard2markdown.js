@@ -840,6 +840,7 @@
       const HTML_SPECIAL_OPEN_RE = /^ {0,3}(<!--|<\?|<![A-Za-z]|<!\[CDATA\[)/;
       const THEMATIC_BREAK_RE = /^[ \t]{0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$/;
       const LINK_TAIL_RE = /^(?:[ \t]|\n(?![ \t]*\n))*(?:(?:"(?:\\.|[^"\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n]|\n(?![ \t]*\n))*'|\((?:\\.|[^()\n]|\n(?![ \t]*\n))*\))(?:[ \t]|\n(?![ \t]*\n))*)?\)/;
+      const URL_BACKPEDAL_RE = /(?:[^?!.,:;*_'"~()&]+|\([^)]*\)|&(?![a-zA-Z0-9]+;$)|[?!.,:;*_'"~)]+(?!$))+/;
       const HTML_SPECIAL_CLOSE_MAP = {
         '<!--': /-->/,
         '<?': /\?>/,
@@ -928,10 +929,9 @@
           return q.rest.trim() === '' || hasBlockInterrupt(q.rest);
         }
         if (
-          activeBlock.quoteDepth === 0 &&
           activeBlock.containerIndent > 0 &&
-          line.trim() !== '' &&
-          countIndentCols(line.match(/^[ \t]*/)[0]) < activeBlock.containerIndent
+          q.rest.trim() !== '' &&
+          countIndentCols(q.rest.match(/^[ \t]*/)[0]) < activeBlock.containerIndent
         ) {
           return prevBlank || activeBlock.hasContent === false || hasBlockInterrupt(q.rest);
         }
@@ -945,7 +945,7 @@
           if (openMatch && (!openMatch[2] || allowAnyOrdered || !/^(?!1[.)])\d/.test(openMatch[2])) && !(openMatch[3][0] === '`' && openMatch[4].includes('`'))) {
             const openIndent = countIndentCols(openMatch[1]);
             const listOffset = openMatch[2] ? countIndentCols(openMatch[1] + openMatch[2]) - openIndent : 0;
-            const containerIndent = q.depth > 0 ? 0 : (listOffset > 0 ? openIndent + listOffset : listContentIndent);
+            const containerIndent = listOffset > 0 ? openIndent + listOffset : listContentIndent;
             const maxOpenIndent = listOffset > 0 ? 3 : listContentIndent + 3;
             if (openIndent > maxOpenIndent) {
               return null;
@@ -1271,11 +1271,11 @@
               .replace(/(?<=(?:^|[^\\`])(?:\\\\)*(?:\\`)?)(`+)(?!`)(?:(?:[^\n]|\n(?![ \t]*\n))*?[^`])?\1(?!`)/g, function (match) {
                 return maskSpan(match, true);
               })
-              .replace(/(?<=(?:^|[^\\])(?:\\\\)*)(?:<(script|style|pre|textarea|xmp|noscript|noembed|noframes|plaintext|iframe|code|kbd|samp|tt)\b(?:[^>"']|"(?:[^"\n]|\n(?![ \t]*\n))*"|'(?:[^'\n]|\n(?![ \t]*\n))*')*>(?:[^\n]|\n(?![ \t]*\n))*?(?:<\/\1>|(?=\n[ \t]*\n)|$)|<!--(?:[^\n]|\n(?![ \t]*\n))*?(?:-->|(?=\n[ \t]*\n)|$)|<\?(?:[^\n]|\n(?![ \t]*\n))*?(?:\?>|(?=\n[ \t]*\n)|$)|<![A-Za-z](?:[^\n]|\n(?![ \t]*\n))*?(?:>|(?=\n[ \t]*\n)|$)|<!\[CDATA\[(?:[^\n]|\n(?![ \t]*\n))*?(?:\]\]>|(?=\n[ \t]*\n)|$))/gi, function (match) {
+              .replace(/(?<=(?:^|[^\\])(?:\\\\)*)(?:<(script|style|pre|textarea|xmp|noscript|noembed|noframes|plaintext|iframe|code|kbd|samp|tt)\b(?:[^>"'|]|"(?:\\.|[^"|\\\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'|\\\n]|\n(?![ \t]*\n))*')*>(?:\\.|[^|\\\n]|\n(?![ \t]*\n))*?(?:<\/\1>|(?=\n[ \t]*\n)|$)|<!--(?:\\.|[^|\\\n]|\n(?![ \t]*\n))*?(?:-->|(?=\n[ \t]*\n)|$)|<\?(?:\\.|[^|\\\n]|\n(?![ \t]*\n))*?(?:\?>|(?=\n[ \t]*\n)|$)|<![A-Za-z](?:\\.|[^|\\\n]|\n(?![ \t]*\n))*?(?:>|(?=\n[ \t]*\n)|$)|<!\[CDATA\[(?:\\.|[^|\\\n]|\n(?![ \t]*\n))*?(?:\]\]>|(?=\n[ \t]*\n)|$))/gi, function (match) {
                 return maskSpan(match, /^<(?:code|kbd|samp|tt)\b/i.test(match));
               })
           )
-            .replace(/(?<=(?:^|[^\\])(?:\\\\)*)(?:<[A-Za-z][\w-]*(?:(?:[ \t]|\n(?![ \t]*\n))+[A-Za-z:_][\w.:-]*(?:(?:[ \t]|\n(?![ \t]*\n))*=(?:[ \t]|\n(?![ \t]*\n))*(?:"(?:[^"\n]|\n(?![ \t]*\n))*"|'(?:[^'\n]|\n(?![ \t]*\n))*'|[^\s"'=<>`]+))?)*(?:[ \t]|\n(?![ \t]*\n))*\/?>|<\/[A-Za-z][\w:-]*(?:[ \t]|\n(?![ \t]*\n))*>|<([a-zA-Z][a-zA-Z0-9+.-]{1,31}:[^\s\x00-\x1f<>|]+|[a-zA-Z0-9.!#$%&'*+/=?^_`{}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+)>)/gi, function (match, autolink) {
+            .replace(/(?<=(?:^|[^\\])(?:\\\\)*)(?:<[A-Za-z][\w-]*(?:(?:[ \t]|\n(?![ \t]*\n))+[A-Za-z:_][\w.:-]*(?:(?:[ \t]|\n(?![ \t]*\n))*=(?:[ \t]|\n(?![ \t]*\n))*(?:"(?:\\.|[^"|\\\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'|\\\n]|\n(?![ \t]*\n))*'|[^\s"'=<>`|]+))?)*(?:[ \t]|\n(?![ \t]*\n))*\/?>|<\/[A-Za-z][\w:-]*(?:[ \t]|\n(?![ \t]*\n))*>|<([a-zA-Z][a-zA-Z0-9+.-]{1,31}:[^\s\x00-\x1f<>|]+|[a-zA-Z0-9.!#$%&'*+/=?^_`{}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+)>)/gi, function (match, autolink) {
               const isAutolink = Boolean(autolink);
               return maskSpan(match, isAutolink, false, isAutolink || match.startsWith('</'));
             })
@@ -1299,7 +1299,8 @@
         );
         const maskedBlock = codeAndHtmlMaskedBlock.replace(
           /(?:(?:ftp|https?):\/\/|www\.)(?:[a-zA-Z0-9-]+\.?)+(?:\\.|[^\s|<\\\[\]\uE000-\uE003])*/gi,
-          function (match) {
+          function (match, offset, fullStr) {
+            const hasLeadingParen = offset > 0 && fullStr[offset - 1] === '(';
             let fwDepth = 0;
             let hwDepth = 0;
             let end = 0;
@@ -1315,13 +1316,22 @@
                 hwDepth++;
               } else if (match[end] === ')') {
                 if (hwDepth === 0) {
-                  break;
+                  if (hasLeadingParen) {
+                    break;
+                  }
+                } else {
+                  hwDepth--;
                 }
-                hwDepth--;
               }
               end++;
             }
-            return maskSpan(match.slice(0, end), false) + match.slice(end);
+            let url = match.slice(0, end);
+            let prevUrl;
+            do {
+              prevUrl = url;
+              url = URL_BACKPEDAL_RE.exec(url)[0];
+            } while (prevUrl !== url);
+            return maskSpan(url, false) + match.slice(url.length);
           }
         );
         // Intentionally repair CJK emphasis spans whose closing delimiter is preceded by `）` and
@@ -1409,7 +1419,7 @@
           if (
             hasOpenParaBefore &&
             tableLines.slice(2).concat(normalizedLines[lineIndex] || '').some(function (l) {
-              return getQuotePrefix(l).depth === tableQuoteDepth && /^[ \t]{0,3}(?:=+|-+)[ \t]*$/.test(getTableRowParts(l).rest);
+              return getQuotePrefix(l).depth <= tableQuoteDepth && /^[ \t]{0,3}(?:=+|-+)[ \t]*$/.test(getTableRowParts(l).rest);
             })
           ) {
             formattedLines.push.apply(formattedLines, tableLines);
