@@ -834,13 +834,13 @@
         return cols;
       };
 
-      const HTML_RAW_TAG_RE = /^ {0,3}<(script|pre|style|textarea|xmp|noscript|noembed|noframes|plaintext|iframe)(?=[\s/>]|$)/i;
-      const HTML_TYPE6_TAG_RE = /^ {0,3}<\/?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|meta|nav|noframes|ol|optgroup|option|p|param|section|source|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?=[\s/>]|$)/i;
+      const HTML_RAW_TAG_RE = /^ {0,3}<(script|pre|style|textarea)(?=[\s>])/i;
+      const HTML_TYPE6_TAG_RE = /^ {0,3}<\/?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|meta|nav|noframes|ol|optgroup|option|p|param|section|source|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?: +|$|\/?>)/i;
       const HTML_TYPE7_TAG_RE = /^ {0,3}(?:<[A-Za-z][\w-]*(?: +[A-Za-z:_][\w.:-]*(?: *= *"[^"\n]*"| *= *'[^'\n]*'| *= *[^\s"'=<>`]+)?)*? *\/?>|<\/[A-Za-z][\w-]*\s*>)[ \t]*$/;
       const HTML_SPECIAL_OPEN_RE = /^ {0,3}(<!--|<\?|<![A-Za-z]|<!\[CDATA\[)/;
       const THEMATIC_BREAK_RE = /^[ \t]{0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$/;
       const TABLE_DELIMITER_REST_RE = /^[ \t]*\|?(?:[ \t]*:?-+:?[ \t]*\|)+[ \t]*:?-+:?[ \t]*\|?[ \t]*$/;
-      const LINK_TAIL_RE = /^(?:[ \t]|\n(?![ \t]*\n))*(?:(?:"(?:\\.|[^"\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n]|\n(?![ \t]*\n))*'|\((?:\\.|[^()\n]|\n(?![ \t]*\n))*\))(?:[ \t]|\n(?![ \t]*\n))*)?\)/;
+      const LINK_TAIL_RE = /^(?:[ \t]|\n(?![ \t]*\n))*(?:(?:"(?:\\.|[^"\n\uE004]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n\uE004]|\n(?![ \t]*\n))*'|\((?:\\.|[^()\n\uE004]|\n(?![ \t]*\n))*\))(?:[ \t]|\n(?![ \t]*\n))*)?\)/;
       const URL_BACKPEDAL_RE = /(?:[^?!.,:;*_'"~()&]+|\([^)]*\)|&(?![a-zA-Z0-9]+;$)|[?!.,:;*_'"~)]+(?!$))+/;
       const HTML_SPECIAL_CLOSE_MAP = {
         '<!--': /-->/,
@@ -887,14 +887,19 @@
           listContentIndent = 0;
           listQuoteDepth = q.depth;
         }
-        const listMatch = !isProtectedBlock && !THEMATIC_BREAK_RE.test(q.rest) && !TABLE_DELIMITER_REST_RE.test(q.rest) && (allowAnyOrdered || !/^[ \t]*(?!1[.)])\d{1,9}[.)]/.test(q.rest)) && q.rest.match(/^([ \t]*)(?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )|[ \t]))+/);
+        const listMatch = !isProtectedBlock && !THEMATIC_BREAK_RE.test(q.rest) && (allowAnyOrdered || !/^[ \t]*(?!1[.)])\d{1,9}[.)]/.test(q.rest)) && q.rest.match(/^([ \t]*)(?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )|[ \t]))+/);
         if (listMatch && countIndentCols(listMatch[1]) <= listContentIndent + 3) {
           const nextIndent = countIndentCols(listMatch[0]);
           listIndents = listIndents.filter(function (n) {
             return n < nextIndent;
           }).concat(nextIndent);
           listContentIndent = nextIndent;
-        } else if (q.rest.trim() !== '' && countIndentCols(q.rest.match(/^[ \t]*/)[0]) < listContentIndent) {
+        } else if (
+          q.rest.trim() !== '' &&
+          countIndentCols(q.rest.match(/^[ \t]*/)[0]) < listContentIndent &&
+          (!isProtectedBlock || /^[ \t]{0,3}(?:`{3,}|~{3,})/.test(q.rest)) &&
+          !getHtmlBlockCloseRe(q.rest, false)
+        ) {
           const lineIndent = countIndentCols(q.rest.match(/^[ \t]*/)[0]);
           listIndents = listIndents.filter(function (n) {
             return n <= lineIndent;
@@ -982,7 +987,7 @@
         });
       };
       const maskSpan = function (str, spaceBefore, isBlock, spaceAfter = spaceBefore) {
-        const rawStr = restoreSpans(str);
+        const rawStr = restoreSpans(str).replace(/\uE004/g, '|');
         const prefix = spaceBefore ? '\uE000' : '\uE002';
         const suffix = spaceAfter ? '\uE001' : '\uE003';
         const kind = isBlock ? 'B' : (rawStr.includes('\n') ? 'M' : 'S');
@@ -991,26 +996,26 @@
         return token;
       };
 
-      const getTableRowParts = function (line) {
+      const getTableRowParts = function (line, isDelimCandidate = false) {
         const q = getQuotePrefix(line);
         const maxMarkerIndent = listContentIndent + 3;
-        const listMatch = !THEMATIC_BREAK_RE.test(q.rest) && !TABLE_DELIMITER_REST_RE.test(q.rest) && q.rest.match(/^([ \t]*(?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )|[ \t]))+(?:(?:\[[ xX]\])[ \t]+)?)(.*)$/);
+        const listMatch = !THEMATIC_BREAK_RE.test(q.rest) && !(isDelimCandidate && TABLE_DELIMITER_REST_RE.test(q.rest)) && q.rest.match(/^([ \t]*(?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )|[ \t]))+(?:(?:\[[ xX]\])[ \t]+)?)(.*)$/);
         if (listMatch && countIndentCols(listMatch[1].match(/^[ \t]*/)[0]) <= maxMarkerIndent) {
           return { depth: q.depth, prefix: q.prefix + listMatch[1], rest: listMatch[2], hasList: true };
         }
         return { depth: q.depth, prefix: q.prefix, rest: q.rest, hasList: /^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]/.test(q.prefix) };
       };
 
-      const splitTableCells = function (line) {
-        const t = getTableRowParts(line);
+      const splitTableCells = function (line, isDelimCandidate = false) {
+        const t = getTableRowParts(line, isDelimCandidate);
         const trimmed = t.rest.trim().replace(/^\|/, '').replace(/(?<=(?:^|[^\\])(?:\\\\)*)\|$/, '');
         return trimmed.split(UNESCAPED_PIPE_RE).map(function (cell) {
           return restoreSpans(cell.trim());
         });
       };
 
-      const isTableRowCandidate = function (line, requirePipe = true) {
-        const t = getTableRowParts(line);
+      const isTableRowCandidate = function (line, requirePipe = true, isDelimCandidate = false) {
+        const t = getTableRowParts(line, isDelimCandidate);
         const maxIndent = t.hasList ? 3 : listContentIndent + 3;
         return (
           !blockSpanLineRe.test(line) &&
@@ -1023,11 +1028,13 @@
         );
       };
 
-      const isTableDelimiterLine = function (line) {
+      const isTableDelimiterLine = function (line, minDelimIndent = 0) {
+        const q = getQuotePrefix(line);
+        const allowListDelim = countIndentCols(q.rest.match(/^[ \t]*/)[0]) >= minDelimIndent;
         return (
-          !getTableRowParts(line).hasList &&
-          isTableRowCandidate(line) &&
-          splitTableCells(line).every(function (cell) {
+          !getTableRowParts(line, allowListDelim).hasList &&
+          isTableRowCandidate(line, true, allowListDelim) &&
+          splitTableCells(line, allowListDelim).every(function (cell) {
             return /^:?-+:?$/.test(cell);
           })
         );
@@ -1040,11 +1047,13 @@
         const bracketStack = [];
         let k = 0;
         while (k < str.length) {
-          if (/\s/.test(str[k])) {
+          if (/[\s\uE004]/.test(str[k])) {
             let newlines = 0;
-            while (k < str.length && /\s/.test(str[k])) {
+            while (k < str.length && /[\s\uE004]/.test(str[k])) {
               if (str[k] === '\n') {
                 newlines++;
+              } else if (str[k] === '\uE004') {
+                newlines += 2;
               }
               k++;
             }
@@ -1056,7 +1065,7 @@
           const runKey = -k - 1;
           const parenStack = [];
           let hasUnmatchedClose = false;
-          while (k < str.length && !/\s/.test(str[k])) {
+          while (k < str.length && !/[\s\uE004]/.test(str[k])) {
             if (str[k] === '\\' && k + 1 < str.length) {
               k += 2;
               continue;
@@ -1108,7 +1117,7 @@
           let endIdx = -1;
           let tailStart = -1;
           if (str[cursor] === '<') {
-            const angleMatch = str.slice(cursor).match(/^<(?:\\.|[^<>\\\r\n])*>/);
+            const angleMatch = str.slice(cursor).match(/^<(?:\\.|[^<>\\\r\n\uE004])*>/);
             if (angleMatch) {
               tailStart = cursor + angleMatch[0].length;
             }
@@ -1144,12 +1153,16 @@
       let activeFence = null;
       let activeHtml = null;
       let inProseTable = false;
+      let tableHasOpenPara = false;
+      let tableStartIdx = -1;
       const flushProse = function () {
         if (currentProseLines.length > 0) {
           segments.push({ fenced: false, text: currentProseLines.join('\n') });
           currentProseLines = [];
         }
         inProseTable = false;
+        tableHasOpenPara = false;
+        tableStartIdx = -1;
       };
       lines.forEach(function (line, lineIdx) {
         if (fmEndIdx > 0 && lineIdx <= fmEndIdx) {
@@ -1185,7 +1198,14 @@
           /(?:^|\n[ \t]*\n)[ \t]{0,3}\[(?:\\.|[^\\\n\]])+\]:[ \t]*(?:\n[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*)(?:"[^"\n]*"|'[^'\n]*'|\([^()\n]*\)))?[ \t]*$/.test(proseTail);
         const prevListIndent = prevProse.trim() === '' ? 0 : listContentIndent;
         const allowAnyOrdered = isBlockBoundary || prevListIndent > 0;
-        if (!activeFence) {
+        const isTableStartDelim =
+          !isBlockBoundary &&
+          !inProseTable &&
+          qBefore.depth === prevT.depth &&
+          isTableRowCandidate(currentProseLines[currentProseLines.length - 1]) &&
+          isTableDelimiterLine(line, qBefore.depth ? 0 : (listContentIndent || prevListIndent)) &&
+          splitTableCells(currentProseLines[currentProseLines.length - 1]).length === splitTableCells(line, true).length;
+        if (!activeFence && !isTableStartDelim) {
           updateListIndent(line, false, allowAnyOrdered);
         }
         const nextFence = updateFenceState(line, activeFence, allowAnyOrdered);
@@ -1205,7 +1225,7 @@
           segments.push({ fenced: true, line: line.replace(/（/g, '(').replace(/）/g, ')') });
           return;
         }
-        const t = getTableRowParts(line);
+        const t = getTableRowParts(line, isTableStartDelim);
         const maxProseIndent = t.hasList ? 3 : listContentIndent + 3;
         const atBlockStart = isBlockBoundary || t.hasList;
         if ((atBlockStart || inProseTable) && t.rest.trim() !== '' && countIndentCols(t.rest.match(/^[ \t]*/)[0]) > maxProseIndent) {
@@ -1226,27 +1246,53 @@
           }
           return;
         }
-        inProseTable = (!isBlockBoundary && inProseTable)
-          ? (!t.hasList && !isHeadingOrHrLine(t.rest, prevProse))
-          : (!isBlockBoundary && t.depth === prevT.depth && isTableRowCandidate(currentProseLines[currentProseLines.length - 1]) && isTableDelimiterLine(line) && splitTableCells(currentProseLines[currentProseLines.length - 1]).length === splitTableCells(line).length);
-        currentProseLines.push(line);
+        if (isTableStartDelim) {
+          inProseTable = true;
+          tableStartIdx = currentProseLines.length - 1;
+          tableHasOpenPara = Boolean(beforePrevProse.trim() !== '' && getQuotePrefix(currentProseLines[currentProseLines.length - 2]).depth === t.depth && !isHeadingOrHrLine(beforePrevProse, currentProseLines.length > 2 ? getTableRowParts(currentProseLines[currentProseLines.length - 3]).rest : ''));
+          currentProseLines[tableStartIdx] = currentProseLines[tableStartIdx].replace(UNESCAPED_PIPE_RE, '\uE004');
+          currentProseLines.push(line);
+        } else if (!isBlockBoundary && inProseTable && !t.hasList && countIndentCols(t.prefix + t.rest.match(/^[ \t]*/)[0]) >= listContentIndent && isTableRowCandidate(line, false)) {
+          if (tableHasOpenPara && /^[ \t]*(?:=+|-+)[ \t]*$/.test(t.rest)) {
+            for (let i = tableStartIdx; i < currentProseLines.length; i++) {
+              currentProseLines[i] = currentProseLines[i].replace(/\uE004/g, '|');
+            }
+            inProseTable = false;
+            currentProseLines.push(line);
+          } else {
+            currentProseLines.push(line.replace(UNESCAPED_PIPE_RE, '\uE004'));
+          }
+        } else {
+          inProseTable = false;
+          currentProseLines.push(line);
+        }
       });
       flushProse();
 
       const maskMath = function (str) {
-        const openRe = /\$\$[\s\S]+?\$\$|(?<!\\|\$)\$(?!\$)[^\s$]/g;
+        const openRe = /\$\$[\s\S]+?\$\$|(?<=(?:^|[^\\$])(?:\\\\)*)\$(?!\$)[^\s$\uE004]/g;
         const closeRe = /(?<=[^\s$])\$(?!\d)/g;
         let out = '';
         let lastIdx = 0;
         let m;
         while ((m = openRe.exec(str)) !== null) {
           if (m[0].startsWith('$$')) {
-            if (/^[ \t]*(?:\n|$)/.test(str.slice(openRe.lastIndex))) {
-              out += str.slice(lastIdx, m.index) + maskSpan(m[0], false);
+            const lineStart = str.lastIndexOf('\n', m.index - 1) + 1;
+            const beforeOnLine = getTableRowParts(str.slice(lineStart, m.index));
+            if (
+              !beforeOnLine.rest.includes('\uE004') &&
+              (!m[0].includes('\uE004') || m[0].includes('\n')) &&
+              (!beforeOnLine.hasList || beforeOnLine.rest.trim() === '') &&
+              !/^[ \t]{0,3}#{1,6}[ \t]/.test(beforeOnLine.rest) &&
+              /^[ \t]*(?:\n|$)/.test(str.slice(openRe.lastIndex))
+            ) {
+              out += str.slice(lastIdx, m.index) + maskSpan(m[0].replace(/\uE004/g, '|'), false);
               lastIdx = openRe.lastIndex;
             }
           } else {
-            const paraBreak = str.slice(openRe.lastIndex).search(/\n[ \t]*\n/);
+            const lineEnd = str.indexOf('\n', m.index);
+            const onTableRow = str.slice(str.lastIndexOf('\n', m.index - 1) + 1, lineEnd === -1 ? str.length : lineEnd).includes('\uE004');
+            const paraBreak = str.slice(openRe.lastIndex).search(onTableRow ? /\n|\uE004/ : /\n[ \t]*\n/);
             const limitIdx = paraBreak === -1 ? str.length : openRe.lastIndex + paraBreak;
             closeRe.lastIndex = openRe.lastIndex;
             const cm = closeRe.exec(str.slice(0, limitIdx));
@@ -1255,7 +1301,7 @@
               continue;
             }
             openRe.lastIndex = cm.index + 1;
-            out += str.slice(lastIdx, m.index) + maskSpan(str.slice(m.index, openRe.lastIndex), true);
+            out += str.slice(lastIdx, m.index) + maskSpan(str.slice(m.index, openRe.lastIndex).replace(/\uE004/g, '|'), true);
             lastIdx = openRe.lastIndex;
           }
         }
@@ -1274,14 +1320,14 @@
         const codeAndHtmlMaskedBlock = maskLinkDestinations(
           maskMath(
             seg.text
-              .replace(/(?<=(?:^|[^\\`])(?:\\\\)*(?:\\`)?)(`+)(?!`)(?:(?:\\[\\|]|[^|`\n]|\n(?![ \t]*\n))*?(?:(?<=\\)\||[^|`]))?\1(?!`)/g, function (match) {
+              .replace(/(?<=(?:^|[^\\`])(?:\\\\)*(?:\\`)?)(`+)(?!`)(?:(?:[^\uE004\n]|\n(?![ \t]*\n))*?[^\uE004`])?\1(?!`)/g, function (match) {
                 return maskSpan(match, true);
               })
-              .replace(/(?<=(?:^|[^\\])(?:\\\\)*)(?:<(script|style|pre|textarea|xmp|noscript|noembed|noframes|plaintext|iframe|code|kbd|samp|tt)\b(?:[^>"'|]|"(?:\\.|[^"|\\\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'|\\\n]|\n(?![ \t]*\n))*')*>(?:\\.|[^|\\\n]|\n(?![ \t]*\n))*?(?:<\/\1>|(?=\n[ \t]*\n)|$)|<!--(?:\\.|[^|\\\n]|\n(?![ \t]*\n))*?(?:-->|(?=\n[ \t]*\n)|$)|<\?(?:\\.|[^|\\\n]|\n(?![ \t]*\n))*?(?:\?>|(?=\n[ \t]*\n)|$)|<![A-Za-z](?:\\.|[^|\\\n]|\n(?![ \t]*\n))*?(?:>|(?=\n[ \t]*\n)|$)|<!\[CDATA\[(?:\\.|[^|\\\n]|\n(?![ \t]*\n))*?(?:\]\]>|(?=\n[ \t]*\n)|$))/gi, function (match) {
+              .replace(/(?<=(?:^|[^\\])(?:\\\\)*)(?:<(script|style|pre|textarea|xmp|noscript|noembed|noframes|plaintext|iframe|code|kbd|samp|tt)\b(?:[^>"'\uE004]|"(?:\\.|[^"\uE004\\\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\uE004\\\n]|\n(?![ \t]*\n))*')*>(?:\\.|[^\uE004\\\n]|\n(?![ \t]*\n))*?(?:<\/\1>|(?=\n[ \t]*\n)|$)|<!--(?:\\.|[^\uE004\\\n]|\n(?![ \t]*\n))*?(?:-->|(?=\n[ \t]*\n)|$)|<\?(?:\\.|[^\uE004\\\n]|\n(?![ \t]*\n))*?(?:\?>|(?=\n[ \t]*\n)|$)|<![A-Za-z](?:\\.|[^\uE004\\\n]|\n(?![ \t]*\n))*?(?:>|(?=\n[ \t]*\n)|$)|<!\[CDATA\[(?:\\.|[^\uE004\\\n]|\n(?![ \t]*\n))*?(?:\]\]>|(?=\n[ \t]*\n)|$))/gi, function (match) {
                 return maskSpan(match, /^<(?:code|kbd|samp|tt)\b/i.test(match));
               })
           )
-            .replace(/(?<=(?:^|[^\\])(?:\\\\)*)(?:<[A-Za-z][\w-]*(?:(?:[ \t]|\n(?![ \t]*\n))+[A-Za-z:_][\w.:-]*(?:(?:[ \t]|\n(?![ \t]*\n))*=(?:[ \t]|\n(?![ \t]*\n))*(?:"(?:\\.|[^"|\\\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'|\\\n]|\n(?![ \t]*\n))*'|[^\s"'=<>`|]+))?)*(?:[ \t]|\n(?![ \t]*\n))*\/?>|<\/[A-Za-z][\w:-]*(?:[ \t]|\n(?![ \t]*\n))*>|<([a-zA-Z][a-zA-Z0-9+.-]{1,31}:[^\s\x00-\x1f<>|]+|[a-zA-Z0-9.!#$%&'*+/=?^_`{}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+)>)/gi, function (match, autolink) {
+            .replace(/(?<=(?:^|[^\\])(?:\\\\)*)(?:<[A-Za-z][\w-]*(?:(?:[ \t]|\n(?![ \t]*\n))+[A-Za-z:_][\w.:-]*(?:(?:[ \t]|\n(?![ \t]*\n))*=(?:[ \t]|\n(?![ \t]*\n))*(?:"(?:\\.|[^"\uE004\\\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\uE004\\\n]|\n(?![ \t]*\n))*'|[^\s"'=<>`\uE004]+))?)*(?:[ \t]|\n(?![ \t]*\n))*\/?>|<\/[A-Za-z][\w:-]*(?:[ \t]|\n(?![ \t]*\n))*>|<([a-zA-Z][a-zA-Z0-9+.-]{1,31}:[^\s\x00-\x1f<>\uE004]+|[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+)>)/gi, function (match, autolink) {
               const isAutolink = Boolean(autolink);
               return maskSpan(match, isAutolink, false, isAutolink || match.startsWith('</'));
             })
@@ -1302,9 +1348,12 @@
               validDefEnd = offset + match.length + 1;
               return prefix + maskSpan(destAndTitle, false);
             })
+            .replace(/^([ \t]*(?:(?:>|(?:[-*+]|\d{1,9}[.)])[ \t])[ \t]*)*\d{1,9})）(?=[ \t]|$)/gm, function (_match, prefix) {
+              return prefix + maskSpan('）', false);
+            })
         );
         const maskedBlock = codeAndHtmlMaskedBlock.replace(
-          /(?:(?:ftp|https?):\/\/|www\.)(?:[a-zA-Z0-9-]+\.?)+(?:\\.|[^\s|<\\\[\]\uE000-\uE003])*/gi,
+          /(?:(?:ftp|https?):\/\/|www\.)(?:[a-zA-Z0-9-]+\.?)+(?:\\.|[^\s<\\\[\]\uE000-\uE004])*/gi,
           function (match, offset, fullStr) {
             const hasLeadingParen = offset > 0 && fullStr[offset - 1] === '(';
             let fwDepth = 0;
@@ -1370,7 +1419,8 @@
           .replace(/([\]\p{L}\p{N}]|\uE001|\uE003\))（/gu, '$1 (')
           .replace(/（/g, '(')
           .replace(/）(?=[\p{L}\p{N}`\[\uE000]|(\*{1,3}(?!\*)|(?<!~)~~(?!~))(?=\S)(?:(?!\1)(?:[^\n]|\n(?![ \t]*(?:\n|$|[-*+>|#]|\d{1,9}[.)]))))+?(?<=\S)\1|(_{1,3}(?!_))(?=\S)(?:(?!\2)(?:[^\n]|\n(?![ \t]*(?:\n|$|[-*+>|#]|\d{1,9}[.)]))))+?(?<=\S)\2(?![\p{L}\p{N}(（]))/gu, ') ')
-          .replace(/）/g, ')');
+          .replace(/）/g, ')')
+          .replace(/\uE004/g, '|');
         normalizedLines.push.apply(normalizedLines, normalizedBlock.split('\n'));
       });
 
@@ -1382,7 +1432,7 @@
       while (lineIndex < normalizedLines.length) {
         const currentLine = normalizedLines[lineIndex];
         const isBlockLine = blockSpanLineRe.test(currentLine);
-        const prevListIndent = (lineIndex > 0 && !blockSpanLineRe.test(normalizedLines[lineIndex - 1]) && normalizedLines[lineIndex - 1].trim() !== '') ? listContentIndent : 0;
+        const prevListIndent = (lineIndex > 0 && restoreSpans(normalizedLines[lineIndex - 1]).trim() !== '') ? listContentIndent : 0;
         updateListIndent(isBlockLine ? restoreSpans(currentLine) : currentLine, isBlockLine);
         if (isBlockLine) {
           formattedLines.push(currentLine);
@@ -1390,23 +1440,22 @@
           continue;
         }
         const tableQuoteDepth = getQuotePrefix(currentLine).depth;
+        const tableListIndent = tableQuoteDepth ? 0 : (listContentIndent || prevListIndent);
         if (
           lineIndex + 1 < normalizedLines.length &&
           isTableRowCandidate(currentLine) &&
           getQuotePrefix(normalizedLines[lineIndex + 1]).depth === tableQuoteDepth &&
-          isTableDelimiterLine(normalizedLines[lineIndex + 1]) &&
-          splitTableCells(currentLine).length === splitTableCells(normalizedLines[lineIndex + 1]).length &&
-          splitTableCells(restoreSpans(currentLine)).length === splitTableCells(normalizedLines[lineIndex + 1]).length
+          isTableDelimiterLine(normalizedLines[lineIndex + 1], tableListIndent) &&
+          splitTableCells(currentLine).length === splitTableCells(normalizedLines[lineIndex + 1], true).length &&
+          splitTableCells(restoreSpans(currentLine)).length === splitTableCells(normalizedLines[lineIndex + 1], true).length
         ) {
           const prevTableLine = normalizedLines[lineIndex - 1] || '';
           const prevTableT = getTableRowParts(prevTableLine);
           const hasOpenParaBefore =
             !blockSpanLineRe.test(prevTableLine) &&
             prevTableT.depth === tableQuoteDepth &&
-            !prevTableT.hasList &&
             prevTableT.rest.trim() !== '' &&
             !isHeadingOrHrLine(prevTableT.rest, getTableRowParts(normalizedLines[lineIndex - 2] || '').rest);
-          const tableListIndent = tableQuoteDepth ? 0 : (listContentIndent || prevListIndent);
           const tableLines = [currentLine];
           lineIndex++;
           // Intentionally allow `depth <= tableQuoteDepth` for blockquoted tables because the bundled
@@ -1414,10 +1463,10 @@
           // same table, while requiring `>= listContentIndent` so dedented lines exit list tables.
           while (
             lineIndex < normalizedLines.length &&
-            !getTableRowParts(normalizedLines[lineIndex]).hasList &&
+            !getTableRowParts(normalizedLines[lineIndex], tableLines.length === 1).hasList &&
             getQuotePrefix(normalizedLines[lineIndex]).depth <= tableQuoteDepth &&
-            countIndentCols(getTableRowParts(normalizedLines[lineIndex]).prefix + getTableRowParts(normalizedLines[lineIndex]).rest.match(/^[ \t]*/)[0]) >= listContentIndent &&
-            isTableRowCandidate(normalizedLines[lineIndex], false)
+            countIndentCols(getTableRowParts(normalizedLines[lineIndex], tableLines.length === 1).prefix + getTableRowParts(normalizedLines[lineIndex], tableLines.length === 1).rest.match(/^[ \t]*/)[0]) >= listContentIndent &&
+            isTableRowCandidate(normalizedLines[lineIndex], false, tableLines.length === 1)
           ) {
             tableLines.push(normalizedLines[lineIndex]);
             lineIndex++;
@@ -1425,13 +1474,15 @@
           if (
             hasOpenParaBefore &&
             tableLines.slice(2).concat(normalizedLines[lineIndex] || '').some(function (l) {
-              return getQuotePrefix(l).depth <= tableQuoteDepth && /^[ \t]{0,3}(?:=+|-+)[ \t]*$/.test(getTableRowParts(l).rest);
+              return getQuotePrefix(l).depth <= tableQuoteDepth && /^[ \t]*(?:=+|-+)[ \t]*$/.test(getTableRowParts(l).rest);
             })
           ) {
             formattedLines.push.apply(formattedLines, tableLines);
             continue;
           }
-          const rows = tableLines.map(splitTableCells);
+          const rows = tableLines.map(function (l, idx) {
+            return splitTableCells(l, idx === 1);
+          });
           const colCount = rows[0].length;
           // Intentionally align columns by character count (.length, matching Prettier's default
           // Markdown table formatter and the project's golden table fixtures, where 1 CJK or ASCII
@@ -1447,7 +1498,7 @@
             }
           });
           rows.forEach(function (row, rIdx) {
-            const t = getTableRowParts(tableLines[rIdx]);
+            const t = getTableRowParts(tableLines[rIdx], rIdx === 1);
             const rawPrefix = t.prefix + t.rest.match(/^[ \t]*/)[0];
             const rowPrefix = rawPrefix + ' '.repeat(Math.max(0, tableListIndent - countIndentCols(rawPrefix)));
             if (rIdx === 1) {
