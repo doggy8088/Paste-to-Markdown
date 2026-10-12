@@ -860,7 +860,7 @@
 
       let listContentIndent = 0;
       const getQuotePrefix = function (line) {
-        const match = line.match(/^((?:[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+)+)?([ \t]*>(?:[ \t]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)*>)* ?)(.*)$/);
+        const match = line.match(/^((?:[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+)+)?([ \t]*>(?:[ \t]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)*>)*[ \t]?)(.*)$/);
         if (!match) {
           return { depth: 0, prefix: '', rest: line };
         }
@@ -912,7 +912,7 @@
       const updateFenceState = function (line, activeFence, allowAnyOrdered = true) {
         const q = getQuotePrefix(line);
         if (!activeFence) {
-          const openMatch = q.rest.match(/^([ \t]*)((?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )|[ \t]))+)?(?:\[[ xX]\][ \t]+)?(`{3,}|~{3,})(.*)$/);
+          const openMatch = q.rest.match(/^([ \t]*)(?:((?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )|[ \t]))+)(?:\[[ xX]\][ \t]+)?)?(`{3,}|~{3,})(.*)$/);
           if (openMatch && (!openMatch[2] || allowAnyOrdered || !/^(?!1[.)])\d/.test(openMatch[2])) && !(openMatch[3][0] === '`' && openMatch[4].includes('`'))) {
             const openIndent = countIndentCols(openMatch[1]);
             const listOffset = openMatch[2] ? countIndentCols(openMatch[1] + openMatch[2]) - openIndent : 0;
@@ -984,7 +984,7 @@
         return (
           !multilineSpanRe.test(line) &&
           countIndentCols(t.rest.match(/^[ \t]*/)[0]) <= maxIndent &&
-          !/^[ \t]*(?:#{1,6}[ \t]|\[(?:\\.|[^\\\n\]])+\]:[ \t]*)/.test(t.rest) &&
+          !/^[ \t]*#{1,6}[ \t]/.test(t.rest) &&
           UNESCAPED_PIPE_RE.test(t.rest)
         );
       };
@@ -1131,7 +1131,7 @@
         if (hasFenceContainerEnded(line, activeFence)) {
           activeFence = null;
         }
-        const proseTail = currentProseLines.slice(-3).map(function (l) {
+        const proseTail = (currentProseLines.length > 4 ? '\n' : '') + currentProseLines.slice(-4).map(function (l) {
           return getTableRowParts(l).rest;
         }).join('\n');
         const prevT = currentProseLines.length > 0 ? getTableRowParts(currentProseLines[currentProseLines.length - 1]) : null;
@@ -1142,7 +1142,7 @@
           prevProse.trim() === '' ||
           /^[ \t]{0,3}(?:#{1,6}(?:[ \t]|$)|(?:=+|-+)[ \t]*$)/.test(prevProse) ||
           THEMATIC_BREAK_RE.test(prevProse) ||
-          /(?:^|\n)[ \t]{0,3}\[(?:\\.|[^\\\n\]])+\]:[ \t]*(?:\n[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*)(?:"[^"\n]*"|'[^'\n]*'|\([^()\n]*\)))?[ \t]*$/.test(proseTail);
+          /(?:^|\n[ \t]*\n)[ \t]{0,3}\[(?:\\.|[^\\\n\]])+\]:[ \t]*(?:\n[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*)(?:"[^"\n]*"|'[^'\n]*'|\([^()\n]*\)))?[ \t]*$/.test(proseTail);
         const prevListIndent = listContentIndent;
         const allowAnyOrdered = isBlockBoundary || prevListIndent > 0;
         if (!activeFence) {
@@ -1186,6 +1186,7 @@
           normalizedLines.push(maskSpan(seg.line, false, true));
           return;
         }
+        let validDefEnd = 0;
         const codeAndHtmlMaskedBlock = maskLinkDestinations(
           seg.text
             .replace(/(?<=(?:^|[^\\`])(?:\\\\)*)(`+)(?!`)(?:[\s\S]*?[^`])?\1(?!`)/g, function (match) {
@@ -1194,14 +1195,27 @@
             .replace(/<(script|style|pre|textarea|xmp|noscript|noembed|noframes|plaintext|iframe|code|kbd|samp|tt)\b(?:[^>"']|"(?:[^"\n]|\n(?![ \t]*\n))*"|'(?:[^'\n]|\n(?![ \t]*\n))*')*>[\s\S]*?(?:<\/\1>|$)|<!--[\s\S]*?(?:-->|$)|<\?[\s\S]*?(?:\?>|$)|<![A-Za-z][\s\S]*?(?:>|$)|<!\[CDATA\[[\s\S]*?(?:\]\]>|$)/gi, function (match) {
               return maskSpan(match, /^<(?:code|kbd|samp|tt)\b/i.test(match));
             })
-            .replace(/\$\$[\s\S]+?\$\$|(?<!\\|\$)\$(?:[^\s$\\]|\\.)(?:[\s\S]*?(?:[^\s$\\]|\\.))?\$(?!\d)/g, function (match) {
+            .replace(/\$\$[\s\S]+?\$\$|(?<!\\|\$)\$(?!\$)(?:[^\s$\\]|\\.)(?:[\s\S]*?(?:[^\s$\\]|\\.))?\$(?!\d)/g, function (match, offset, fullStr) {
+              if (match.startsWith('$$') && !/^[ \t]*(?:\n|$)/.test(fullStr.slice(offset + match.length))) {
+                return match;
+              }
               return maskSpan(match, !match.startsWith('$$'));
             })
             .replace(/<[A-Za-z][\w-]*(?:(?:[ \t]|\n(?![ \t]*\n))+[A-Za-z:_][\w.:-]*(?:(?:[ \t]|\n(?![ \t]*\n))*=(?:[ \t]|\n(?![ \t]*\n))*(?:"(?:[^"\n]|\n(?![ \t]*\n))*"|'(?:[^'\n]|\n(?![ \t]*\n))*'|[^\s"'=<>`]+))?)*(?:[ \t]|\n(?![ \t]*\n))*\/?>|<\/[A-Za-z][\w:-]*(?:[ \t]|\n(?![ \t]*\n))*>|<([a-zA-Z][a-zA-Z0-9+.-]{1,31}:[^\s\x00-\x1f<>]+|[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+)>/gi, function (match, autolink) {
               const isAutolink = Boolean(autolink);
               return maskSpan(match, isAutolink, false, isAutolink || match.startsWith('</'));
             })
-            .replace(/^([ \t]*(?:(?:>|(?:[-*+]|\d{1,9}[.)])[ \t])[ \t]*)*\[(?:\\.|[^\\\n\]])+\]:[ \t]*)((?:\n[ \t]*(?:>[ \t]*)*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*(?:>[ \t]*)*)(?:"(?:\\.|[^"\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n]|\n(?![ \t]*\n))*'|\((?:\\.|[^()\n]|\n(?![ \t]*\n))*\))[ \t]*(?=\n|$))?)/gm, function (match, prefix, destAndTitle) {
+            .replace(/^([ \t]*(?:(?:>|(?:[-*+]|\d{1,9}[.)])[ \t])[ \t]*)*\[(?:\\.|[^\\\n\]])+\]:[ \t]*)((?:\n[ \t]*(?:>[ \t]*)*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*(?:>[ \t]*)*)(?:"(?:\\.|[^"\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n]|\n(?![ \t]*\n))*'|\((?:\\.|[^()\n]|\n(?![ \t]*\n))*\))[ \t]*(?=\n|$))?)/gm, function (match, prefix, destAndTitle, offset, fullStr) {
+              const prevLine = offset > 0 ? fullStr.slice(0, offset - 1).split('\n').pop() : '';
+              if (
+                offset > 0 &&
+                offset !== validDefEnd &&
+                !/[-*+]|\d[.)]/.test(prefix.slice(0, prefix.indexOf('['))) &&
+                getQuotePrefix(prevLine).rest.trim() !== ''
+              ) {
+                return match;
+              }
+              validDefEnd = offset + match.length + 1;
               return prefix + maskSpan(destAndTitle, false);
             })
         );
