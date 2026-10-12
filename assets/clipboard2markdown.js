@@ -1048,8 +1048,13 @@
         );
       };
 
+      const definedRefLabels = new Set();
+      const normalizeRefLabel = function (lbl) {
+        return restoreSpans(lbl).replace(/\s+/g, ' ').toLowerCase();
+      };
+
       const maskLinkDestinations = function (str) {
-        const validLabelClose = new Set();
+        const labelOpenByClose = new Map();
         const directClose = new Map();
         const runEndBeforeTitle = new Map();
         const bracketStack = [];
@@ -1081,8 +1086,7 @@
             if (str[k] === '[') {
               bracketStack.push(k);
             } else if (str[k] === ']' && bracketStack.length > 0) {
-              bracketStack.pop();
-              validLabelClose.add(k);
+              labelOpenByClose.set(k, bracketStack.pop());
             } else if (str[k] === '(') {
               parenStack.push(k);
             } else if (str[k] === ')') {
@@ -1105,60 +1109,70 @@
         let out = '';
         let i = 0;
         while (i < str.length) {
-          const nextMatch = str.slice(i).match(/\][(\[]/);
-          if (!nextMatch) {
+          const openIdx = str.indexOf(']', i);
+          if (openIdx === -1) {
             out += str.slice(i);
             break;
           }
-          const openIdx = i + nextMatch.index;
-          if (!validLabelClose.has(openIdx)) {
+          if (!labelOpenByClose.has(openIdx)) {
             out += str.slice(i, openIdx + 1);
             i = openIdx + 1;
             continue;
           }
+          const bracketOpenIdx = labelOpenByClose.get(openIdx);
           if (str[openIdx + 1] === '[') {
             const refMatch = str.slice(openIdx + 1).match(/^\[((?!\s*\])(?:\\.|[^\[\]\\\n\uE004]|\n(?![ \t]*\n))+)\]/);
             if (refMatch) {
-              out += str.slice(i, openIdx + 2) + maskSpan(refMatch[1], false);
-              i = openIdx + refMatch[0].length;
+              const hasDef = definedRefLabels.has(normalizeRefLabel(refMatch[1]));
+              out += str.slice(i, openIdx + 2) + maskSpan(refMatch[1], false) + (hasDef ? ']' : '');
+              i = openIdx + refMatch[0].length + (hasDef ? 1 : 0);
               continue;
             }
-            out += str.slice(i, openIdx + 1);
-            i = openIdx + 1;
+          } else if (str[openIdx + 1] === '(') {
+            const parenIdx = openIdx + 1;
+            let cursor = openIdx + 2;
+            const leadWs = str.slice(cursor).match(/^(?:[ \t]|\n(?![ \t]*\n))+/);
+            if (leadWs) {
+              cursor += leadWs[0].length;
+            }
+            const lookupKey = leadWs ? -cursor - 1 : parenIdx;
+            let endIdx = -1;
+            let tailStart = -1;
+            if (str[cursor] === '<') {
+              const angleMatch = str.slice(cursor).match(/^<(?:\\.|[^<>\\\r\n\uE004])*>/);
+              if (angleMatch) {
+                tailStart = cursor + angleMatch[0].length;
+              }
+            } else if (directClose.has(lookupKey)) {
+              endIdx = directClose.get(lookupKey);
+            } else if (runEndBeforeTitle.has(lookupKey)) {
+              tailStart = runEndBeforeTitle.get(lookupKey);
+            }
+            if (tailStart !== -1) {
+              const tailMatch = str.slice(tailStart).match(LINK_TAIL_RE);
+              if (tailMatch) {
+                endIdx = tailStart + tailMatch[0].length - 1;
+              }
+            }
+            if (endIdx !== -1) {
+              out += str.slice(i, openIdx + 2) + maskSpan(str.slice(openIdx + 2, endIdx), false) + ')';
+              i = endIdx + 1;
+              continue;
+            }
+          }
+          const lbl = str.slice(bracketOpenIdx + 1, openIdx);
+          if (
+            bracketOpenIdx >= i &&
+            /^(?!\s*$)(?:\\.|[^\[\]\\\uE004])+$/.test(restoreSpans(lbl)) &&
+            definedRefLabels.has(normalizeRefLabel(lbl))
+          ) {
+            const collapsedSuffix = str.slice(openIdx + 1, openIdx + 3) === '[]' ? '[]' : '';
+            out += str.slice(i, bracketOpenIdx + 1) + maskSpan(lbl, false) + ']' + collapsedSuffix;
+            i = openIdx + 1 + collapsedSuffix.length;
             continue;
           }
-          out += str.slice(i, openIdx + 2);
-          const parenIdx = openIdx + 1;
-          let cursor = openIdx + 2;
-          const leadWs = str.slice(cursor).match(/^(?:[ \t]|\n(?![ \t]*\n))+/);
-          if (leadWs) {
-            cursor += leadWs[0].length;
-          }
-          const lookupKey = leadWs ? -cursor - 1 : parenIdx;
-          let endIdx = -1;
-          let tailStart = -1;
-          if (str[cursor] === '<') {
-            const angleMatch = str.slice(cursor).match(/^<(?:\\.|[^<>\\\r\n\uE004])*>/);
-            if (angleMatch) {
-              tailStart = cursor + angleMatch[0].length;
-            }
-          } else if (directClose.has(lookupKey)) {
-            endIdx = directClose.get(lookupKey);
-          } else if (runEndBeforeTitle.has(lookupKey)) {
-            tailStart = runEndBeforeTitle.get(lookupKey);
-          }
-          if (tailStart !== -1) {
-            const tailMatch = str.slice(tailStart).match(LINK_TAIL_RE);
-            if (tailMatch) {
-              endIdx = tailStart + tailMatch[0].length - 1;
-            }
-          }
-          if (endIdx !== -1) {
-            out += maskSpan(str.slice(openIdx + 2, endIdx), false) + ')';
-            i = endIdx + 1;
-          } else {
-            i = openIdx + 2;
-          }
+          out += str.slice(i, openIdx + 1);
+          i = openIdx + 1;
         }
         return out;
       };
@@ -1329,52 +1343,56 @@
         return out + str.slice(lastIdx);
       };
 
+      segments.forEach(function (seg) {
+        if (seg.fenced) return;
+        let validDefEnd = 0;
+        // CommonMark and the bundled Marked parser do not allow inline code spans to cross blank
+        // lines (`\n[ \t]*\n`), because paragraphs are split on blank lines before inline lexing.
+        seg.preMasked = maskMath(
+          seg.text
+            .replace(/(?<=(?:^|[^\\`])(?:\\\\)*(?:\\`)?)(`+)(?!`)(?:(?:[^\uE004\n]|\n(?![ \t]*\n))*?[^\uE004`])?\1(?!`)/g, function (match) {
+              return maskSpan(match, true);
+            })
+            .replace(/(?<=(?:^|[^\\])(?:\\\\)*)(?:<(script|style|pre|textarea|xmp|noscript|noembed|noframes|plaintext|iframe|code|kbd|samp|tt)\b(?:[^>"'\uE004]|"(?:\\.|[^"\uE004\\\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\uE004\\\n]|\n(?![ \t]*\n))*')*>(?:\\.|[^\uE004\\\n]|\n(?![ \t]*\n))*?(?:<\/\1>|(?=\n[ \t]*\n)|$)|<!--(?:\\.|[^\uE004\\\n]|\n(?![ \t]*\n))*?(?:-->|(?=\n[ \t]*\n)|$)|<\?(?:\\.|[^\uE004\\\n]|\n(?![ \t]*\n))*?(?:\?>|(?=\n[ \t]*\n)|$)|<![A-Za-z](?:\\.|[^\uE004\\\n]|\n(?![ \t]*\n))*?(?:>|(?=\n[ \t]*\n)|$)|<!\[CDATA\[(?:\\.|[^\uE004\\\n]|\n(?![ \t]*\n))*?(?:\]\]>|(?=\n[ \t]*\n)|$))/gi, function (match) {
+              return maskSpan(match, /^<(?:code|kbd|samp|tt)\b/i.test(match));
+            })
+        )
+          .replace(/(?<=(?:^|[^\\])(?:\\\\)*)(?:<[A-Za-z][\w-]*(?:(?:[ \t]|\n(?![ \t]*\n))+[A-Za-z:_][\w.:-]*(?:(?:[ \t]|\n(?![ \t]*\n))*=(?:[ \t]|\n(?![ \t]*\n))*(?:"(?:\\.|[^"\uE004\\\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\uE004\\\n]|\n(?![ \t]*\n))*'|[^\s"'=<>`\uE004]+))?)*(?:[ \t]|\n(?![ \t]*\n))*\/?>|<\/[A-Za-z][\w:-]*(?:[ \t]|\n(?![ \t]*\n))*>|<([a-zA-Z][a-zA-Z0-9+.-]{1,31}:[^\s\x00-\x1f<>\uE004]+|[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+)>)/gi, function (match, autolink) {
+            const isAutolink = Boolean(autolink);
+            return maskSpan(match, isAutolink, false, isAutolink || match.startsWith('</'));
+          })
+          .replace(/^([ \t]*(?:(?:>|(?:[-*+]|\d{1,9}[.)])[ \t])[ \t]*)*\[(?:\\.|[^\\\n\]])+\]:[ \t]*)((?:\n[ \t]*(?:>[ \t]*)*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*(?:>[ \t]*)*)(?:"(?:\\.|[^"\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n]|\n(?![ \t]*\n))*'|\((?:\\.|[^()\n]|\n(?![ \t]*\n))*\))[ \t]*(?=\n|$))?)/gm, function (match, prefix, destAndTitle, offset, fullStr) {
+            const beforeLines = offset > 0 ? fullStr.slice(0, offset - 1).split('\n') : [];
+            const prevQ = getQuotePrefix(beforeLines.pop() || '');
+            const beforePrevQ = getQuotePrefix(beforeLines.pop() || '');
+            if (
+              offset > 0 &&
+              offset !== validDefEnd &&
+              !/[-*+]|\d[.)]/.test(prefix.slice(0, prefix.indexOf('['))) &&
+              getQuotePrefix(prefix).depth <= prevQ.depth &&
+              prevQ.rest.trim() !== '' &&
+              !isHeadingOrHrLine(prevQ.rest, beforePrevQ.rest)
+            ) {
+              return match;
+            }
+            validDefEnd = offset + match.length + 1;
+            return prefix.replace(/\[((?:\\.|[^\\\n\]])+)\]/, function (_m, lbl) {
+              definedRefLabels.add(normalizeRefLabel(lbl));
+              return '[' + maskSpan(lbl, false) + ']';
+            }) + maskSpan(destAndTitle, false);
+          })
+          .replace(/^([ \t]*(?:(?:>|(?:[-*+]|\d{1,9}[.)])[ \t])[ \t]*)*\d{1,9})）(?=[ \t]|$)/gm, function (_match, prefix) {
+            return prefix + maskSpan('）', false);
+          });
+      });
+
       const normalizedLines = [];
       segments.forEach(function (seg) {
         if (seg.fenced) {
           normalizedLines.push(maskSpan(seg.line, false, true));
           return;
         }
-        let validDefEnd = 0;
-        // CommonMark and the bundled Marked parser do not allow inline code spans to cross blank
-        // lines (`\n[ \t]*\n`), because paragraphs are split on blank lines before inline lexing.
-        const codeAndHtmlMaskedBlock = maskLinkDestinations(
-          maskMath(
-            seg.text
-              .replace(/(?<=(?:^|[^\\`])(?:\\\\)*(?:\\`)?)(`+)(?!`)(?:(?:[^\uE004\n]|\n(?![ \t]*\n))*?[^\uE004`])?\1(?!`)/g, function (match) {
-                return maskSpan(match, true);
-              })
-              .replace(/(?<=(?:^|[^\\])(?:\\\\)*)(?:<(script|style|pre|textarea|xmp|noscript|noembed|noframes|plaintext|iframe|code|kbd|samp|tt)\b(?:[^>"'\uE004]|"(?:\\.|[^"\uE004\\\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\uE004\\\n]|\n(?![ \t]*\n))*')*>(?:\\.|[^\uE004\\\n]|\n(?![ \t]*\n))*?(?:<\/\1>|(?=\n[ \t]*\n)|$)|<!--(?:\\.|[^\uE004\\\n]|\n(?![ \t]*\n))*?(?:-->|(?=\n[ \t]*\n)|$)|<\?(?:\\.|[^\uE004\\\n]|\n(?![ \t]*\n))*?(?:\?>|(?=\n[ \t]*\n)|$)|<![A-Za-z](?:\\.|[^\uE004\\\n]|\n(?![ \t]*\n))*?(?:>|(?=\n[ \t]*\n)|$)|<!\[CDATA\[(?:\\.|[^\uE004\\\n]|\n(?![ \t]*\n))*?(?:\]\]>|(?=\n[ \t]*\n)|$))/gi, function (match) {
-                return maskSpan(match, /^<(?:code|kbd|samp|tt)\b/i.test(match));
-              })
-          )
-            .replace(/(?<=(?:^|[^\\])(?:\\\\)*)(?:<[A-Za-z][\w-]*(?:(?:[ \t]|\n(?![ \t]*\n))+[A-Za-z:_][\w.:-]*(?:(?:[ \t]|\n(?![ \t]*\n))*=(?:[ \t]|\n(?![ \t]*\n))*(?:"(?:\\.|[^"\uE004\\\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\uE004\\\n]|\n(?![ \t]*\n))*'|[^\s"'=<>`\uE004]+))?)*(?:[ \t]|\n(?![ \t]*\n))*\/?>|<\/[A-Za-z][\w:-]*(?:[ \t]|\n(?![ \t]*\n))*>|<([a-zA-Z][a-zA-Z0-9+.-]{1,31}:[^\s\x00-\x1f<>\uE004]+|[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+)>)/gi, function (match, autolink) {
-              const isAutolink = Boolean(autolink);
-              return maskSpan(match, isAutolink, false, isAutolink || match.startsWith('</'));
-            })
-            .replace(/^([ \t]*(?:(?:>|(?:[-*+]|\d{1,9}[.)])[ \t])[ \t]*)*\[(?:\\.|[^\\\n\]])+\]:[ \t]*)((?:\n[ \t]*(?:>[ \t]*)*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*(?:>[ \t]*)*)(?:"(?:\\.|[^"\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n]|\n(?![ \t]*\n))*'|\((?:\\.|[^()\n]|\n(?![ \t]*\n))*\))[ \t]*(?=\n|$))?)/gm, function (match, prefix, destAndTitle, offset, fullStr) {
-              const beforeLines = offset > 0 ? fullStr.slice(0, offset - 1).split('\n') : [];
-              const prevQ = getQuotePrefix(beforeLines.pop() || '');
-              const beforePrevQ = getQuotePrefix(beforeLines.pop() || '');
-              if (
-                offset > 0 &&
-                offset !== validDefEnd &&
-                !/[-*+]|\d[.)]/.test(prefix.slice(0, prefix.indexOf('['))) &&
-                getQuotePrefix(prefix).depth <= prevQ.depth &&
-                prevQ.rest.trim() !== '' &&
-                !isHeadingOrHrLine(prevQ.rest, beforePrevQ.rest)
-              ) {
-                return match;
-              }
-              validDefEnd = offset + match.length + 1;
-              return prefix.replace(/\[((?:\\.|[^\\\n\]])+)\]/, function (_m, lbl) {
-                return '[' + maskSpan(lbl, false) + ']';
-              }) + maskSpan(destAndTitle, false);
-            })
-            .replace(/^([ \t]*(?:(?:>|(?:[-*+]|\d{1,9}[.)])[ \t])[ \t]*)*\d{1,9})）(?=[ \t]|$)/gm, function (_match, prefix) {
-              return prefix + maskSpan('）', false);
-            })
-        );
+        const codeAndHtmlMaskedBlock = maskLinkDestinations(seg.preMasked);
         const maskedBlock = codeAndHtmlMaskedBlock.replace(
           /(?:(?:ftp|https?):\/\/|www\.)(?:[a-zA-Z0-9-]+\.?)+(?:\\.|[^\s<\\\[\]\uE000-\uE004])*/gi,
           function (match, offset, fullStr) {

@@ -2081,6 +2081,10 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '',
       'abc\uE004def（x）',
       '',
+      '[a（x）]: /one',
+      '',
+      '[a（x）] 與 [a（x）][] 與 [說明（一）][a（x）] 與 [說明（二）][未定義（y）] 與 [普通（文字）]',
+      '',
       'https://example.com/a)（b）後 與 https://example.com/a(b（說明）'
     ].join('\n');
     const expected = [
@@ -2352,6 +2356,10 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       'x (1) | y',
       '',
       'abc\uE004def (x)',
+      '',
+      '[a（x）]: /one',
+      '',
+      '[a（x）] 與 [a（x）][] 與 [說明 (一)][a（x）] 與 [說明 (二)][未定義（y）] 與 [普通 (文字)]',
       '',
       'https://example.com/a)（b）後 與 https://example.com/a(b (說明)'
     ].join('\n');
