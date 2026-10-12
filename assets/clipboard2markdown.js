@@ -816,64 +816,122 @@
     markdownSyntax: function (text) {
       const baseText = plainTextRules.genericPlainText(text);
       const lines = baseText.split('\n');
-      let inCodeBlock = false;
+      const UNESCAPED_PIPE_RE = /(?<=(?:^|[^\\])(?:\\\\)*)\|/;
+
+      const updateFenceState = function (line, activeFence) {
+        if (!activeFence) {
+          const openMatch = line.match(/^\s*(`{3,}|~{3,})(.*)$/);
+          if (openMatch && !(openMatch[1][0] === '`' && openMatch[2].includes('`'))) {
+            return { char: openMatch[1][0], length: openMatch[1].length };
+          }
+          return null;
+        }
+        const closeRegex = new RegExp('^\\s*' + activeFence.char + '{' + activeFence.length + ',}\\s*$');
+        return closeRegex.test(line) ? null : activeFence;
+      };
+
+      const splitTableCells = function (line) {
+        const trimmed = line.trim().replace(/^\|/, '').replace(/(?<=(?:^|[^\\])(?:\\\\)*)\|$/, '');
+        return trimmed.split(UNESCAPED_PIPE_RE).map(function (cell) {
+          return cell.trim();
+        });
+      };
+
+      const isTableDelimiterLine = function (line) {
+        return UNESCAPED_PIPE_RE.test(line) && splitTableCells(line).every(function (cell) {
+          return /^:?-+:?$/.test(cell);
+        });
+      };
+
+      let activeFence = null;
       const normalizedLines = lines.map(function (line) {
-        if (/^\s*```/.test(line)) {
-          inCodeBlock = !inCodeBlock;
+        const nextFence = updateFenceState(line, activeFence);
+        if (nextFence !== activeFence) {
+          activeFence = nextFence;
           return line;
         }
-        if (inCodeBlock) {
+        if (activeFence) {
           return line.replace(/（/g, '(').replace(/）/g, ')');
         }
-        return line
+        const protectedSpans = [];
+        const maskSpan = function (str) {
+          const token = '\uE000P2MSPAN' + protectedSpans.length + '\uE001';
+          protectedSpans.push(str);
+          return token;
+        };
+        const maskedLine = line
+          .replace(/(`+)([^`]|(?!\1)`)*\1/g, function (match) {
+            return maskSpan(match);
+          })
+          .replace(/(\]\()((?:[^()\r\n]|\([^()\r\n]*\))+)(\))/g, function (match, prefix, dest, suffix) {
+            return prefix + maskSpan(dest) + suffix;
+          });
+        const normalized = maskedLine
+          .replace(
+            /(\*\*|__|\*(?!\*)|_(?!_))(?=\S)((?:(?!\1).)+?)(?<=\S)\1/g,
+            function (match, delim, inner, offset, fullStr) {
+              if (!inner.endsWith('）')) {
+                return match;
+              }
+              const updatedInner = inner.slice(0, -1) + ')';
+              const rest = fullStr.slice(offset + match.length);
+              const needsSpace = /^[\u4e00-\u9fffA-Za-z0-9`*_\[\uE000]/.test(rest);
+              return delim + updatedInner + delim + (needsSpace ? ' ' : '');
+            }
+          )
           .replace(/([\u4e00-\u9fffA-Za-z0-9])（/g, '$1 (')
           .replace(/（/g, '(')
-          .replace(/）(\*\*|__|\*|_)?(?=[\u4e00-\u9fffA-Za-z0-9`])/g, ')$1 ')
+          .replace(/）(?=[\u4e00-\u9fffA-Za-z0-9`*_\[\uE000])/g, ') ')
           .replace(/）/g, ')');
+        return normalized.replace(/\uE000P2MSPAN(\d+)\uE001/g, function (match, idx) {
+          return protectedSpans[Number(idx)];
+        });
       });
 
       const formattedLines = [];
       let lineIndex = 0;
-      inCodeBlock = false;
+      activeFence = null;
       while (lineIndex < normalizedLines.length) {
         const currentLine = normalizedLines[lineIndex];
-        if (/^\s*```/.test(currentLine)) {
-          inCodeBlock = !inCodeBlock;
+        const nextFence = updateFenceState(currentLine, activeFence);
+        if (nextFence !== activeFence) {
+          activeFence = nextFence;
           formattedLines.push(currentLine);
           lineIndex++;
           continue;
         }
         if (
-          !inCodeBlock &&
-          currentLine.trim().startsWith('|') &&
+          !activeFence &&
           lineIndex + 1 < normalizedLines.length &&
-          /^\s*\|(?:\s*:?-+:?\s*\|)+\s*$/.test(normalizedLines[lineIndex + 1])
+          UNESCAPED_PIPE_RE.test(currentLine) &&
+          isTableDelimiterLine(normalizedLines[lineIndex + 1]) &&
+          splitTableCells(currentLine).length === splitTableCells(normalizedLines[lineIndex + 1]).length
         ) {
           const tableLines = [];
-          while (lineIndex < normalizedLines.length && normalizedLines[lineIndex].trim().startsWith('|')) {
+          while (
+            lineIndex < normalizedLines.length &&
+            updateFenceState(normalizedLines[lineIndex], null) === null &&
+            UNESCAPED_PIPE_RE.test(normalizedLines[lineIndex])
+          ) {
             tableLines.push(normalizedLines[lineIndex]);
             lineIndex++;
           }
-          const rows = tableLines.map(function (tLine) {
-            return tLine.trim().replace(/^\|/, '').replace(/\|$/, '').split(/(?<!\\)\|/).map(function (cell) {
-              return cell.trim();
-            });
-          });
-          const colCount = Math.max.apply(null, rows.map(function (row) {
-            return row.length;
-          }));
+          const rows = tableLines.map(splitTableCells);
+          const colCount = rows[0].length;
           const colWidths = new Array(colCount).fill(3);
           rows.forEach(function (row, rIdx) {
             if (rIdx === 1) return;
-            row.forEach(function (cell, cIdx) {
-              if (cell.length > colWidths[cIdx]) {
-                colWidths[cIdx] = cell.length;
+            for (let cIdx = 0; cIdx < colCount; cIdx++) {
+              const cellLen = (row[cIdx] || '').length;
+              if (cellLen > colWidths[cIdx]) {
+                colWidths[cIdx] = cellLen;
               }
-            });
+            }
           });
           rows.forEach(function (row, rIdx) {
+            const rowIndent = tableLines[rIdx].match(/^\s*/)[0];
             if (rIdx === 1) {
-              formattedLines.push('| ' + colWidths.map(function (width, cIdx) {
+              formattedLines.push(rowIndent + '| ' + colWidths.map(function (width, cIdx) {
                 const rawSep = row[cIdx] || '';
                 const leftColon = rawSep.startsWith(':');
                 const rightColon = rawSep.endsWith(':') && rawSep.length > 1;
@@ -889,7 +947,7 @@
                 return '-'.repeat(width);
               }).join(' | ') + ' |');
             } else {
-              formattedLines.push('| ' + colWidths.map(function (width, cIdx) {
+              formattedLines.push(rowIndent + '| ' + colWidths.map(function (width, cIdx) {
                 return (row[cIdx] || '').padEnd(width, ' ');
               }).join(' | ') + ' |');
             }
@@ -1972,9 +2030,18 @@
           return (spaces < min) ? spaces : min;
         }, Infinity);
         text = lines.map(line => line.slice(minSpaces)).join('\n');
-        const markdownCorrected = plainTextRules.markdownSyntax(text);
-        if (markdownCorrected !== null) {
-          text = markdownCorrected;
+        let vscodeMode = '';
+        try {
+          const vscodeMeta = JSON.parse(event.clipboardData.getData('vscode-editor-data'));
+          vscodeMode = (vscodeMeta && typeof vscodeMeta.mode === 'string') ? vscodeMeta.mode.toLowerCase() : '';
+        } catch (err) {
+          vscodeMode = '';
+        }
+        if (vscodeMode === 'markdown') {
+          const markdownCorrected = plainTextRules.markdownSyntax(text);
+          if (markdownCorrected !== null) {
+            text = markdownCorrected;
+          }
         }
 
         console.log('Plain Text: ', text);

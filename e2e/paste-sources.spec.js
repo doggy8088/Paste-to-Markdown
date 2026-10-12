@@ -1526,5 +1526,77 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const markdown = await convertPaste(page, { text: tableWithAlign });
     expect(markdown).toBe(expectedTable);
   });
+
+  test('does not apply markdown syntax correction when VS Code mode is not markdown', async function ({ page }) {
+    await gotoApp(page);
+    const vscodeData = { version: 1, isFromEmptySelection: false, mode: 'javascript' };
+    const code = '  const msg = "測試（值）";\n  console.log(msg);';
+    const markdown = await convertPaste(page, { vscode: vscodeData, text: code });
+    expect(markdown).toBe('const msg = "測試（值）";\nconsole.log(msg);');
+    const malformed = await convertPaste(page, { vscode: 'invalid-json', text: code });
+    expect(malformed).toBe('const msg = "測試（值）";\nconsole.log(msg);');
+  });
+
+  test('handles four-backtick and tilde fences without premature close or table formatting', async function ({ page }) {
+    await gotoApp(page);
+    const input = [
+      '````markdown',
+      '```',
+      '範例（內嵌）文字',
+      '```',
+      '````',
+      '~~~text',
+      '| A | B |',
+      '| --- | --- |',
+      '| 1（一） | 2 |',
+      '~~~'
+    ].join('\n');
+    const expected = [
+      '````markdown',
+      '```',
+      '範例(內嵌)文字',
+      '```',
+      '````',
+      '~~~text',
+      '| A | B |',
+      '| --- | --- |',
+      '| 1(一) | 2 |',
+      '~~~'
+    ].join('\n');
+    const markdown = await convertPaste(page, { text: input });
+    expect(markdown).toBe(expected);
+  });
+
+  test('protects link destinations and inline code while distinguishing opening vs closing emphasis', async function ({ page }) {
+    await gotoApp(page);
+    const input = [
+      '請參考 [文件（一）](https://example.com/頁面（測試）) 與 `呼叫（值）` 範例。',
+      '公司（Cisco）**產品**與**思科**公司（Cisco）**設備**以及**交換器（switch）**主要功能。'
+    ].join('\n');
+    const expected = [
+      '請參考 [文件 (一)](https://example.com/頁面（測試）) 與 `呼叫（值）` 範例。',
+      '公司 (Cisco) **產品**與**思科**公司 (Cisco) **設備**以及**交換器 (switch)** 主要功能。'
+    ].join('\n');
+    const markdown = await convertPaste(page, { text: input });
+    expect(markdown).toBe(expected);
+  });
+
+  test('handles optional boundary pipes, nested table indentation, even backslashes, and header column schema', async function ({ page }) {
+    await gotoApp(page);
+    const input = [
+      '- 清單內表格：',
+      '  Name | Value',
+      '  --- | ---',
+      '  A \\\\| B | 多餘欄位 | 忽略'
+    ].join('\n');
+    const expected = [
+      '- 清單內表格：',
+      '  | Name | Value |',
+      '  | ---- | ----- |',
+      '  | A \\\\ | B     |'
+    ].join('\n');
+    const markdown = await convertPaste(page, { text: input });
+    expect(markdown).toBe(expected);
+  });
 });
 
