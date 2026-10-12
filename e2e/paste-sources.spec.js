@@ -1583,6 +1583,21 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '註解（保留）',
       '```',
       '-->',
+      '<!DOCTYPE html>',
+      '<div>',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      '</div>',
+      '',
+      '<xmp>',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      '</xmp>',
+      '> <div>',
+      '> 引用內區塊（保留）',
+      '離開引用區塊（散文）',
       '<pre>',
       '```',
       '原樣（保留）',
@@ -1636,6 +1651,21 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '註解（保留）',
       '```',
       '-->',
+      '<!DOCTYPE html>',
+      '<div>',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      '</div>',
+      '',
+      '<xmp>',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      '</xmp>',
+      '> <div>',
+      '> 引用內區塊（保留）',
+      '離開引用區塊 (散文)',
       '<pre>',
       '```',
       '原樣（保留）',
@@ -1695,14 +1725,23 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     expect(markdown).toBe(expected);
   });
 
-  test('handles optional boundary pipes, nested/blockquoted table indentation, even backslashes, header column schema, following list, top-level 4-space fence, and specialized rule post-processing', async function ({ page }) {
+  test('handles optional boundary pipes, nested/blockquoted table indentation, front matter, even backslashes, header column schema, following list, top-level 4-space fence, and specialized rule post-processing', async function ({ page }) {
     await gotoApp(page);
     const input = [
+      '---',
+      'permalink: /guide（zh）/index',
+      'A | B',
+      '--- | ---',
+      '---',
       '- 清單內表格：',
       '  Name | Value',
       '  --- | ---',
       '  A \\\\| B | 多餘欄位 | 忽略',
       '- 選項 A | 選項 B',
+      '- > 欄甲 | 欄乙',
+      '  > --- | ---',
+      '  > 1 | 2345',
+      '- > 另一項 | 非同表',
       '> | 甲 | 乙 |',
       '> | --- | --- |',
       '> | 1 | 2345 |',
@@ -1712,11 +1751,20 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '後段文字（仍應修正）'
     ].join('\n');
     const expected = [
+      '---',
+      'permalink: /guide（zh）/index',
+      'A | B',
+      '--- | ---',
+      '---',
       '- 清單內表格：',
       '  | Name | Value |',
       '  | ---- | ----- |',
       '  | A \\\\ | B     |',
       '- 選項 A | 選項 B',
+      '- > | 欄甲  | 欄乙   |',
+      '  > | --- | ---- |',
+      '  > | 1   | 2345 |',
+      '- > 另一項 | 非同表',
       '> | 甲    | 乙    |',
       '> | ---- | ---- |',
       '> | 1    | 2345 |',
@@ -1727,6 +1775,10 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     ].join('\n');
     const markdown = await convertPaste(page, { text: input });
     expect(markdown).toBe(expected);
+
+    const tomlInput = '+++\ntitle = "標題（測試）"\n+++\n段落（散文）';
+    const tomlMarkdown = await convertPaste(page, { text: tomlInput });
+    expect(tomlMarkdown).toBe('+++\ntitle = "標題（測試）"\n+++\n段落 (散文)');
 
     const copilotInput = ' ● **交換器（switch）**主要\n   後續（說明）文字';
     const copilotMarkdown = await convertPaste(page, { text: copilotInput });
