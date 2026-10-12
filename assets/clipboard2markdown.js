@@ -859,6 +859,7 @@
       };
 
       let listContentIndent = 0;
+      let listIndents = [];
       const getQuotePrefix = function (line) {
         const match = line.match(/^((?:[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+)+)?([ \t]*>(?:[ \t]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)*>)*[ \t]?)(.*)$/);
         if (!match) {
@@ -880,9 +881,17 @@
         const q = getQuotePrefix(line);
         const listMatch = !isProtectedBlock && !THEMATIC_BREAK_RE.test(q.rest) && (allowAnyOrdered || !/^[ \t]*(?!1[.)])\d{1,9}[.)]/.test(q.rest)) && line.match(/^([ \t]*)(?:>[ \t]*)*(?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )|[ \t]))+/);
         if (listMatch && countIndentCols(listMatch[1]) <= listContentIndent + 3) {
-          listContentIndent = countIndentCols(listMatch[0]);
+          const nextIndent = countIndentCols(listMatch[0]);
+          listIndents = listIndents.filter(function (n) {
+            return n < nextIndent;
+          }).concat(nextIndent);
+          listContentIndent = nextIndent;
         } else if (line.trim() !== '' && countIndentCols(line.match(/^[ \t]*/)[0]) < listContentIndent) {
-          listContentIndent = 0;
+          const lineIndent = countIndentCols(line.match(/^[ \t]*/)[0]);
+          listIndents = listIndents.filter(function (n) {
+            return n <= lineIndent;
+          });
+          listContentIndent = listIndents[listIndents.length - 1] || 0;
         }
       };
 
@@ -978,14 +987,17 @@
         });
       };
 
-      const isTableRowCandidate = function (line) {
+      const isTableRowCandidate = function (line, requirePipe = true) {
         const t = getTableRowParts(line);
         const maxIndent = (t.depth > 0 || t.hasList) ? 3 : listContentIndent + 3;
         return (
+          !blockSpanLineRe.test(line) &&
           !multilineSpanRe.test(line) &&
+          t.rest.trim() !== '' &&
+          !THEMATIC_BREAK_RE.test(t.rest) &&
           countIndentCols(t.rest.match(/^[ \t]*/)[0]) <= maxIndent &&
-          !/^[ \t]*#{1,6}[ \t]/.test(t.rest) &&
-          UNESCAPED_PIPE_RE.test(t.rest)
+          !/^[ \t]*#{1,6}(?:[ \t]|$)/.test(t.rest) &&
+          (!requirePipe || UNESCAPED_PIPE_RE.test(t.rest))
         );
       };
 
@@ -1143,7 +1155,7 @@
           /^[ \t]{0,3}(?:#{1,6}(?:[ \t]|$)|(?:=+|-+)[ \t]*$)/.test(prevProse) ||
           THEMATIC_BREAK_RE.test(prevProse) ||
           /(?:^|\n[ \t]*\n)[ \t]{0,3}\[(?:\\.|[^\\\n\]])+\]:[ \t]*(?:\n[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*)(?:"[^"\n]*"|'[^'\n]*'|\([^()\n]*\)))?[ \t]*$/.test(proseTail);
-        const prevListIndent = listContentIndent;
+        const prevListIndent = prevProse.trim() === '' ? 0 : listContentIndent;
         const allowAnyOrdered = isBlockBoundary || prevListIndent > 0;
         if (!activeFence) {
           updateListIndent(line, false, allowAnyOrdered);
@@ -1186,8 +1198,8 @@
       flushProse();
 
       const maskMath = function (str) {
-        const openRe = /\$\$[\s\S]+?\$\$|(?<!\\|\$)\$(?!\$)(?:[^\s$\\]|\\.)/g;
-        const closeRe = /(?<=(?:^|[^\\])(?:\\\\)*(?:[^\s$\\]|\\.))\$(?!\d)/g;
+        const openRe = /\$\$[\s\S]+?\$\$|(?<!\\|\$)\$(?!\$)[^\s$]/g;
+        const closeRe = /(?<=[^\s$])\$(?!\d)/g;
         let out = '';
         let lastIdx = 0;
         let m;
@@ -1233,12 +1245,15 @@
               return maskSpan(match, isAutolink, false, isAutolink || match.startsWith('</'));
             })
             .replace(/^([ \t]*(?:(?:>|(?:[-*+]|\d{1,9}[.)])[ \t])[ \t]*)*\[(?:\\.|[^\\\n\]])+\]:[ \t]*)((?:\n[ \t]*(?:>[ \t]*)*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*(?:>[ \t]*)*)(?:"(?:\\.|[^"\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n]|\n(?![ \t]*\n))*'|\((?:\\.|[^()\n]|\n(?![ \t]*\n))*\))[ \t]*(?=\n|$))?)/gm, function (match, prefix, destAndTitle, offset, fullStr) {
-              const prevLine = offset > 0 ? fullStr.slice(0, offset - 1).split('\n').pop() : '';
+              const prevQ = getQuotePrefix(offset > 0 ? fullStr.slice(0, offset - 1).split('\n').pop() : '');
               if (
                 offset > 0 &&
                 offset !== validDefEnd &&
                 !/[-*+]|\d[.)]/.test(prefix.slice(0, prefix.indexOf('['))) &&
-                getQuotePrefix(prevLine).rest.trim() !== ''
+                getQuotePrefix(prefix).depth <= prevQ.depth &&
+                prevQ.rest.trim() !== '' &&
+                !/^[ \t]{0,3}(?:#{1,6}(?:[ \t]|$)|(?:=+|-+)[ \t]*$)/.test(prevQ.rest) &&
+                !THEMATIC_BREAK_RE.test(prevQ.rest)
               ) {
                 return match;
               }
@@ -1305,10 +1320,11 @@
       const formattedLines = [];
       let lineIndex = 0;
       listContentIndent = 0;
+      listIndents = [];
       while (lineIndex < normalizedLines.length) {
         const currentLine = normalizedLines[lineIndex];
         const isBlockLine = blockSpanLineRe.test(currentLine);
-        const prevListIndent = listContentIndent;
+        const prevListIndent = (lineIndex > 0 && normalizedLines[lineIndex - 1].trim() !== '') ? listContentIndent : 0;
         updateListIndent(isBlockLine ? restoreSpans(currentLine) : currentLine, isBlockLine);
         if (isBlockLine) {
           formattedLines.push(currentLine);
@@ -1335,7 +1351,7 @@
             !getTableRowParts(normalizedLines[lineIndex]).hasList &&
             getQuotePrefix(normalizedLines[lineIndex]).depth <= tableQuoteDepth &&
             countIndentCols(getTableRowParts(normalizedLines[lineIndex]).prefix + getTableRowParts(normalizedLines[lineIndex]).rest.match(/^[ \t]*/)[0]) >= listContentIndent &&
-            isTableRowCandidate(normalizedLines[lineIndex])
+            isTableRowCandidate(normalizedLines[lineIndex], false)
           ) {
             tableLines.push(normalizedLines[lineIndex]);
             lineIndex++;
