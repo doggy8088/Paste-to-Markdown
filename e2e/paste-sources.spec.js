@@ -2079,9 +2079,20 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '- | -',
       'x（1） | y',
       '',
+      '> intro',
+      'A | B',
+      '- | -',
+      'x（1） | y',
+      '',
       '> - A | B',
       '> - | -',
       'x（1） | y',
+      '',
+      '- item',
+      '  text $$值（x）$$',
+      '',
+      '- item',
+      'text $$值（x）$$',
       '',
       '</pre>',
       'raw（x）',
@@ -2362,9 +2373,20 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '- | -',
       'x (1) | y',
       '',
+      '> intro',
+      'A | B',
+      '- | -',
+      'x (1) | y',
+      '',
       '> - A | B',
       '> - | -',
       'x (1) | y',
+      '',
+      '- item',
+      '  text $$值 (x)$$',
+      '',
+      '- item',
+      'text $$值 (x)$$',
       '',
       '</pre>',
       'raw (x)',
@@ -2400,6 +2422,10 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const longUnclosedMath = '$a '.repeat(40000);
     const longUnclosedMathMarkdown = await convertPaste(page, { text: longUnclosedMath + '（測試）' });
     expect(longUnclosedMathMarkdown).toBe(longUnclosedMath + '(測試)');
+
+    const longUnclosedBlockMath = '$$a '.repeat(40001);
+    const longUnclosedBlockMathMarkdown = await convertPaste(page, { text: longUnclosedBlockMath + '（測試）' });
+    expect(longUnclosedBlockMathMarkdown).toBe(longUnclosedBlockMath + '(測試)');
 
     const longEmphasisBody = 'a'.repeat(501);
     const longEmphasisMarkdown = await convertPaste(page, { text: '**' + longEmphasisBody + '**（Cisco）產品' });

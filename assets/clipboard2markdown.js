@@ -886,7 +886,7 @@
 
       const updateListIndent = function (line, isProtectedBlock, allowAnyOrdered = true) {
         const q = getQuotePrefix(line);
-        if (q.depth !== listQuoteDepth) {
+        if (q.depth > listQuoteDepth || (q.depth < listQuoteDepth && (q.rest.trim() === '' || hasBlockInterrupt(q.rest)))) {
           listIndents = [];
           listContentIndent = 0;
           listQuoteDepth = q.depth;
@@ -1227,7 +1227,7 @@
         const beforePrevProse = currentProseLines.length > 1 ? getTableRowParts(currentProseLines[currentProseLines.length - 2]).rest : '';
         const isBlockBoundary =
           !prevT ||
-          qBefore.depth > prevT.depth ||
+          qBefore.depth > listQuoteDepth ||
           prevProse.trim() === '' ||
           isHeadingOrHrLine(prevProse, beforePrevProse) ||
           /(?:^|\n[ \t]*\n)[ \t]{0,3}\[(?:\\.|[^\\\n\]])+\]:[ \t]*(?:\n[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*)(?:"[^"\n]*"|'[^'\n]*'|\([^()\n]*\)))?[ \t]*$/.test(proseTail);
@@ -1236,9 +1236,9 @@
         const isTableStartDelim =
           !isBlockBoundary &&
           !inProseTable &&
-          qBefore.depth <= prevT.depth &&
+          qBefore.depth <= listQuoteDepth &&
           isTableRowCandidate(currentProseLines[currentProseLines.length - 1]) &&
-          isTableDelimiterLine(line, qBefore.depth < prevT.depth ? Infinity : (listContentIndent || prevListIndent)) &&
+          isTableDelimiterLine(line, qBefore.depth < listQuoteDepth ? Infinity : (listContentIndent || prevListIndent)) &&
           splitTableCells(currentProseLines[currentProseLines.length - 1]).length === splitTableCells(line, true).length;
         if (!activeFence && !isTableStartDelim) {
           updateListIndent(line, false, allowAnyOrdered);
@@ -1305,37 +1305,82 @@
       flushProse();
 
       const maskMath = function (str) {
-        const openRe = /\$\$[\s\S]+?\$\$|(?<=(?:^|[^\\$])(?:\\\\)*)\$(?!\$)[^\s$\uE004]/g;
+        const openRe = /\$\$|(?<=(?:^|[^\\$])(?:\\\\)*)\$(?!\$)[^\s$\uE004]/g;
+        const blockCloseRe = /\$\$/g;
+        const closeEndRe = /[ \t]*(?:\n|$)/y;
         const closeRe = /(?<=[^\s$])\$(?!\d)/g;
+        const paraBreakRe = /\n[ \t]*\n/g;
+        const rowBreakRe = /[\n\uE004]/g;
+        let inlineCloseIdx = -2;
+        let paraBreakIdx = -2;
+        let rowBreakIdx = -2;
+        listContentIndent = 0;
+        listQuoteDepth = 0;
+        listIndents = [];
+        let curLineStart = 0;
+        let curLineEnd = -1;
+        let curFirstPipeIdx = Infinity;
+        let curHasHeading = false;
+        let curContentStart = 0;
+        let inListPara = false;
         let out = '';
         let lastIdx = 0;
         let m;
         while ((m = openRe.exec(str)) !== null) {
-          if (m[0].startsWith('$$')) {
-            const lineStart = str.lastIndexOf('\n', m.index - 1) + 1;
-            const beforeOnLine = getTableRowParts(str.slice(lineStart, m.index));
-            if (
-              !beforeOnLine.rest.includes('\uE004') &&
-              (!m[0].includes('\uE004') || m[0].includes('\n')) &&
-              (!beforeOnLine.hasList || beforeOnLine.rest.trim() === '') &&
-              !/^[ \t]{0,3}#{1,6}[ \t]/.test(beforeOnLine.rest) &&
-              /^[ \t]*(?:\n|$)/.test(str.slice(openRe.lastIndex))
-            ) {
-              out += str.slice(lastIdx, m.index) + maskSpan(m[0].replace(/\uE004/g, '|'), false);
-              lastIdx = openRe.lastIndex;
+          while (m.index > curLineEnd) {
+            curLineStart = curLineEnd + 1;
+            const nextNl = str.indexOf('\n', curLineStart);
+            curLineEnd = nextNl === -1 ? str.length : nextNl;
+            const curLine = str.slice(curLineStart, curLineEnd);
+            const curT = getTableRowParts(curLine);
+            updateListIndent(curLine, false);
+            inListPara = curT.rest.trim() !== '' && (listContentIndent > 0 || (inListPara && !hasBlockInterrupt(curT.rest)));
+            const pipeOffset = curLine.indexOf('\uE004');
+            curFirstPipeIdx = pipeOffset === -1 ? Infinity : curLineStart + pipeOffset;
+            curHasHeading = /^[ \t]{0,3}#{1,6}[ \t]/.test(curT.rest);
+            curContentStart = curLineStart + curT.prefix.length + curT.rest.match(/^[ \t]*/)[0].length;
+          }
+          if (m[0] === '$$') {
+            if (!curHasHeading && m.index < curFirstPipeIdx && (!inListPara || m.index <= curContentStart)) {
+              blockCloseRe.lastIndex = m.index + 3;
+              const bm = blockCloseRe.exec(str);
+              if (bm) {
+                openRe.lastIndex = bm.index + 2;
+                closeEndRe.lastIndex = openRe.lastIndex;
+                const rawMath = str.slice(m.index, openRe.lastIndex);
+                if ((!rawMath.includes('\uE004') || rawMath.includes('\n')) && closeEndRe.test(str)) {
+                  out += str.slice(lastIdx, m.index) + maskSpan(rawMath.replace(/\uE004/g, '|'), false);
+                  lastIdx = openRe.lastIndex;
+                }
+              }
             }
           } else {
-            const lineEnd = str.indexOf('\n', m.index);
-            const onTableRow = str.slice(str.lastIndexOf('\n', m.index - 1) + 1, lineEnd === -1 ? str.length : lineEnd).includes('\uE004');
-            const paraBreak = str.slice(openRe.lastIndex).search(onTableRow ? /\n|\uE004/ : /\n[ \t]*\n/);
-            const limitIdx = paraBreak === -1 ? str.length : openRe.lastIndex + paraBreak;
-            closeRe.lastIndex = openRe.lastIndex;
-            const cm = closeRe.exec(str.slice(0, limitIdx));
-            if (!cm) {
+            let limitIdx;
+            if (curFirstPipeIdx !== Infinity) {
+              if (rowBreakIdx !== -1 && rowBreakIdx < openRe.lastIndex) {
+                rowBreakRe.lastIndex = openRe.lastIndex;
+                const rm = rowBreakRe.exec(str);
+                rowBreakIdx = rm ? rm.index : -1;
+              }
+              limitIdx = rowBreakIdx === -1 ? str.length : rowBreakIdx;
+            } else {
+              if (paraBreakIdx !== -1 && paraBreakIdx < openRe.lastIndex) {
+                paraBreakRe.lastIndex = openRe.lastIndex;
+                const pm = paraBreakRe.exec(str);
+                paraBreakIdx = pm ? pm.index : -1;
+              }
+              limitIdx = paraBreakIdx === -1 ? str.length : paraBreakIdx;
+            }
+            if (inlineCloseIdx !== -1 && inlineCloseIdx < openRe.lastIndex) {
+              closeRe.lastIndex = openRe.lastIndex;
+              const cm = closeRe.exec(str);
+              inlineCloseIdx = cm ? cm.index : -1;
+            }
+            if (inlineCloseIdx === -1 || inlineCloseIdx >= limitIdx) {
               openRe.lastIndex = limitIdx;
               continue;
             }
-            openRe.lastIndex = cm.index + 1;
+            openRe.lastIndex = inlineCloseIdx + 1;
             out += str.slice(lastIdx, m.index) + maskSpan(str.slice(m.index, openRe.lastIndex).replace(/\uE004/g, '|'), true);
             lastIdx = openRe.lastIndex;
           }
@@ -1480,7 +1525,7 @@
           lineIndex++;
           continue;
         }
-        const tableQuoteDepth = getQuotePrefix(currentLine).depth;
+        const tableQuoteDepth = listQuoteDepth;
         const tableListIndent = tableQuoteDepth ? 0 : (listContentIndent || prevListIndent);
         if (
           lineIndex + 1 < normalizedLines.length &&
