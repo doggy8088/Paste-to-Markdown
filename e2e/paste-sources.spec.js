@@ -1572,8 +1572,17 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '頂層圍欄（程式碼）',
       '```',
       '圍欄後（散文）',
+      '- > ```',
+      '  > 清單引用（程式碼）',
+      '  > ```',
+      '      > 縮排大於（散文）',
       '\t```',
       'Tab縮排後（散文）',
+      '<!--',
+      '```',
+      '註解（保留）',
+      '```',
+      '-->',
       '<pre>',
       '```',
       '原樣（保留）',
@@ -1616,8 +1625,17 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '頂層圍欄(程式碼)',
       '```',
       '圍欄後 (散文)',
+      '- > ```',
+      '  > 清單引用(程式碼)',
+      '  > ```',
+      '      > 縮排大於 (散文)',
       '\t```',
       'Tab縮排後 (散文)',
+      '<!--',
+      '```',
+      '註解（保留）',
+      '```',
+      '-->',
       '<pre>',
       '```',
       '原樣（保留）',
@@ -1636,12 +1654,16 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const input = [
       '請參考 [文件（一）](foo(a(b（c）))\\))（連結）、[未閉合](foo 與 [標籤]（測試）及 `呼叫（值）`（參數）以及 `跨行（',
       '測試）` 範例，並顯示 \\`符號（test）\\` 後文與 foo_bar（baz）_qux、foo_テスト（x）_bar、foo_（x）_bar、_（x）_bar 識別字。',
-      '裸網址 https://example.com/foo（bar） 與 <https://example.com/auto（link）> 皆保持不變。',
+      '裸網址 https://example.com/foo（bar） 與 www.example.com/a（b（c）d） 與 ftp://example.com/a（b） 與（請見 https://example.com/x（y））後文與 <https://example.com/auto（link）> 皆保持不變。',
       'HTML <a title="1 > 0" href="page（test）.html">連結（一）</a> 與 <pre>原樣（保留）</pre> 屬性不變。',
       '[ref]: https://example.com/ref（目標）',
       '[cont]:',
       '  page（目標）',
-      '公式 $x（1）$（說明）與區塊：',
+      '公式 $x（1）$（說明）、跨行行內公式 $a',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      'z$ 與區塊：',
       '$$',
       'a | b（1）',
       '--- | ---',
@@ -1652,12 +1674,16 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const expected = [
       '請參考 [文件 (一)](foo(a(b（c）))\\)) (連結)、[未閉合](foo 與 [標籤] (測試) 及 `呼叫（值）` (參數) 以及 `跨行（',
       '測試）` 範例，並顯示 \\`符號 (test)\\` 後文與 foo_bar (baz)_qux、foo_テスト (x)_bar、foo_(x)_bar、_(x)_bar 識別字。',
-      '裸網址 https://example.com/foo（bar） 與 <https://example.com/auto（link）> 皆保持不變。',
+      '裸網址 https://example.com/foo（bar） 與 www.example.com/a（b（c）d） 與 ftp://example.com/a（b） 與 (請見 https://example.com/x（y）) 後文與 <https://example.com/auto（link）> 皆保持不變。',
       'HTML <a title="1 > 0" href="page（test）.html">連結 (一)</a> 與 <pre>原樣（保留）</pre> 屬性不變。',
       '[ref]: https://example.com/ref（目標）',
       '[cont]:',
       '  page（目標）',
-      '公式 $x（1）$ (說明) 與區塊：',
+      '公式 $x（1）$ (說明)、跨行行內公式 $a',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      'z$ 與區塊：',
       '$$',
       'a | b（1）',
       '--- | ---',
@@ -1709,6 +1735,10 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const wordNestedInput = '\uf06e\t巢狀項目（測試）';
     const wordNestedMarkdown = await convertPaste(page, { text: wordNestedInput });
     expect(wordNestedMarkdown).toBe('  - 巢狀項目 (測試)');
+
+    const crlfInput = '```\r\nCRLF（程式碼）\r\n```\r\n段落（散文）';
+    const crlfMarkdown = await convertPaste(page, { text: crlfInput });
+    expect(crlfMarkdown).toBe('```\nCRLF(程式碼)\n```\n段落 (散文)');
   });
 });
 

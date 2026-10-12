@@ -814,7 +814,8 @@
 
     // Auto-correct pasted Markdown syntax (full-width parentheses spacing & GFM table alignment)
     markdownSyntax: function (text) {
-      const lines = text.split('\n');
+      const normalizedInput = text.replace(/\r\n?/g, '\n');
+      const lines = normalizedInput.split('\n');
       const UNESCAPED_PIPE_RE = /(?<=(?:^|[^\\])(?:\\\\)*)\|/;
 
       const countIndentCols = function (ws) {
@@ -836,13 +837,18 @@
       };
 
       const getQuotePrefix = function (line) {
-        const match = line.match(/^((?: {0,3}> ?)+)(.*)$/);
+        const match = line.match(/^([ \t]*(?:[-*+]|\d+[.)])[ \t]+)?([ \t]*> ?(?: {0,3}> ?)*)(.*)$/);
         if (!match) {
           return { depth: 0, rest: line };
         }
+        const firstQuoteWs = match[2].match(/^[ \t]*/)[0];
+        const maxQuoteIndent = match[1] ? 3 : listContentIndent + 3;
+        if (countIndentCols(firstQuoteWs) > maxQuoteIndent) {
+          return { depth: 0, rest: line };
+        }
         return {
-          depth: (match[1].match(/>/g) || []).length,
-          rest: match[2]
+          depth: (match[2].match(/>/g) || []).length,
+          rest: match[3]
         };
       };
 
@@ -1001,9 +1007,9 @@
           segments.push({ fenced: true, line: line.replace(/（/g, '(').replace(/）/g, ')') });
           return;
         }
-        const htmlBlockOpen = line.match(/<(script|style|pre|textarea)\b(?:[^>"']|"[^"]*"|'[^']*')*>/i);
+        const htmlBlockOpen = line.match(/<(script|style|pre|textarea)\b(?:[^>"']|"[^"]*"|'[^']*')*>|<!--/i);
         if (htmlBlockOpen) {
-          const closeRe = new RegExp('<\\/' + htmlBlockOpen[1] + '\\s*>', 'i');
+          const closeRe = htmlBlockOpen[1] ? new RegExp('<\\/' + htmlBlockOpen[1] + '\\s*>', 'i') : /-->/;
           if (!closeRe.test(line)) {
             activeHtmlEnd = closeRe;
           }
@@ -1027,7 +1033,7 @@
           .replace(/(?<=(?:^|[^\\])(?:\\\\)*)(`+)(?!`)(?:[\s\S]*?[^`])?\1(?!`)/g, function (match) {
             return maskSpan(match, true);
           })
-          .replace(/\$\$[\s\S]+?\$\$|(?<!\\|\$)\$(?:[^\s$\\]|\\.)(?:[^\n$]*?(?:[^\s$\\]|\\.))?\$(?!\d|\$)/g, function (match) {
+          .replace(/\$\$[\s\S]+?\$\$|(?<!\\|\$)\$(?:[^\s$\\]|\\.)(?:[\s\S]*?(?:[^\s$\\]|\\.))?\$(?!\d|\$)/g, function (match) {
             return maskSpan(match, !match.startsWith('$$'));
           })
           .replace(/<\/?[A-Za-z](?:[^>"'\r\n]|"[^"\r\n]*"|'[^'\r\n]*')*>/gi, function (match) {
@@ -1038,9 +1044,22 @@
           });
         codeAndHtmlMaskedBlock.split('\n').forEach(function (line) {
           const maskedLine = maskLinkDestinations(line).replace(
-            /<https?:\/\/[^>\s]+>|https?:\/\/(?:[^\s<>)\]（）]|（[^\s<>)\]（）]*）)+/g,
+            /(?:(?:ftp|https?):\/\/|www\.)(?:[a-zA-Z0-9-]+\.?)+[^\s<]*/gi,
             function (match) {
-              return maskSpan(match, false);
+              let fwDepth = 0;
+              let end = 0;
+              while (end < match.length) {
+                if (match[end] === '（') {
+                  fwDepth++;
+                } else if (match[end] === '）') {
+                  if (fwDepth === 0) {
+                    break;
+                  }
+                  fwDepth--;
+                }
+                end++;
+              }
+              return maskSpan(match.slice(0, end), false) + match.slice(end);
             }
           );
           const normalized = maskedLine
@@ -1159,7 +1178,7 @@
       const result = formattedLines.join('\n').replace(/[\uE000\uE002]P2MSPAN(\d+)[\uE001\uE003]/g, function (match, idx) {
         return protectedSpans[Number(idx)];
       });
-      if (result === text) {
+      if (result === normalizedInput) {
         return null;
       }
 
