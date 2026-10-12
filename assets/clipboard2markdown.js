@@ -860,7 +860,7 @@
 
       let listContentIndent = 0;
       const getQuotePrefix = function (line) {
-        const match = line.match(/^((?:[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+)+)?([ \t]*> ?(?:(?:[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+)*[ \t]*> ?)*)(.*)$/);
+        const match = line.match(/^((?:[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+)+)?([ \t]*>(?:[ \t]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)*>)* ?)(.*)$/);
         if (!match) {
           return { depth: 0, prefix: '', rest: line };
         }
@@ -870,15 +870,15 @@
           return { depth: 0, prefix: '', rest: line };
         }
         return {
-          depth: (match[2].match(/>/g) || []).length,
+          depth: match[2].match(/>/g).length,
           prefix: (match[1] || '') + match[2],
           rest: match[3]
         };
       };
 
-      const updateListIndent = function (line, isProtectedBlock) {
+      const updateListIndent = function (line, isProtectedBlock, allowAnyOrdered = true) {
         const q = getQuotePrefix(line);
-        const listMatch = !isProtectedBlock && !THEMATIC_BREAK_RE.test(q.rest) && line.match(/^([ \t]*)(?:>[ \t]*)*(?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )|[ \t]))+/);
+        const listMatch = !isProtectedBlock && !THEMATIC_BREAK_RE.test(q.rest) && (allowAnyOrdered || !/^[ \t]*(?!1[.)])\d{1,9}[.)]/.test(q.rest)) && line.match(/^([ \t]*)(?:>[ \t]*)*(?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )|[ \t]))+/);
         if (listMatch && countIndentCols(listMatch[1]) <= listContentIndent + 3) {
           listContentIndent = countIndentCols(listMatch[0]);
         } else if (line.trim() !== '' && countIndentCols(line.match(/^[ \t]*/)[0]) < listContentIndent) {
@@ -909,11 +909,11 @@
         return false;
       };
 
-      const updateFenceState = function (line, activeFence) {
+      const updateFenceState = function (line, activeFence, allowAnyOrdered = true) {
         const q = getQuotePrefix(line);
         if (!activeFence) {
           const openMatch = q.rest.match(/^([ \t]*)((?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )|[ \t]))+)?(?:\[[ xX]\][ \t]+)?(`{3,}|~{3,})(.*)$/);
-          if (openMatch && !(openMatch[3][0] === '`' && openMatch[4].includes('`'))) {
+          if (openMatch && (!openMatch[2] || allowAnyOrdered || !/^(?!1[.)])\d/.test(openMatch[2])) && !(openMatch[3][0] === '`' && openMatch[4].includes('`'))) {
             const openIndent = countIndentCols(openMatch[1]);
             const listOffset = openMatch[2] ? countIndentCols(openMatch[1] + openMatch[2]) - openIndent : 0;
             const containerIndent = q.depth > 0 ? 0 : (listOffset > 0 ? openIndent + listOffset : listContentIndent);
@@ -1131,10 +1131,24 @@
         if (hasFenceContainerEnded(line, activeFence)) {
           activeFence = null;
         }
+        const proseTail = currentProseLines.slice(-3).map(function (l) {
+          return getTableRowParts(l).rest;
+        }).join('\n');
+        const prevT = currentProseLines.length > 0 ? getTableRowParts(currentProseLines[currentProseLines.length - 1]) : null;
+        const prevProse = prevT ? prevT.rest : '';
+        const isBlockBoundary =
+          !prevT ||
+          qBefore.depth > prevT.depth ||
+          prevProse.trim() === '' ||
+          /^[ \t]{0,3}(?:#{1,6}(?:[ \t]|$)|(?:=+|-+)[ \t]*$)/.test(prevProse) ||
+          THEMATIC_BREAK_RE.test(prevProse) ||
+          /(?:^|\n)[ \t]{0,3}\[(?:\\.|[^\\\n\]])+\]:[ \t]*(?:\n[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*)(?:"[^"\n]*"|'[^'\n]*'|\([^()\n]*\)))?[ \t]*$/.test(proseTail);
+        const prevListIndent = listContentIndent;
+        const allowAnyOrdered = isBlockBoundary || prevListIndent > 0;
         if (!activeFence) {
-          updateListIndent(line, false);
+          updateListIndent(line, false, allowAnyOrdered);
         }
-        const nextFence = updateFenceState(line, activeFence);
+        const nextFence = updateFenceState(line, activeFence, allowAnyOrdered);
         if (nextFence !== activeFence) {
           flushProse();
           activeFence = nextFence;
@@ -1147,25 +1161,13 @@
         }
         const t = getTableRowParts(line);
         const maxProseIndent = (t.depth > 0 || t.hasList) ? 3 : listContentIndent + 3;
-        const proseTail = currentProseLines.slice(-3).map(function (l) {
-          return getTableRowParts(l).rest;
-        }).join('\n');
-        const prevT = currentProseLines.length > 0 ? getTableRowParts(currentProseLines[currentProseLines.length - 1]) : null;
-        const prevProse = prevT ? prevT.rest : '';
-        const atBlockStart =
-          !prevT ||
-          t.hasList ||
-          t.depth > prevT.depth ||
-          prevProse.trim() === '' ||
-          /^[ \t]{0,3}(?:#{1,6}(?:[ \t]|$)|(?:=+|-+)[ \t]*$)/.test(prevProse) ||
-          THEMATIC_BREAK_RE.test(prevProse) ||
-          /(?:^|\n)[ \t]{0,3}\[(?:\\.|[^\\\n\]])+\]:[ \t]*(?:\n[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*)(?:"[^"\n]*"|'[^'\n]*'|\([^()\n]*\)))?[ \t]*$/.test(proseTail);
+        const atBlockStart = isBlockBoundary || t.hasList;
         if (atBlockStart && t.rest.trim() !== '' && countIndentCols(t.rest.match(/^[ \t]*/)[0]) > maxProseIndent) {
           flushProse();
           segments.push({ fenced: true, line: line.replace(/（/g, '(').replace(/）/g, ')') });
           return;
         }
-        const htmlCloseRe = getHtmlBlockCloseRe(t.rest, atBlockStart);
+        const htmlCloseRe = getHtmlBlockCloseRe(t.rest, atBlockStart || prevListIndent > 0);
         if (htmlCloseRe) {
           flushProse();
           segments.push({ fenced: true, line: line });
@@ -1189,17 +1191,17 @@
             .replace(/(?<=(?:^|[^\\`])(?:\\\\)*)(`+)(?!`)(?:[\s\S]*?[^`])?\1(?!`)/g, function (match) {
               return maskSpan(match, true);
             })
-            .replace(/<(script|style|pre|textarea|xmp|noscript|noembed|noframes|plaintext|iframe|code|kbd|samp|tt)\b(?:[^>"']|"[^"]*"|'[^']*')*>[\s\S]*?(?:<\/\1>|$)|<!--[\s\S]*?(?:-->|$)|<\?[\s\S]*?(?:\?>|$)|<![A-Za-z][\s\S]*?(?:>|$)|<!\[CDATA\[[\s\S]*?(?:\]\]>|$)/gi, function (match) {
+            .replace(/<(script|style|pre|textarea|xmp|noscript|noembed|noframes|plaintext|iframe|code|kbd|samp|tt)\b(?:[^>"']|"(?:[^"\n]|\n(?![ \t]*\n))*"|'(?:[^'\n]|\n(?![ \t]*\n))*')*>[\s\S]*?(?:<\/\1>|$)|<!--[\s\S]*?(?:-->|$)|<\?[\s\S]*?(?:\?>|$)|<![A-Za-z][\s\S]*?(?:>|$)|<!\[CDATA\[[\s\S]*?(?:\]\]>|$)/gi, function (match) {
               return maskSpan(match, /^<(?:code|kbd|samp|tt)\b/i.test(match));
             })
             .replace(/\$\$[\s\S]+?\$\$|(?<!\\|\$)\$(?:[^\s$\\]|\\.)(?:[\s\S]*?(?:[^\s$\\]|\\.))?\$(?!\d)/g, function (match) {
               return maskSpan(match, !match.startsWith('$$'));
             })
-            .replace(/<[A-Za-z][\w-]*(?:(?:[ \t]|\n(?![ \t]*\n))+[A-Za-z:_][\w.:-]*(?:(?:[ \t]|\n(?![ \t]*\n))*=(?:[ \t]|\n(?![ \t]*\n))*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+))?)*(?:[ \t]|\n(?![ \t]*\n))*\/?>|<\/[A-Za-z][\w:-]*(?:[ \t]|\n(?![ \t]*\n))*>|<([a-zA-Z][a-zA-Z0-9+.-]{1,31}:[^\s\x00-\x1f<>]+|[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+)>/gi, function (match, autolink) {
+            .replace(/<[A-Za-z][\w-]*(?:(?:[ \t]|\n(?![ \t]*\n))+[A-Za-z:_][\w.:-]*(?:(?:[ \t]|\n(?![ \t]*\n))*=(?:[ \t]|\n(?![ \t]*\n))*(?:"(?:[^"\n]|\n(?![ \t]*\n))*"|'(?:[^'\n]|\n(?![ \t]*\n))*'|[^\s"'=<>`]+))?)*(?:[ \t]|\n(?![ \t]*\n))*\/?>|<\/[A-Za-z][\w:-]*(?:[ \t]|\n(?![ \t]*\n))*>|<([a-zA-Z][a-zA-Z0-9+.-]{1,31}:[^\s\x00-\x1f<>]+|[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+)>/gi, function (match, autolink) {
               const isAutolink = Boolean(autolink);
               return maskSpan(match, isAutolink, false, isAutolink || match.startsWith('</'));
             })
-            .replace(/^((?:[ \t]*>[ \t]*|[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+|[ \t])*\[(?:\\.|[^\\\n\]])+\]:[ \t]*)((?:\n(?:[ \t]*>[ \t]*)*[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n(?:[ \t]*>[ \t]*)*[ \t]*)(?:"(?:\\.|[^"\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n]|\n(?![ \t]*\n))*'|\((?:\\.|[^()\n]|\n(?![ \t]*\n))*\))[ \t]*(?=\n|$))?)/gm, function (match, prefix, destAndTitle) {
+            .replace(/^([ \t]*(?:(?:>|(?:[-*+]|\d{1,9}[.)])[ \t])[ \t]*)*\[(?:\\.|[^\\\n\]])+\]:[ \t]*)((?:\n[ \t]*(?:>[ \t]*)*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*(?:>[ \t]*)*)(?:"(?:\\.|[^"\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n]|\n(?![ \t]*\n))*'|\((?:\\.|[^()\n]|\n(?![ \t]*\n))*\))[ \t]*(?=\n|$))?)/gm, function (match, prefix, destAndTitle) {
               return prefix + maskSpan(destAndTitle, false);
             })
         );
@@ -1233,7 +1235,7 @@
         const normalizedBlock = maskedBlock
           .replace(/(?<=(?:^|[^\\])(?:\\\\)*\\)(?=[（）])/g, '\\')
           .replace(
-            /(?<=(?:^|[^\\])(?:\\\\)*)(\*{1,3}(?!\*)|_{1,3}(?!_)|(?<!~)~~(?!~))(?=\S)((?:(?!\1)(?:[^\n]|\n(?![ \t]*(?:\n|$|[-*+>|#]|\d{1,9}[.)]))))+?)(?<=\S)\1((?:\*|_)?[^\s*_~]+?(?:\*|_)?\1\1|(?!(?:(\*{1,3}(?!\*)|_{1,3}(?!_)|(?<!~)~~(?!~))(?=\S)(?:(?!\4).)+?(?<=\S)\4))(?:\*{1,3}(?!\*)|_{1,3}(?!_)))?/g,
+            /(?<=(?:^|[^\\])(?:\\\\)*)(\*{1,3}(?!\*)|_{1,3}(?!_)|(?<!~)~~(?!~))(?=\S)((?:(?!\1)(?:[^\n]|\n(?![ \t]*(?:\n|$|[-*+>|#]|\d{1,9}[.)]))))+?)(?<=\S)\1((?<=）\1)(?:\*|_)?[^\s*_~]+?(?<![\s*_~（(、；，。！？：])\1(?:[^\n*_~]+?(?<![\s*_~（(、；，。！？：]))?\1(?=(?!\1)[\s*_~（）()、；，。！？：]|$)|(?!(?:(\*{1,3}(?!\*)|_{1,3}(?!_)|(?<!~)~~(?!~))(?=\S)(?:(?!\4).)+?(?<=\S)\4))(?:\*{1,3}(?!\*)|_{1,3}(?!_)))?/g,
             function (match, delim, inner, extraClose, _nextDelim, offset, fullStr) {
               const prevChar = offset > 0 ? fullStr[offset - 1] : '';
               const closeDelim = delim + (extraClose || '');
@@ -1284,10 +1286,14 @@
           const tableListIndent = tableQuoteDepth ? 0 : (listContentIndent || prevListIndent);
           const tableLines = [currentLine];
           lineIndex++;
+          // Intentionally allow `depth <= tableQuoteDepth` for blockquoted tables because the bundled
+          // Marked parser includes lazy blockquote continuation rows (without repeating `>`) in the
+          // same table, while requiring `>= listContentIndent` so dedented lines exit list tables.
           while (
             lineIndex < normalizedLines.length &&
             !getTableRowParts(normalizedLines[lineIndex]).hasList &&
             getQuotePrefix(normalizedLines[lineIndex]).depth <= tableQuoteDepth &&
+            countIndentCols(getTableRowParts(normalizedLines[lineIndex]).prefix + getTableRowParts(normalizedLines[lineIndex]).rest.match(/^[ \t]*/)[0]) >= listContentIndent &&
             isTableRowCandidate(normalizedLines[lineIndex])
           ) {
             tableLines.push(normalizedLines[lineIndex]);
