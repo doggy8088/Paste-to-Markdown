@@ -815,6 +815,12 @@
     // Auto-correct pasted Markdown syntax (full-width parentheses spacing & GFM table alignment)
     markdownSyntax: function (text) {
       const normalizedInput = text.replace(/\r\n?/g, '\n');
+      let spanTag = 'P2MSPAN';
+      while (normalizedInput.includes(spanTag)) {
+        spanTag += '_';
+      }
+      const spanTokenRe = new RegExp('[\\uE000\\uE002]' + spanTag + '(\\d+)[\\uE001\\uE003]', 'g');
+      const blockSpanLineRe = new RegExp('^\\uE002' + spanTag + '\\d+\\uE003$');
       const lines = normalizedInput.split('\n');
       const UNESCAPED_PIPE_RE = /(?<=(?:^|[^\\])(?:\\\\)*)\|/;
 
@@ -827,7 +833,8 @@
       };
 
       const HTML_RAW_TAG_RE = /^ {0,3}<(script|pre|style|textarea|xmp|noscript|noembed|noframes|plaintext|iframe)(?=[\s/>]|$)/i;
-      const HTML_BLOCK_TAG_RE = /^ {0,3}(?:<\/?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|meta|nav|noframes|ol|optgroup|option|p|param|section|source|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?=[\s/>]|$)|(?:<[A-Za-z][\w-]*(?: +[A-Za-z:_][\w.:-]*(?: *= *"[^"\n]*"| *= *'[^'\n]*'| *= *[^\s"'=<>`]+)?)*? *\/?>|<\/[A-Za-z][\w-]*\s*>)[ \t]*$)/i;
+      const HTML_TYPE6_TAG_RE = /^ {0,3}<\/?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|meta|nav|noframes|ol|optgroup|option|p|param|section|source|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?=[\s/>]|$)/i;
+      const HTML_TYPE7_TAG_RE = /^ {0,3}(?:<[A-Za-z][\w-]*(?: +[A-Za-z:_][\w.:-]*(?: *= *"[^"\n]*"| *= *'[^'\n]*'| *= *[^\s"'=<>`]+)?)*? *\/?>|<\/[A-Za-z][\w-]*\s*>)[ \t]*$/;
       const HTML_SPECIAL_OPEN_RE = /^ {0,3}(<!--|<\?|<![A-Za-z]|<!\[CDATA\[)/;
       const HTML_SPECIAL_CLOSE_MAP = {
         '<!--': /-->/,
@@ -835,7 +842,7 @@
         '<![CDATA[': /\]\]>/
       };
 
-      const getHtmlBlockCloseRe = function (rest) {
+      const getHtmlBlockCloseRe = function (rest, atBlockStart) {
         const rawMatch = rest.match(HTML_RAW_TAG_RE);
         if (rawMatch) {
           return new RegExp('<\\/' + rawMatch[1] + '\\s*>', 'i');
@@ -844,12 +851,12 @@
         if (specialMatch) {
           return HTML_SPECIAL_CLOSE_MAP[specialMatch[1]] || />/;
         }
-        return HTML_BLOCK_TAG_RE.test(rest) ? /^[ \t]*$/ : null;
+        return (HTML_TYPE6_TAG_RE.test(rest) || (atBlockStart && HTML_TYPE7_TAG_RE.test(rest))) ? /^[ \t]*$/ : null;
       };
 
       let listContentIndent = 0;
       const updateListIndent = function (line) {
-        const listMatch = line.match(/^((?:[ \t]*>[ \t]*|[ \t]*)(?:[-*+]|\d+[.)])[ \t]+)/);
+        const listMatch = line.match(/^((?:[ \t]*>[ \t]*|[ \t]*)(?:[-*+]|\d{1,9}[.)])[ \t]+)/);
         if (listMatch) {
           listContentIndent = countIndentCols(listMatch[1]);
         } else if (line.trim() !== '' && countIndentCols(line.match(/^[ \t]*/)[0]) < listContentIndent) {
@@ -858,7 +865,7 @@
       };
 
       const getQuotePrefix = function (line) {
-        const match = line.match(/^((?:[ \t]*(?:[-*+]|\d+[.)])[ \t]+)+)?([ \t]*> ?(?:(?:[ \t]*(?:[-*+]|\d+[.)])[ \t]+)*[ \t]*> ?)*)(.*)$/);
+        const match = line.match(/^((?:[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+)+)?([ \t]*> ?(?:(?:[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+)*[ \t]*> ?)*)(.*)$/);
         if (!match) {
           return { depth: 0, prefix: '', rest: line };
         }
@@ -882,8 +889,8 @@
         if (activeFence.quoteDepth > 0 && q.depth < activeFence.quoteDepth) {
           return (
             q.rest.trim() === '' ||
-            /^ {0,3}(?:#{1,6}(?:[ \t]|$)|(?:[-*+]|\d+[.)])[ \t]|(?:\*[ \t]*){3,}$|(?:-[ \t]*){3,}$|(?:_[ \t]*){3,}$|`{3,}(?=[^`]*$)|~{3,})/.test(q.rest) ||
-            getHtmlBlockCloseRe(q.rest) !== null
+            /^ {0,3}(?:#{1,6}(?:[ \t]|$)|(?:[-*+]|\d{1,9}[.)])[ \t]|(?:\*[ \t]*){3,}$|(?:-[ \t]*){3,}$|(?:_[ \t]*){3,}$|`{3,}(?=[^`]*$)|~{3,})/.test(q.rest) ||
+            getHtmlBlockCloseRe(q.rest, false) !== null
           );
         }
         if (
@@ -900,7 +907,7 @@
       const updateFenceState = function (line, activeFence) {
         const q = getQuotePrefix(line);
         if (!activeFence) {
-          const openMatch = q.rest.match(/^([ \t]*)((?:[-*+]|\d+[.)])[ \t]+)?(`{3,}|~{3,})(.*)$/);
+          const openMatch = q.rest.match(/^([ \t]*)((?:[-*+]|\d{1,9}[.)])[ \t]+)?(`{3,}|~{3,})(.*)$/);
           if (openMatch && !(openMatch[3][0] === '`' && openMatch[4].includes('`'))) {
             const openIndent = countIndentCols(openMatch[1]);
             const listOffset = openMatch[2] ? countIndentCols(openMatch[1] + openMatch[2]) - openIndent : 0;
@@ -943,14 +950,14 @@
       const isTableRowCandidate = function (line) {
         const q = getQuotePrefix(line);
         return (
-          !/^\s*(?:#{1,6}\s|(?:[-*+]|\d+[.)])\s)/.test(q.rest) &&
+          !/^[ \t]*(?:#{1,6}[ \t]|(?:[-*+]|\d{1,9}[.)])[ \t]|\[[^\n\]]+\]:[ \t]*)/.test(q.rest) &&
           UNESCAPED_PIPE_RE.test(q.rest)
         );
       };
 
       const isTableDelimiterLine = function (line) {
         return (
-          !/^[ \t]*(?:[-*+]|\d+[.)])[ \t]/.test(line) &&
+          !/^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]/.test(line) &&
           isTableRowCandidate(line) &&
           splitTableCells(line).every(function (cell) {
             return /^:?-+:?$/.test(cell);
@@ -962,7 +969,7 @@
       const maskSpan = function (str, isCode) {
         const prefix = isCode ? '\uE000' : '\uE002';
         const suffix = isCode ? '\uE001' : '\uE003';
-        const token = prefix + 'P2MSPAN' + protectedSpans.length + suffix;
+        const token = prefix + spanTag + protectedSpans.length + suffix;
         protectedSpans.push(str);
         return token;
       };
@@ -979,11 +986,25 @@
           out += str.slice(i, openIdx + 2);
           let cursor = openIdx + 2;
           let depth = 1;
-          while (cursor < str.length && str[cursor] !== '\r' && str[cursor] !== '\n' && depth > 0) {
+          let seenHref = false;
+          while (cursor < str.length && depth > 0) {
             if (str[cursor] === '\\' && cursor + 1 < str.length) {
+              seenHref = true;
               cursor += 2;
               continue;
             }
+            if (depth === 1 && /\s/.test(str[cursor])) {
+              const tailRe = seenHref
+                ? /^(?:[ \t]|\n(?![ \t]*\n))*(?:(?:"(?:\\.|[^"\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n]|\n(?![ \t]*\n))*'|\((?:\\.|[^()\n]|\n(?![ \t]*\n))*\))(?:[ \t]|\n(?![ \t]*\n))*)?(?=\))/
+                : /^(?:[ \t]|\n(?![ \t]*\n))+/;
+              const wsMatch = str.slice(cursor).match(tailRe);
+              if (!wsMatch) {
+                break;
+              }
+              cursor += wsMatch[0].length;
+              continue;
+            }
+            seenHref = true;
             if (str[cursor] === '(') {
               depth++;
             } else if (str[cursor] === ')') {
@@ -1055,7 +1076,8 @@
           return;
         }
         const q = getQuotePrefix(line);
-        const htmlCloseRe = getHtmlBlockCloseRe(q.rest);
+        const atBlockStart = currentProseLines.length === 0 || getQuotePrefix(currentProseLines[currentProseLines.length - 1]).rest.trim() === '';
+        const htmlCloseRe = getHtmlBlockCloseRe(q.rest, atBlockStart);
         if (htmlCloseRe) {
           flushProse();
           segments.push({ fenced: true, line: line });
@@ -1075,25 +1097,27 @@
           normalizedLines.push(maskSpan(seg.line, false));
           return;
         }
-        const codeAndHtmlMaskedBlock = seg.text
-          .replace(/<(script|style|pre|textarea|xmp|noscript|noembed|noframes|plaintext|iframe|code|kbd|samp|tt)\b(?:[^>"']|"[^"]*"|'[^']*')*>[\s\S]*?(?:<\/\1>|$)|<!--[\s\S]*?(?:-->|$)|<\?[\s\S]*?(?:\?>|$)|<![A-Za-z][\s\S]*?(?:>|$)|<!\[CDATA\[[\s\S]*?(?:\]\]>|$)/gi, function (match) {
-            return maskSpan(match, false);
-          })
-          .replace(/(?<=(?:^|[^\\])(?:\\\\)*)(`+)(?!`)(?:[\s\S]*?[^`])?\1(?!`)/g, function (match) {
-            return maskSpan(match, true);
-          })
-          .replace(/\$\$[\s\S]+?\$\$|(?<!\\|\$)\$(?:[^\s$\\]|\\.)(?:[\s\S]*?(?:[^\s$\\]|\\.))?\$(?!\d|\$)/g, function (match) {
-            return maskSpan(match, !match.startsWith('$$'));
-          })
-          .replace(/<\/?[A-Za-z](?:[^>"'\r\n]|"[^"\r\n]*"|'[^'\r\n]*')*>/gi, function (match) {
-            return maskSpan(match, false);
-          })
-          .replace(/^((?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}\[[^\n\]]+\]:[ \t]*(?:\n(?:[ \t]{0,3}>[ \t]?)*[ \t]*)?)(<[^>\r\n]+>|\S+)/gm, function (match, prefix, dest) {
-            return prefix + maskSpan(dest, false);
-          });
+        const codeAndHtmlMaskedBlock = maskLinkDestinations(
+          seg.text
+            .replace(/<(script|style|pre|textarea|xmp|noscript|noembed|noframes|plaintext|iframe|code|kbd|samp|tt)\b(?:[^>"']|"[^"]*"|'[^']*')*>[\s\S]*?(?:<\/\1>|$)|<!--[\s\S]*?(?:-->|$)|<\?[\s\S]*?(?:\?>|$)|<![A-Za-z][\s\S]*?(?:>|$)|<!\[CDATA\[[\s\S]*?(?:\]\]>|$)/gi, function (match) {
+              return maskSpan(match, false);
+            })
+            .replace(/(?<=(?:^|[^\\])(?:\\\\)*)(`+)(?!`)(?:[\s\S]*?[^`])?\1(?!`)/g, function (match) {
+              return maskSpan(match, true);
+            })
+            .replace(/\$\$[\s\S]+?\$\$|(?<!\\|\$)\$(?:[^\s$\\]|\\.)(?:[\s\S]*?(?:[^\s$\\]|\\.))?\$(?!\d|\$)/g, function (match) {
+              return maskSpan(match, !match.startsWith('$$'));
+            })
+            .replace(/<\/?[A-Za-z](?:[^>"'\r\n]|"[^"\r\n]*"|'[^'\r\n]*')*>/gi, function (match) {
+              return maskSpan(match, false);
+            })
+            .replace(/^((?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}\[[^\n\]]+\]:[ \t]*(?:\n(?:[ \t]{0,3}>[ \t]?)*[ \t]*)?)(<[^>\r\n]+>|\S+)/gm, function (match, prefix, dest) {
+              return prefix + maskSpan(dest, false);
+            })
+        );
         codeAndHtmlMaskedBlock.split('\n').forEach(function (line) {
-          const maskedLine = maskLinkDestinations(line).replace(
-            /(?:(?:ftp|https?):\/\/|www\.)(?:[a-zA-Z0-9-]+\.?)+[^\s<]*/gi,
+          const maskedLine = line.replace(
+            /(?:(?:ftp|https?):\/\/|www\.)(?:[a-zA-Z0-9-]+\.?)+[^\s<\[\]\uE000-\uE003]*/gi,
             function (match) {
               let fwDepth = 0;
               let end = 0;
@@ -1134,7 +1158,7 @@
             .replace(/（/g, '(')
             .replace(/）(?=[\p{L}\p{N}`\[\uE000]|(\*+)(?=\S)(?:(?!\1).)+?(?<=\S)\1|(_+)(?=\S)(?:(?!\2).)+?(?<=\S)\2(?![\p{L}\p{N}(（]))/gu, ') ')
             .replace(/）/g, ')');
-          normalizedLines.push(normalized.replace(/[\uE000\uE002]P2MSPAN(\d+)[\uE001\uE003]/g, function (match, idx) {
+          normalizedLines.push(normalized.replace(spanTokenRe, function (match, idx) {
             const original = protectedSpans[Number(idx)];
             return original.includes('\n') ? match : original;
           }));
@@ -1146,7 +1170,7 @@
       listContentIndent = 0;
       while (lineIndex < normalizedLines.length) {
         const currentLine = normalizedLines[lineIndex];
-        if (/^\uE002P2MSPAN\d+\uE003$/.test(currentLine)) {
+        if (blockSpanLineRe.test(currentLine)) {
           formattedLines.push(currentLine);
           lineIndex++;
           continue;
@@ -1164,7 +1188,7 @@
           lineIndex++;
           while (
             lineIndex < normalizedLines.length &&
-            !/^[ \t]*(?:[-*+]|\d+[.)])[ \t]/.test(normalizedLines[lineIndex]) &&
+            !/^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]/.test(normalizedLines[lineIndex]) &&
             getQuotePrefix(normalizedLines[lineIndex]).depth <= tableQuoteDepth &&
             isTableRowCandidate(normalizedLines[lineIndex])
           ) {
@@ -1217,7 +1241,7 @@
         }
       }
 
-      const result = formattedLines.join('\n').replace(/[\uE000\uE002]P2MSPAN(\d+)[\uE001\uE003]/g, function (match, idx) {
+      const result = formattedLines.join('\n').replace(spanTokenRe, function (match, idx) {
         return protectedSpans[Number(idx)];
       });
       if (result === normalizedInput) {

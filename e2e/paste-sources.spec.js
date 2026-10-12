@@ -1611,6 +1611,19 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '```',
       '</pre>',
       '區塊後（散文）',
+      '',
+      '<custom-box>',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      '</custom-box>',
+      '',
+      '段落前（一）',
+      '<span>',
+      '段落後（二）',
+      '1234567890. ~~~',
+      '            十位數（非清單）',
+      '            ~~~',
       '<pre>',
       '未閉合（保留）'
     ].join('\n');
@@ -1686,6 +1699,19 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '```',
       '</pre>',
       '區塊後 (散文)',
+      '',
+      '<custom-box>',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      '</custom-box>',
+      '',
+      '段落前 (一)',
+      '<span>',
+      '段落後 (二)',
+      '1234567890. ~~~',
+      '            十位數 (非清單)',
+      '            ~~~',
       '<pre>',
       '未閉合（保留）'
     ].join('\n');
@@ -1696,8 +1722,9 @@ Port-channel1(設定推測為交換器間中繼鏈路)
   test('protects deeply nested link destinations, bare/angle/reference URLs, raw HTML, math, and inline/multiline code while handling brackets, nested emphasis, and Unicode intraword underscores', async function ({ page }) {
     await gotoApp(page);
     const input = [
-      '請參考 [文件（一）](foo(a(b（c）))\\))（連結）、[未閉合](foo 與 [標籤]（測試）及 `呼叫（值）`（參數）以及 `跨行（',
-      '測試）` 範例，並顯示 \\`符號（test）\\` 與 literal \\（x\\） 後文與 foo_bar（baz）_qux、foo_テスト（x）_bar、foo_（x）_bar、_（x）_bar 識別字。',
+      '請參考 [文件（一）](foo(a(b（c）))\\))（連結）、[跨行連結](',
+      'foo（bar） "標題（一）")（說明）、[https://example.com/foo](url)（說明）後、[未閉合](foo 與 [標籤]（測試）及 `呼叫（值）`（參數）以及 `跨行（',
+      '測試）` 範例，並顯示 \\`符號（test）\\` 與 literal \\（x\\） 後文與 \uE002P2MSPAN0\uE003（測試） 與 foo_bar（baz）_qux、foo_テスト（x）_bar、foo_（x）_bar、_（x）_bar 識別字。',
       '裸網址 https://example.com/foo（bar） 與 www.example.com/a（b（c）d） 與 ftp://example.com/a（b） 與（請見 https://example.com/x（y））後文與 <https://example.com/auto（link）> 皆保持不變。',
       'HTML <a title="1 > 0" href="page（test）.html">連結（一）</a> 與 <code>call（arg）</code> 與 <pre>原樣（保留）</pre> 屬性不變。',
       '[ref]: https://example.com/ref（目標）',
@@ -1716,8 +1743,9 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '**公司**（Cisco）產品與**思科**公司（Cisco）**設備**、**交換器（switch）**主要功能、***路由器（router）***主要用途、**甲（x）****乙**、**甲（x）**__乙__ 與 *丙 **丁（x）***後。'
     ].join('\n');
     const expected = [
-      '請參考 [文件 (一)](foo(a(b（c）))\\)) (連結)、[未閉合](foo 與 [標籤] (測試) 及 `呼叫（值）` (參數) 以及 `跨行（',
-      '測試）` 範例，並顯示 \\`符號 (test)\\` 與 literal \\\\(x\\\\) 後文與 foo_bar (baz)_qux、foo_テスト (x)_bar、foo_(x)_bar、_(x)_bar 識別字。',
+      '請參考 [文件 (一)](foo(a(b（c）))\\)) (連結)、[跨行連結](',
+      'foo（bar） "標題（一）") (說明)、[https://example.com/foo](url) (說明) 後、[未閉合](foo 與 [標籤] (測試) 及 `呼叫（值）` (參數) 以及 `跨行（',
+      '測試）` 範例，並顯示 \\`符號 (test)\\` 與 literal \\\\(x\\\\) 後文與 \uE002P2MSPAN0\uE003(測試) 與 foo_bar (baz)_qux、foo_テスト (x)_bar、foo_(x)_bar、_(x)_bar 識別字。',
       '裸網址 https://example.com/foo（bar） 與 www.example.com/a（b（c）d） 與 ftp://example.com/a（b） 與 (請見 https://example.com/x（y）) 後文與 <https://example.com/auto（link）> 皆保持不變。',
       'HTML <a title="1 > 0" href="page（test）.html">連結 (一)</a> 與 <code>call（arg）</code> 與 <pre>原樣（保留）</pre> 屬性不變。',
       '[ref]: https://example.com/ref（目標）',
@@ -1747,6 +1775,8 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       'A | B',
       '--- | ---',
       '---',
+      '[x]: foo|bar',
+      '---|---',
       '- 清單內表格：',
       '  Name | Value',
       '  --- | ---',
@@ -1770,6 +1800,8 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       'A | B',
       '--- | ---',
       '---',
+      '[x]: foo|bar',
+      '---|---',
       '- 清單內表格：',
       '  | Name | Value |',
       '  | ---- | ----- |',
