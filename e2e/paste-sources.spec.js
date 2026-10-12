@@ -1764,7 +1764,7 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '--- | ---',
       'c | d',
       '$$',
-      '**公司**（Cisco）產品與**思科**公司（Cisco）**設備**、~~公司（Cisco）~~產品、~~**公司（x）**~~產品、~~公司~~（Cisco）~~設備~~、**交換器（switch）**主要功能、***路由器（router）***主要用途、**甲（x）****乙**、**甲（x）**__乙__、**甲（x）**~~乙~~、~~丙 **丁（x）**~~後 與 *丙 **丁（x）***後 與 *公司（x）*尾**（後）產品 與 *a（x）*b尾*後（y）產品* 與 **交換器',
+      '**公司**（Cisco）產品與**思科**公司（Cisco）**設備**、~~公司（Cisco）~~產品、~~**公司（x）**~~產品、~~公司~~（Cisco）~~設備~~、**交換器（switch）**主要功能、***路由器（router）***主要用途、**甲（x）****乙**、**甲（x）**__乙__、**甲（x）**~~乙~~、~~丙 **丁（x）**~~後 與 *丙 **丁（x）***後 與 *公司（x）*尾**（後）產品 與 *a（x）*b尾*後（y）產品* 與 *公司（x）*尾**後（y）** 與 **交換器',
       '型號（switch）**主要。'
     ].join('\n');
     const expected = [
@@ -1792,7 +1792,7 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '--- | ---',
       'c | d',
       '$$',
-      '**公司** (Cisco) 產品與**思科**公司 (Cisco) **設備**、~~公司 (Cisco)~~ 產品、~~**公司 (x)**~~ 產品、~~公司~~ (Cisco) ~~設備~~、**交換器 (switch)** 主要功能、***路由器 (router)*** 主要用途、**甲 (x)** **乙**、**甲 (x)** __乙__、**甲 (x)** ~~乙~~、~~丙 **丁 (x)**~~ 後 與 *丙 **丁 (x)*** 後 與 *公司 (x)*尾** (後) 產品 與 *a (x)*b尾*後 (y) 產品* 與 **交換器',
+      '**公司** (Cisco) 產品與**思科**公司 (Cisco) **設備**、~~公司 (Cisco)~~ 產品、~~**公司 (x)**~~ 產品、~~公司~~ (Cisco) ~~設備~~、**交換器 (switch)** 主要功能、***路由器 (router)*** 主要用途、**甲 (x)** **乙**、**甲 (x)** __乙__、**甲 (x)** ~~乙~~、~~丙 **丁 (x)**~~ 後 與 *丙 **丁 (x)*** 後 與 *公司 (x)*尾** (後) 產品 與 *a (x)*b尾*後 (y) 產品* 與 *公司 (x)*尾**後 (y)** 與 **交換器',
       '型號 (switch)** 主要。'
     ].join('\n');
     const markdown = await convertPaste(page, { text: input });
@@ -1901,6 +1901,13 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       'x（1） | y',
       '</custom>',
       '',
+      '- 清單項目後縮排自訂標籤',
+      '    <custom>',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      '</custom>',
+      '',
       '前導段落二',
       '> <custom>',
       '> A | B',
@@ -1917,7 +1924,7 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       'after（x）',
       '> ```',
       '一般段落重置清單縮排',
-      '2. ```',
+      '2. ~~~',
       '   code（x）after',
       '   ```',
       'next（y）',
@@ -1934,7 +1941,11 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '>\t公司（x）產品',
       '>\tA | B',
       '>\t--- | ---',
-      '>\tx（1） | y'
+      '>\tx（1） | y',
+      '',
+      'pre ```',
+      'x（y）',
+      '```'
     ].join('\n');
     const expected = [
       '---',
@@ -2036,6 +2047,13 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       'x（1） | y',
       '</custom>',
       '',
+      '- 清單項目後縮排自訂標籤',
+      '    <custom>',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      '</custom>',
+      '',
       '前導段落二',
       '> <custom>',
       '> A | B',
@@ -2052,7 +2070,7 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       'after(x)',
       '> ```',
       '一般段落重置清單縮排',
-      '2. ```',
+      '2. ~~~',
       '   code (x) after',
       '   ```',
       'next(y)',
@@ -2069,7 +2087,11 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '>\t公司 (x) 產品',
       '>\t| A     | B   |',
       '>\t| ----- | --- |',
-      '>\t| x (1) | y   |'
+      '>\t| x (1) | y   |',
+      '',
+      'pre ```',
+      'x（y）',
+      '```'
     ].join('\n');
     const markdown = await convertPaste(page, { text: input });
     expect(markdown).toBe(expected);
@@ -2090,6 +2112,10 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const longUnclosedLinks = '[a](b'.repeat(20000);
     const longUnclosedMarkdown = await convertPaste(page, { text: longUnclosedLinks + '（測試）' });
     expect(longUnclosedMarkdown).toBe(longUnclosedLinks + ' (測試)');
+
+    const longUnclosedMath = '$a '.repeat(40000);
+    const longUnclosedMathMarkdown = await convertPaste(page, { text: longUnclosedMath + '（測試）' });
+    expect(longUnclosedMathMarkdown).toBe(longUnclosedMath + '(測試)');
 
     const longEmphasisBody = 'a'.repeat(501);
     const longEmphasisMarkdown = await convertPaste(page, { text: '**' + longEmphasisBody + '**（Cisco）產品' });

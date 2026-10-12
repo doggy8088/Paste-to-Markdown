@@ -1149,7 +1149,12 @@
           updateListIndent(line, false, allowAnyOrdered);
         }
         const nextFence = updateFenceState(line, activeFence, allowAnyOrdered);
-        if (nextFence !== activeFence) {
+        if (
+          nextFence !== activeFence &&
+          !(nextFence && nextFence.char === '`' && new RegExp('(?<=(?:^|[^\\\\`])(?:\\\\\\\\)*)' + '`'.repeat(nextFence.length) + '(?!`)').test(
+            currentProseLines.join('\n').split(/\n[ \t]*\n/).pop().replace(/(?<=(?:^|[^\\`])(?:\\\\)*)(`+)(?!`)(?:(?:[^\n]|\n(?![ \t]*\n))*?[^`])?\1(?!`)/g, '')
+          ))
+        ) {
           flushProse();
           activeFence = nextFence;
           segments.push({ fenced: true, line: line });
@@ -1167,7 +1172,7 @@
           segments.push({ fenced: true, line: line.replace(/（/g, '(').replace(/）/g, ')') });
           return;
         }
-        const htmlCloseRe = getHtmlBlockCloseRe(t.rest, atBlockStart || prevListIndent > 0);
+        const htmlCloseRe = getHtmlBlockCloseRe(t.rest.slice(Math.min(t.rest.match(/^ */)[0].length, listContentIndent)), atBlockStart || prevListIndent > 0);
         if (htmlCloseRe) {
           flushProse();
           segments.push({ fenced: true, line: line });
@@ -1180,6 +1185,32 @@
       });
       flushProse();
 
+      const maskMath = function (str) {
+        const openRe = /\$\$[\s\S]+?\$\$|(?<!\\|\$)\$(?!\$)(?:[^\s$\\]|\\.)/g;
+        const closeRe = /(?<=(?:^|[^\\])(?:\\\\)*(?:[^\s$\\]|\\.))\$(?!\d)/g;
+        let out = '';
+        let lastIdx = 0;
+        let m;
+        while ((m = openRe.exec(str)) !== null) {
+          if (m[0].startsWith('$$')) {
+            if (/^[ \t]*(?:\n|$)/.test(str.slice(openRe.lastIndex))) {
+              out += str.slice(lastIdx, m.index) + maskSpan(m[0], false);
+              lastIdx = openRe.lastIndex;
+            }
+          } else {
+            closeRe.lastIndex = openRe.lastIndex;
+            const cm = closeRe.exec(str);
+            if (!cm) {
+              break;
+            }
+            openRe.lastIndex = cm.index + 1;
+            out += str.slice(lastIdx, m.index) + maskSpan(str.slice(m.index, openRe.lastIndex), true);
+            lastIdx = openRe.lastIndex;
+          }
+        }
+        return out + str.slice(lastIdx);
+      };
+
       const normalizedLines = [];
       segments.forEach(function (seg) {
         if (seg.fenced) {
@@ -1188,19 +1219,15 @@
         }
         let validDefEnd = 0;
         const codeAndHtmlMaskedBlock = maskLinkDestinations(
-          seg.text
-            .replace(/(?<=(?:^|[^\\`])(?:\\\\)*)(`+)(?!`)(?:[\s\S]*?[^`])?\1(?!`)/g, function (match) {
-              return maskSpan(match, true);
-            })
-            .replace(/<(script|style|pre|textarea|xmp|noscript|noembed|noframes|plaintext|iframe|code|kbd|samp|tt)\b(?:[^>"']|"(?:[^"\n]|\n(?![ \t]*\n))*"|'(?:[^'\n]|\n(?![ \t]*\n))*')*>[\s\S]*?(?:<\/\1>|$)|<!--[\s\S]*?(?:-->|$)|<\?[\s\S]*?(?:\?>|$)|<![A-Za-z][\s\S]*?(?:>|$)|<!\[CDATA\[[\s\S]*?(?:\]\]>|$)/gi, function (match) {
-              return maskSpan(match, /^<(?:code|kbd|samp|tt)\b/i.test(match));
-            })
-            .replace(/\$\$[\s\S]+?\$\$|(?<!\\|\$)\$(?!\$)(?:[^\s$\\]|\\.)(?:[\s\S]*?(?:[^\s$\\]|\\.))?\$(?!\d)/g, function (match, offset, fullStr) {
-              if (match.startsWith('$$') && !/^[ \t]*(?:\n|$)/.test(fullStr.slice(offset + match.length))) {
-                return match;
-              }
-              return maskSpan(match, !match.startsWith('$$'));
-            })
+          maskMath(
+            seg.text
+              .replace(/(?<=(?:^|[^\\`])(?:\\\\)*)(`+)(?!`)(?:(?:[^\n]|\n(?![ \t]*\n))*?[^`])?\1(?!`)/g, function (match) {
+                return maskSpan(match, true);
+              })
+              .replace(/<(script|style|pre|textarea|xmp|noscript|noembed|noframes|plaintext|iframe|code|kbd|samp|tt)\b(?:[^>"']|"(?:[^"\n]|\n(?![ \t]*\n))*"|'(?:[^'\n]|\n(?![ \t]*\n))*')*>[\s\S]*?(?:<\/\1>|$)|<!--[\s\S]*?(?:-->|$)|<\?[\s\S]*?(?:\?>|$)|<![A-Za-z][\s\S]*?(?:>|$)|<!\[CDATA\[[\s\S]*?(?:\]\]>|$)/gi, function (match) {
+                return maskSpan(match, /^<(?:code|kbd|samp|tt)\b/i.test(match));
+              })
+          )
             .replace(/<[A-Za-z][\w-]*(?:(?:[ \t]|\n(?![ \t]*\n))+[A-Za-z:_][\w.:-]*(?:(?:[ \t]|\n(?![ \t]*\n))*=(?:[ \t]|\n(?![ \t]*\n))*(?:"(?:[^"\n]|\n(?![ \t]*\n))*"|'(?:[^'\n]|\n(?![ \t]*\n))*'|[^\s"'=<>`]+))?)*(?:[ \t]|\n(?![ \t]*\n))*\/?>|<\/[A-Za-z][\w:-]*(?:[ \t]|\n(?![ \t]*\n))*>|<([a-zA-Z][a-zA-Z0-9+.-]{1,31}:[^\s\x00-\x1f<>]+|[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+)>/gi, function (match, autolink) {
               const isAutolink = Boolean(autolink);
               return maskSpan(match, isAutolink, false, isAutolink || match.startsWith('</'));
@@ -1249,7 +1276,7 @@
         const normalizedBlock = maskedBlock
           .replace(/(?<=(?:^|[^\\])(?:\\\\)*\\)(?=[（）])/g, '\\')
           .replace(
-            /(?<=(?:^|[^\\])(?:\\\\)*)(\*{1,3}(?!\*)|_{1,3}(?!_)|(?<!~)~~(?!~))(?=\S)((?:(?!\1)(?:[^\n]|\n(?![ \t]*(?:\n|$|[-*+>|#]|\d{1,9}[.)]))))+?)(?<=\S)\1((?<=）\1)(?:\*|_)?[^\s*_~]+?(?<![\s*_~（(、；，。！？：])\1(?:[^\n*_~]+?(?<![\s*_~（(、；，。！？：]))?\1(?=(?!\1)[\s*_~（）()、；，。！？：]|$)|(?!(?:(\*{1,3}(?!\*)|_{1,3}(?!_)|(?<!~)~~(?!~))(?=\S)(?:(?!\4).)+?(?<=\S)\4))(?:\*{1,3}(?!\*)|_{1,3}(?!_)))?/g,
+            /(?<=(?:^|[^\\])(?:\\\\)*)(\*{1,3}(?!\*)|_{1,3}(?!_)|(?<!~)~~(?!~))(?=\S)((?:(?!\1)(?:[^\n]|\n(?![ \t]*(?:\n|$|[-*+>|#]|\d{1,9}[.)]))))+?)(?<=\S)\1((?<=）\1)(?:\*|_)?[^\s*_~（(、；，。！？：]+?(?<![\s*_~（(、；，。！？：])(?:\*+|_+)(?:[^\n*_~]+?(?<![\s*_~（(、；，。！？：])(?:\*+|_+))?(?=(?![*_])[\s~（）()、；，。！？：]|$)|(?!(?:(\*{1,3}(?!\*)|_{1,3}(?!_)|(?<!~)~~(?!~))(?=\S)(?:(?!\4).)+?(?<=\S)\4))(?:\*{1,3}(?!\*)|_{1,3}(?!_)))?/g,
             function (match, delim, inner, extraClose, _nextDelim, offset, fullStr) {
               const prevChar = offset > 0 ? fullStr[offset - 1] : '';
               const closeDelim = delim + (extraClose || '');
