@@ -912,7 +912,7 @@
       const updateFenceState = function (line, activeFence) {
         const q = getQuotePrefix(line);
         if (!activeFence) {
-          const openMatch = q.rest.match(/^([ \t]*)((?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )|[ \t]))+)?(`{3,}|~{3,})(.*)$/);
+          const openMatch = q.rest.match(/^([ \t]*)((?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )|[ \t]))+)?(?:\[[ xX]\][ \t]+)?(`{3,}|~{3,})(.*)$/);
           if (openMatch && !(openMatch[3][0] === '`' && openMatch[4].includes('`'))) {
             const openIndent = countIndentCols(openMatch[1]);
             const listOffset = openMatch[2] ? countIndentCols(openMatch[1] + openMatch[2]) - openIndent : 0;
@@ -1150,14 +1150,17 @@
         const proseTail = currentProseLines.slice(-3).map(function (l) {
           return getTableRowParts(l).rest;
         }).join('\n');
-        const prevProse = currentProseLines.length > 0 ? getTableRowParts(currentProseLines[currentProseLines.length - 1]).rest : '';
+        const prevT = currentProseLines.length > 0 ? getTableRowParts(currentProseLines[currentProseLines.length - 1]) : null;
+        const prevProse = prevT ? prevT.rest : '';
         const atBlockStart =
-          currentProseLines.length === 0 ||
+          !prevT ||
+          t.hasList ||
+          t.depth > prevT.depth ||
           prevProse.trim() === '' ||
           /^[ \t]{0,3}(?:#{1,6}(?:[ \t]|$)|(?:=+|-+)[ \t]*$)/.test(prevProse) ||
           THEMATIC_BREAK_RE.test(prevProse) ||
           /(?:^|\n)[ \t]{0,3}\[[^\n\]]+\]:[ \t]*(?:\n[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*)(?:"[^"\n]*"|'[^'\n]*'|\([^()\n]*\)))?[ \t]*$/.test(proseTail);
-        if ((atBlockStart || t.hasList) && t.rest.trim() !== '' && countIndentCols(t.rest.match(/^[ \t]*/)[0]) > maxProseIndent) {
+        if (atBlockStart && t.rest.trim() !== '' && countIndentCols(t.rest.match(/^[ \t]*/)[0]) > maxProseIndent) {
           flushProse();
           segments.push({ fenced: true, line: line.replace(/（/g, '(').replace(/）/g, ')') });
           return;
@@ -1192,7 +1195,7 @@
             .replace(/\$\$[\s\S]+?\$\$|(?<!\\|\$)\$(?:[^\s$\\]|\\.)(?:[\s\S]*?(?:[^\s$\\]|\\.))?\$(?!\d)/g, function (match) {
               return maskSpan(match, !match.startsWith('$$'));
             })
-            .replace(/<\/?[A-Za-z](?:[^>"'\r\n]|"[^"\r\n]*"|'[^'\r\n]*')*>/gi, function (match) {
+            .replace(/<[A-Za-z][\w-]*(?:(?:[ \t]|\n(?![ \t]*\n))+[A-Za-z:_][\w.:-]*(?:(?:[ \t]|\n(?![ \t]*\n))*=(?:[ \t]|\n(?![ \t]*\n))*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+))?)*(?:[ \t]|\n(?![ \t]*\n))*\/?>|<\/[A-Za-z][\w:-]*(?:[ \t]|\n(?![ \t]*\n))*>|<[A-Za-z](?:[^>"'\r\n]|"[^"\r\n]*"|'[^'\r\n]*')*>/gi, function (match) {
               const isAutolink = /^<(?:[a-zA-Z][a-zA-Z0-9+.-]{1,31}:|[^\s<>@]+@)/.test(match);
               return maskSpan(match, isAutolink, false, isAutolink || match.startsWith('</'));
             })
