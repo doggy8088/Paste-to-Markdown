@@ -815,11 +815,11 @@
     // Auto-correct pasted Markdown syntax (full-width parentheses spacing & GFM table alignment)
     markdownSyntax: function (text) {
       const normalizedInput = text.replace(/\r\n?/g, '\n');
+      const usedSpanTags = new Set(normalizedInput.match(/P2MSPAN(?:\d+X)?/g));
       let spanTag = 'P2MSPAN';
-      normalizedInput.replace(/P2MSPANX*/g, function (m) {
-        spanTag = 'P2MSPAN' + 'X'.repeat(Math.max(spanTag.length, m.length + 1) - 7);
-        return m;
-      });
+      for (let nonce = 1; usedSpanTags.has(spanTag); nonce++) {
+        spanTag = 'P2MSPAN' + nonce + 'X';
+      }
       const spanTokenRe = new RegExp('[\\uE000\\uE002]' + spanTag + '(\\d+)[BMS][\\uE001\\uE003]', 'g');
       const blockSpanLineRe = new RegExp('^\\uE002' + spanTag + '\\d+B\\uE003$');
       const multilineSpanRe = new RegExp('[\\uE000\\uE002]' + spanTag + '\\d+M[\\uE001\\uE003]');
@@ -1233,7 +1233,7 @@
         const codeAndHtmlMaskedBlock = maskLinkDestinations(
           maskMath(
             seg.text
-              .replace(/(?<=(?:^|[^\\`])(?:\\\\)*)(`+)(?!`)(?:(?:[^\n]|\n(?![ \t]*\n))*?[^`])?\1(?!`)/g, function (match) {
+              .replace(/(?<=(?:^|[^\\`])(?:\\\\)*(?:\\`)?)(`+)(?!`)(?:(?:[^\n]|\n(?![ \t]*\n))*?[^`])?\1(?!`)/g, function (match) {
                 return maskSpan(match, true);
               })
               .replace(/<(script|style|pre|textarea|xmp|noscript|noembed|noframes|plaintext|iframe|code|kbd|samp|tt)\b(?:[^>"']|"(?:[^"\n]|\n(?![ \t]*\n))*"|'(?:[^'\n]|\n(?![ \t]*\n))*')*>[\s\S]*?(?:<\/\1>|$)|<!--[\s\S]*?(?:-->|$)|<\?[\s\S]*?(?:\?>|$)|<![A-Za-z][\s\S]*?(?:>|$)|<!\[CDATA\[[\s\S]*?(?:\]\]>|$)/gi, function (match) {
@@ -1324,7 +1324,7 @@
       while (lineIndex < normalizedLines.length) {
         const currentLine = normalizedLines[lineIndex];
         const isBlockLine = blockSpanLineRe.test(currentLine);
-        const prevListIndent = (lineIndex > 0 && normalizedLines[lineIndex - 1].trim() !== '') ? listContentIndent : 0;
+        const prevListIndent = (lineIndex > 0 && !blockSpanLineRe.test(normalizedLines[lineIndex - 1]) && normalizedLines[lineIndex - 1].trim() !== '') ? listContentIndent : 0;
         updateListIndent(isBlockLine ? restoreSpans(currentLine) : currentLine, isBlockLine);
         if (isBlockLine) {
           formattedLines.push(currentLine);

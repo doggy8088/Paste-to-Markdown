@@ -1950,11 +1950,13 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '>\tx（1） | y',
       '',
       '- 清單後空白行重置表格縮排',
+      '  ```',
       '',
       'A | B',
       '--- | ---',
       'foo（x）',
       '',
+      '\\``x（y）z` 後段（一）',
       'pre ```',
       'x（y）',
       '```'
@@ -2104,11 +2106,13 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '>\t| x (1) | y   |',
       '',
       '- 清單後空白行重置表格縮排',
+      '  ```',
       '',
       '| A       | B   |',
       '| ------- | --- |',
       '| foo (x) |     |',
       '',
+      '\\``x（y）z` 後段 (一)',
       'pre ```',
       'x（y）',
       '```'
@@ -2120,7 +2124,7 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const deepQuotesMarkdown = await convertPaste(page, { text: deepQuotes + 'x（y）' });
     expect(deepQuotesMarkdown).toBe(deepQuotes + 'x (y)');
 
-    const longSpanTag = 'P2MSPAN' + 'X'.repeat(5000);
+    const longSpanTag = 'P2MSPAN1X ' + 'P2MSPAN' + 'X'.repeat(5000);
     const longSpanMarkdown = await convertPaste(page, { text: longSpanTag + ' `code` 測試（一）' });
     expect(longSpanMarkdown).toBe(longSpanTag + ' `code` 測試 (一)');
 
