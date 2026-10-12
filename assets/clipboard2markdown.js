@@ -817,7 +817,7 @@
       const normalizedInput = text.replace(/\r\n?/g, '\n');
       let spanTag = 'P2MSPAN';
       while (normalizedInput.includes(spanTag)) {
-        spanTag += '_';
+        spanTag += 'X';
       }
       const spanTokenRe = new RegExp('[\\uE000\\uE002]' + spanTag + '(\\d+)[\\uE001\\uE003]', 'g');
       const blockSpanLineRe = new RegExp('^\\uE002' + spanTag + '\\d+\\uE003$');
@@ -856,7 +856,7 @@
 
       let listContentIndent = 0;
       const updateListIndent = function (line) {
-        const listMatch = line.match(/^((?:[ \t]*>[ \t]*|[ \t]*)(?:[-*+]|\d{1,9}[.)])[ \t]+)/);
+        const listMatch = line.match(/^((?:[ \t]*>[ \t]*|[ \t]*)(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)+)/);
         if (listMatch) {
           listContentIndent = countIndentCols(listMatch[1]);
         } else if (line.trim() !== '' && countIndentCols(line.match(/^[ \t]*/)[0]) < listContentIndent) {
@@ -907,7 +907,7 @@
       const updateFenceState = function (line, activeFence) {
         const q = getQuotePrefix(line);
         if (!activeFence) {
-          const openMatch = q.rest.match(/^([ \t]*)((?:[-*+]|\d{1,9}[.)])[ \t]+)?(`{3,}|~{3,})(.*)$/);
+          const openMatch = q.rest.match(/^([ \t]*)((?:(?:[-*+]|\d{1,9}[.)])[ \t]+)+)?(`{3,}|~{3,})(.*)$/);
           if (openMatch && !(openMatch[3][0] === '`' && openMatch[4].includes('`'))) {
             const openIndent = countIndentCols(openMatch[1]);
             const listOffset = openMatch[2] ? countIndentCols(openMatch[1] + openMatch[2]) - openIndent : 0;
@@ -939,17 +939,33 @@
         return activeFence;
       };
 
+      const protectedSpans = [];
+      const maskSpan = function (str, isCode) {
+        const prefix = isCode ? '\uE000' : '\uE002';
+        const suffix = isCode ? '\uE001' : '\uE003';
+        const token = prefix + spanTag + protectedSpans.length + suffix;
+        protectedSpans.push(str);
+        return token;
+      };
+      const restoreSpans = function (str) {
+        return str.replace(spanTokenRe, function (match, idx) {
+          return protectedSpans[Number(idx)];
+        });
+      };
+
       const splitTableCells = function (line) {
         const q = getQuotePrefix(line);
         const trimmed = q.rest.trim().replace(/^\|/, '').replace(/(?<=(?:^|[^\\])(?:\\\\)*)\|$/, '');
         return trimmed.split(UNESCAPED_PIPE_RE).map(function (cell) {
-          return cell.trim();
+          return restoreSpans(cell.trim());
         });
       };
 
       const isTableRowCandidate = function (line) {
         const q = getQuotePrefix(line);
+        const maxIndent = q.depth > 0 ? 3 : listContentIndent + 3;
         return (
+          countIndentCols(q.rest.match(/^[ \t]*/)[0]) <= maxIndent &&
           !/^[ \t]*(?:#{1,6}[ \t]|(?:[-*+]|\d{1,9}[.)])[ \t]|\[[^\n\]]+\]:[ \t]*)/.test(q.rest) &&
           UNESCAPED_PIPE_RE.test(q.rest)
         );
@@ -963,15 +979,6 @@
             return /^:?-+:?$/.test(cell);
           })
         );
-      };
-
-      const protectedSpans = [];
-      const maskSpan = function (str, isCode) {
-        const prefix = isCode ? '\uE000' : '\uE002';
-        const suffix = isCode ? '\uE001' : '\uE003';
-        const token = prefix + spanTag + protectedSpans.length + suffix;
-        protectedSpans.push(str);
-        return token;
       };
 
       const maskLinkDestinations = function (str) {
@@ -992,6 +999,14 @@
               seenHref = true;
               cursor += 2;
               continue;
+            }
+            if (!seenHref && str[cursor] === '<') {
+              const angleMatch = str.slice(cursor).match(/^<(?:\\.|[^<>\\\r\n])*>/);
+              if (angleMatch) {
+                cursor += angleMatch[0].length;
+                seenHref = true;
+                continue;
+              }
             }
             if (depth === 1 && /\s/.test(str[cursor])) {
               const tailRe = seenHref
@@ -1035,7 +1050,6 @@
       let currentProseLines = [];
       let activeFence = null;
       let activeHtmlEnd = null;
-      let activeHtmlQuoteDepth = 0;
       const flushProse = function () {
         if (currentProseLines.length > 0) {
           segments.push({ fenced: false, text: currentProseLines.join('\n') });
@@ -1048,9 +1062,6 @@
           return;
         }
         const qBefore = getQuotePrefix(line);
-        if (activeHtmlEnd && qBefore.depth < activeHtmlQuoteDepth) {
-          activeHtmlEnd = null;
-        }
         if (activeHtmlEnd) {
           segments.push({ fenced: true, line: line });
           if (activeHtmlEnd.test(qBefore.rest)) {
@@ -1083,7 +1094,6 @@
           segments.push({ fenced: true, line: line });
           if (!htmlCloseRe.test(q.rest)) {
             activeHtmlEnd = htmlCloseRe;
-            activeHtmlQuoteDepth = q.depth;
           }
           return;
         }
@@ -1111,8 +1121,8 @@
             .replace(/<\/?[A-Za-z](?:[^>"'\r\n]|"[^"\r\n]*"|'[^'\r\n]*')*>/gi, function (match) {
               return maskSpan(match, false);
             })
-            .replace(/^(?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}\[[^\n\]]+\]:[ \t]*(?:\n(?:[ \t]{0,3}>[ \t]?)*[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n(?:[ \t]{0,3}>[ \t]?)*[ \t]*)(?:"(?:\\.|[^"\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n]|\n(?![ \t]*\n))*'|\((?:\\.|[^()\n]|\n(?![ \t]*\n))*\))[ \t]*(?=\n|$))?/gm, function (match) {
-              return maskSpan(match, false);
+            .replace(/^((?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}\[[^\n\]]+\]:[ \t]*)((?:\n(?:[ \t]{0,3}>[ \t]?)*[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n(?:[ \t]{0,3}>[ \t]?)*[ \t]*)(?:"(?:\\.|[^"\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n]|\n(?![ \t]*\n))*'|\((?:\\.|[^()\n]|\n(?![ \t]*\n))*\))[ \t]*(?=\n|$))?)/gm, function (match, prefix, destAndTitle) {
+              return prefix + maskSpan(destAndTitle, false);
             })
         );
         codeAndHtmlMaskedBlock.split('\n').forEach(function (line) {
@@ -1138,7 +1148,7 @@
           const normalized = maskedLine
             .replace(/(?<=(?:^|[^\\])(?:\\\\)*\\)(?=[（）])/g, '\\')
             .replace(
-              /(?<=(?:^|[^\\])(?:\\\\)*)(\*+|_+|(?<!~)~~(?!~))(?![*_])(?=\S)((?:(?!\1).)+?)(?<=\S)\1(?:(?!(?:(\*+|_+|(?<!~)~~(?!~))(?=\S)(?:(?!\3).)+?(?<=\S)\3))(\*+|_+))?/g,
+              /(?<=(?:^|[^\\])(?:\\\\)*)(\*+(?!\*)|_+(?!_)|(?<!~)~~(?!~))(?=\S)((?:(?!\1).)+?)(?<=\S)\1(?:(?!(?:(\*+|_+|(?<!~)~~(?!~))(?=\S)(?:(?!\3).)+?(?<=\S)\3))(\*+|_+))?/g,
               function (match, delim, inner, _nextDelim, extraClose, offset, fullStr) {
                 const prevChar = offset > 0 ? fullStr[offset - 1] : '';
                 const closeDelim = delim + (extraClose || '');
@@ -1161,10 +1171,7 @@
             .replace(/（/g, '(')
             .replace(/）(?=[\p{L}\p{N}`\[\uE000]|(\*+|(?<!~)~~(?!~))(?=\S)(?:(?!\1).)+?(?<=\S)\1|(_+)(?=\S)(?:(?!\2).)+?(?<=\S)\2(?![\p{L}\p{N}(（]))/gu, ') ')
             .replace(/）/g, ')');
-          normalizedLines.push(normalized.replace(spanTokenRe, function (match, idx) {
-            const original = protectedSpans[Number(idx)];
-            return original.includes('\n') ? match : original;
-          }));
+          normalizedLines.push(normalized);
         });
       });
 
@@ -1244,9 +1251,7 @@
         }
       }
 
-      const result = formattedLines.join('\n').replace(spanTokenRe, function (match, idx) {
-        return protectedSpans[Number(idx)];
-      });
+      const result = restoreSpans(formattedLines.join('\n'));
       if (result === normalizedInput) {
         return null;
       }
