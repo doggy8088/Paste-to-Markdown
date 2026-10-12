@@ -828,32 +828,64 @@
         }
       };
 
-      const updateFenceState = function (line, activeFence) {
+      const getQuotePrefix = function (line) {
+        const match = line.match(/^((?:\s{0,3}> ?)+)(.*)$/);
+        if (!match) {
+          return { depth: 0, rest: line };
+        }
+        return {
+          depth: (match[1].match(/>/g) || []).length,
+          rest: match[2]
+        };
+      };
+
+      const hasFenceContainerEnded = function (line, activeFence) {
         if (!activeFence) {
-          const openMatch = line.match(/^((?:\s{0,3}>\s*)*)(\s*)((?:[-*+]|\d+[.)])\s+)?(`{3,}|~{3,})(.*)$/);
-          if (openMatch && !(openMatch[4][0] === '`' && openMatch[5].includes('`'))) {
-            const quoteDepth = (openMatch[1].match(/>/g) || []).length;
-            const listOffset = openMatch[3] ? openMatch[3].length : 0;
-            const maxOpenIndent = (quoteDepth > 0 || listOffset > 0) ? 3 : listContentIndent + 3;
-            if (openMatch[2].length > maxOpenIndent) {
+          return false;
+        }
+        const q = getQuotePrefix(line);
+        if (activeFence.quoteDepth > 0 && q.depth < activeFence.quoteDepth) {
+          return true;
+        }
+        if (
+          activeFence.quoteDepth === 0 &&
+          activeFence.containerIndent > 0 &&
+          line.trim() !== '' &&
+          line.match(/^\s*/)[0].length < activeFence.containerIndent
+        ) {
+          return true;
+        }
+        return false;
+      };
+
+      const updateFenceState = function (line, activeFence) {
+        const q = getQuotePrefix(line);
+        if (!activeFence) {
+          const openMatch = q.rest.match(/^(\s*)((?:[-*+]|\d+[.)])\s+)?(`{3,}|~{3,})(.*)$/);
+          if (openMatch && !(openMatch[3][0] === '`' && openMatch[4].includes('`'))) {
+            const listOffset = openMatch[2] ? openMatch[2].length : 0;
+            const containerIndent = q.depth > 0 ? 0 : (listOffset > 0 ? openMatch[1].length + listOffset : listContentIndent);
+            const maxOpenIndent = (q.depth > 0 || listOffset > 0) ? 3 : listContentIndent + 3;
+            if (openMatch[1].length > maxOpenIndent) {
               return null;
             }
             return {
-              char: openMatch[4][0],
-              length: openMatch[4].length,
-              quoteDepth: quoteDepth,
-              maxCloseIndent: openMatch[2].length + listOffset + 3
+              char: openMatch[3][0],
+              length: openMatch[3].length,
+              quoteDepth: q.depth,
+              containerIndent: containerIndent,
+              maxCloseIndent: containerIndent + 3
             };
           }
           return null;
         }
-        const closeMatch = line.match(/^((?:\s{0,3}>\s*)*)(\s*)(`{3,}|~{3,})\s*$/);
+        const closeMatch = q.rest.match(/^(\s*)(`{3,}|~{3,})\s*$/);
         if (
           closeMatch &&
-          (closeMatch[1].match(/>/g) || []).length === activeFence.quoteDepth &&
-          closeMatch[2].length <= activeFence.maxCloseIndent &&
-          closeMatch[3][0] === activeFence.char &&
-          closeMatch[3].length >= activeFence.length
+          q.depth === activeFence.quoteDepth &&
+          closeMatch[1].length <= activeFence.maxCloseIndent &&
+          closeMatch[2][0] === activeFence.char &&
+          closeMatch[2].length >= activeFence.length
         ) {
           return null;
         }
@@ -882,16 +914,57 @@
       };
 
       const protectedSpans = [];
-      const maskSpan = function (str) {
-        const token = '\uE000P2MSPAN' + protectedSpans.length + '\uE001';
+      const maskSpan = function (str, isCode) {
+        const prefix = isCode ? '\uE000' : '\uE002';
+        const token = prefix + 'P2MSPAN' + protectedSpans.length + '\uE001';
         protectedSpans.push(str);
         return token;
+      };
+
+      const maskLinkDestinations = function (str) {
+        let out = '';
+        let i = 0;
+        while (i < str.length) {
+          const openIdx = str.indexOf('](', i);
+          if (openIdx === -1) {
+            out += str.slice(i);
+            break;
+          }
+          out += str.slice(i, openIdx + 2);
+          let cursor = openIdx + 2;
+          let depth = 1;
+          while (cursor < str.length && str[cursor] !== '\r' && str[cursor] !== '\n' && depth > 0) {
+            if (str[cursor] === '\\' && cursor + 1 < str.length) {
+              cursor += 2;
+              continue;
+            }
+            if (str[cursor] === '(') {
+              depth++;
+            } else if (str[cursor] === ')') {
+              depth--;
+              if (depth === 0) {
+                break;
+              }
+            }
+            cursor++;
+          }
+          if (depth === 0) {
+            out += maskSpan(str.slice(openIdx + 2, cursor), false) + ')';
+            i = cursor + 1;
+          } else {
+            i = openIdx + 2;
+          }
+        }
+        return out;
       };
 
       const segments = [];
       let currentProseLines = [];
       let activeFence = null;
       lines.forEach(function (line) {
+        if (hasFenceContainerEnded(line, activeFence)) {
+          activeFence = null;
+        }
         const nextFence = updateFenceState(line, activeFence);
         if (nextFence !== activeFence) {
           if (currentProseLines.length > 0) {
@@ -919,26 +992,27 @@
           normalizedLines.push(seg.line);
           return;
         }
-        const codeMaskedBlock = seg.text.replace(/(?<=(?:^|[^\\])(?:\\\\)*)(`+)(?!`)(?:[\s\S]*?[^`])?\1(?!`)/g, function (match) {
-          return maskSpan(match);
-        });
-        codeMaskedBlock.split('\n').forEach(function (line) {
-          const maskedLine = line
-            .replace(/^(\s*\[[^\]]+\]:\s*)(<[^>\r\n]+>|\S+)/, function (match, prefix, dest) {
-              return prefix + maskSpan(dest);
+        const codeAndHtmlMaskedBlock = seg.text
+          .replace(/(?<=(?:^|[^\\])(?:\\\\)*)(`+)(?!`)(?:[\s\S]*?[^`])?\1(?!`)/g, function (match) {
+            return maskSpan(match, true);
+          })
+          .replace(/<(script|style|pre|textarea)\b[\s\S]*?<\/\1>|<!--[\s\S]*?-->|<\/?[A-Za-z][^>\r\n]*>/gi, function (match) {
+            return maskSpan(match, false);
+          });
+        codeAndHtmlMaskedBlock.split('\n').forEach(function (line) {
+          const maskedLine = maskLinkDestinations(
+            line.replace(/^(\s*\[[^\]]+\]:\s*)(<[^>\r\n]+>|\S+)/, function (match, prefix, dest) {
+              return prefix + maskSpan(dest, false);
             })
-            .replace(/(\]\()((?:[^()\r\n]|\([^()\r\n]*\))+)(\))/g, function (match, prefix, dest, suffix) {
-              return prefix + maskSpan(dest) + suffix;
-            })
-            .replace(/<https?:\/\/[^>\s]+>|https?:\/\/(?:[^\s<>)\]（）]|（[^\s<>)\]（）]*）)+/g, function (match) {
-              return maskSpan(match);
-            });
+          ).replace(/<https?:\/\/[^>\s]+>|https?:\/\/(?:[^\s<>)\]（）]|（[^\s<>)\]（）]*）)+/g, function (match) {
+            return maskSpan(match, false);
+          });
           const normalized = maskedLine
             .replace(
               /(?<=(?:^|[^\\])(?:\\\\)*)(?<![*_])(\*+|_+)(?![*_])(?=\S)((?:(?!\1).)+?)(?<=\S)\1(\*+|_+)?/g,
               function (match, delim, inner, extraClose, offset, fullStr) {
                 const prevChar = offset > 0 ? fullStr[offset - 1] : '';
-                if (delim[0] === '_' && /[\u4e00-\u9fffA-Za-z0-9]/.test(prevChar) && /^[\u4e00-\u9fffA-Za-z0-9]/.test(inner)) {
+                if (delim[0] === '_' && /[\p{L}\p{N}]/u.test(prevChar) && /^[\p{L}\p{N}]/u.test(inner)) {
                   return match;
                 }
                 if (!inner.endsWith('）')) {
@@ -947,15 +1021,15 @@
                 const closeDelim = delim + (extraClose || '');
                 const updatedInner = inner.slice(0, -1) + ')';
                 const rest = fullStr.slice(offset + match.length);
-                const needsSpace = /^[\u4e00-\u9fffA-Za-z0-9`*_\[\uE000]/.test(rest);
+                const needsSpace = /^[\p{L}\p{N}`*_\[\uE000]/u.test(rest);
                 return delim + updatedInner + closeDelim + (needsSpace ? ' ' : '');
               }
             )
-            .replace(/([\u4e00-\u9fffA-Za-z0-9])（/g, '$1 (')
+            .replace(/([\]\p{L}\p{N}])（/gu, '$1 (')
             .replace(/（/g, '(')
-            .replace(/）(?=[\u4e00-\u9fffA-Za-z0-9`\[\uE000]|(\*+|_+)(?=\S)(?:(?!\1).)+?(?<=\S)\1)/g, ') ')
+            .replace(/）(?=[\p{L}\p{N}`\[\uE000]|(\*+)(?=\S)(?:(?!\1).)+?(?<=\S)\1|(_+)(?=\S)(?:(?!\2).)+?(?<=\S)\2(?![\p{L}\p{N}]))/gu, ') ')
             .replace(/）/g, ')');
-          normalizedLines.push(normalized.replace(/\uE000P2MSPAN(\d+)\uE001/g, function (match, idx) {
+          normalizedLines.push(normalized.replace(/[\uE000\uE002]P2MSPAN(\d+)\uE001/g, function (match, idx) {
             const original = protectedSpans[Number(idx)];
             return original.includes('\n') ? match : original;
           }));
@@ -968,6 +1042,9 @@
       listContentIndent = 0;
       while (lineIndex < normalizedLines.length) {
         const currentLine = normalizedLines[lineIndex];
+        if (hasFenceContainerEnded(currentLine, activeFence)) {
+          activeFence = null;
+        }
         const nextFence = updateFenceState(currentLine, activeFence);
         if (nextFence !== activeFence) {
           activeFence = nextFence;
@@ -1035,7 +1112,7 @@
         }
       }
 
-      const result = formattedLines.join('\n').replace(/\uE000P2MSPAN(\d+)\uE001/g, function (match, idx) {
+      const result = formattedLines.join('\n').replace(/[\uE000\uE002]P2MSPAN(\d+)\uE001/g, function (match, idx) {
         return protectedSpans[Number(idx)];
       });
       if (result === baseText) {

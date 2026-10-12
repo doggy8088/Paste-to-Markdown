@@ -1537,7 +1537,7 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     expect(malformed).toBe('const msg = "測試（值）";\nconsole.log(msg);');
   });
 
-  test('handles four-backtick, tilde, blockquote, list, and over-indented fences without premature close or table formatting', async function ({ page }) {
+  test('handles four-backtick, tilde, blockquote, list, container-exit, and over-indented fences without premature close or table formatting', async function ({ page }) {
     await gotoApp(page);
     const input = [
       '````markdown',
@@ -1545,18 +1545,24 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '範例（內嵌）文字',
       '```',
       '````',
-      '~~~text',
-      '    ~~~',
+      '   ~~~text',
+      '      ~~~',
       '| A | B |',
       '| --- | --- |',
       '| 1（一） | 2 |',
-      '~~~',
+      '   ~~~',
       '> ~~~',
       '> 引用區塊（程式碼）',
       '> ~~~',
+      '>     ```',
+      '> 引用縮排後文字（仍應修正）',
+      '> ```',
+      '> 未關閉引用（程式碼）',
+      '',
+      '離開引用（仍應修正）',
       '- ```',
-      '  清單（程式碼）',
-      '  ```'
+      '  清單未關閉（程式碼）',
+      '離開清單（仍應修正）'
     ].join('\n');
     const expected = [
       '````markdown',
@@ -1564,36 +1570,44 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '範例(內嵌)文字',
       '```',
       '````',
-      '~~~text',
-      '    ~~~',
+      '   ~~~text',
+      '      ~~~',
       '| A | B |',
       '| --- | --- |',
       '| 1(一) | 2 |',
-      '~~~',
+      '   ~~~',
       '> ~~~',
       '> 引用區塊(程式碼)',
       '> ~~~',
+      '>     ```',
+      '> 引用縮排後文字 (仍應修正)',
+      '> ```',
+      '> 未關閉引用(程式碼)',
+      '',
+      '離開引用 (仍應修正)',
       '- ```',
-      '  清單(程式碼)',
-      '  ```'
+      '  清單未關閉(程式碼)',
+      '離開清單 (仍應修正)'
     ].join('\n');
     const markdown = await convertPaste(page, { text: input });
     expect(markdown).toBe(expected);
   });
 
-  test('protects link destinations, bare/angle/reference URLs, and inline/multiline code while handling nested emphasis and intraword underscores', async function ({ page }) {
+  test('protects deeply nested link destinations, bare/angle/reference URLs, raw HTML, and inline/multiline code while handling brackets, nested emphasis, and Unicode intraword underscores', async function ({ page }) {
     await gotoApp(page);
     const input = [
-      '請參考 [文件（一）](https://example.com/頁面（測試）) 與 `呼叫（值）` 以及 `跨行（',
-      '測試）` 範例，並顯示 \\`符號（test）\\` 後文與 foo_bar（baz）_qux 識別字。',
+      '請參考 [文件（一）](foo(a(b（c）))\\))、[未閉合](foo 與 [標籤]（測試）及 `呼叫（值）` 以及 `跨行（',
+      '測試）` 範例，並顯示 \\`符號（test）\\` 後文與 foo_bar（baz）_qux、foo_テスト（x）_bar 識別字。',
       '裸網址 https://example.com/foo（bar） 與 <https://example.com/auto（link）> 皆保持不變。',
+      'HTML <a href="page（test）.html">連結（一）</a> 與 <pre>原樣（保留）</pre> 屬性不變。',
       '[ref]: https://example.com/ref（目標）',
       '公司（Cisco）**產品**與**思科**公司（Cisco）**設備**、**交換器（switch）**主要功能與***路由器（router）***主要用途。'
     ].join('\n');
     const expected = [
-      '請參考 [文件 (一)](https://example.com/頁面（測試）) 與 `呼叫（值）` 以及 `跨行（',
-      '測試）` 範例，並顯示 \\`符號 (test)\\` 後文與 foo_bar (baz)_qux 識別字。',
+      '請參考 [文件 (一)](foo(a(b（c）))\\))、[未閉合](foo 與 [標籤] (測試) 及 `呼叫（值）` 以及 `跨行（',
+      '測試）` 範例，並顯示 \\`符號 (test)\\` 後文與 foo_bar (baz)_qux、foo_テスト (x)_bar 識別字。',
       '裸網址 https://example.com/foo（bar） 與 <https://example.com/auto（link）> 皆保持不變。',
+      'HTML <a href="page（test）.html">連結 (一)</a> 與 <pre>原樣（保留）</pre> 屬性不變。',
       '[ref]: https://example.com/ref（目標）',
       '公司 (Cisco) **產品**與**思科**公司 (Cisco) **設備**、**交換器 (switch)** 主要功能與***路由器 (router)*** 主要用途。'
     ].join('\n');
