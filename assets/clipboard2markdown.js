@@ -826,9 +826,30 @@
         return cols;
       };
 
+      const HTML_RAW_TAG_RE = /^ {0,3}<(script|pre|style|textarea|xmp|noscript|noembed|noframes|plaintext|iframe)(?=[\s/>]|$)/i;
+      const HTML_BLOCK_TAG_RE = /^ {0,3}(?:<\/?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|meta|nav|noframes|ol|optgroup|option|p|param|section|source|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?=[\s/>]|$)|(?:<[A-Za-z][\w-]*(?: +[A-Za-z:_][\w.:-]*(?: *= *"[^"\n]*"| *= *'[^'\n]*'| *= *[^\s"'=<>`]+)?)*? *\/?>|<\/[A-Za-z][\w-]*\s*>)[ \t]*$)/i;
+      const HTML_SPECIAL_OPEN_RE = /^ {0,3}(<!--|<\?|<![A-Za-z]|<!\[CDATA\[)/;
+      const HTML_SPECIAL_CLOSE_MAP = {
+        '<!--': /-->/,
+        '<?': /\?>/,
+        '<![CDATA[': /\]\]>/
+      };
+
+      const getHtmlBlockCloseRe = function (rest) {
+        const rawMatch = rest.match(HTML_RAW_TAG_RE);
+        if (rawMatch) {
+          return new RegExp('<\\/' + rawMatch[1] + '\\s*>', 'i');
+        }
+        const specialMatch = rest.match(HTML_SPECIAL_OPEN_RE);
+        if (specialMatch) {
+          return HTML_SPECIAL_CLOSE_MAP[specialMatch[1]] || />/;
+        }
+        return HTML_BLOCK_TAG_RE.test(rest) ? /^[ \t]*$/ : null;
+      };
+
       let listContentIndent = 0;
       const updateListIndent = function (line) {
-        const listMatch = line.match(/^([ \t]*(?:[-*+]|\d+[.)])[ \t]+)/);
+        const listMatch = line.match(/^((?:[ \t]*>[ \t]*|[ \t]*)(?:[-*+]|\d+[.)])[ \t]+)/);
         if (listMatch) {
           listContentIndent = countIndentCols(listMatch[1]);
         } else if (line.trim() !== '' && countIndentCols(line.match(/^[ \t]*/)[0]) < listContentIndent) {
@@ -837,7 +858,7 @@
       };
 
       const getQuotePrefix = function (line) {
-        const match = line.match(/^([ \t]*(?:[-*+]|\d+[.)])[ \t]+)?([ \t]*> ?(?: {0,3}> ?)*)(.*)$/);
+        const match = line.match(/^((?:[ \t]*(?:[-*+]|\d+[.)])[ \t]+)+)?([ \t]*> ?(?:(?:[ \t]*(?:[-*+]|\d+[.)])[ \t]+)*[ \t]*> ?)*)(.*)$/);
         if (!match) {
           return { depth: 0, prefix: '', rest: line };
         }
@@ -859,7 +880,11 @@
         }
         const q = getQuotePrefix(line);
         if (activeFence.quoteDepth > 0 && q.depth < activeFence.quoteDepth) {
-          return q.rest.trim() === '' || /^[ \t]*(?:#{1,6}[ \t]|(?:[-*+]|\d+[.)])[ \t])/.test(q.rest);
+          return (
+            q.rest.trim() === '' ||
+            /^ {0,3}(?:#{1,6}(?:[ \t]|$)|(?:[-*+]|\d+[.)])[ \t]|(?:\*[ \t]*){3,}$|(?:-[ \t]*){3,}$|(?:_[ \t]*){3,}$|`{3,}(?=[^`]*$)|~{3,})/.test(q.rest) ||
+            getHtmlBlockCloseRe(q.rest) !== null
+          );
         }
         if (
           activeFence.quoteDepth === 0 &&
@@ -979,27 +1004,6 @@
         return out;
       };
 
-      const HTML_RAW_TAG_RE = /^ {0,3}<(script|pre|style|textarea|xmp|noscript|noembed|noframes|plaintext|iframe)(?=[\s/>]|$)/i;
-      const HTML_BLOCK_TAG_RE = /^ {0,3}(?:<\/?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|meta|nav|noframes|ol|optgroup|option|p|param|section|source|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?=[\s/>]|$)|(?:<[A-Za-z][\w-]*(?: +[A-Za-z:_][\w.:-]*(?: *= *"[^"\n]*"| *= *'[^'\n]*'| *= *[^\s"'=<>`]+)?)*? *\/?>|<\/[A-Za-z][\w-]*\s*>)[ \t]*$)/i;
-      const HTML_SPECIAL_OPEN_RE = /^ {0,3}(<!--|<\?|<![A-Za-z]|<!\[CDATA\[)/;
-      const HTML_SPECIAL_CLOSE_MAP = {
-        '<!--': /-->/,
-        '<?': /\?>/,
-        '<![CDATA[': /\]\]>/
-      };
-
-      const getHtmlBlockCloseRe = function (rest) {
-        const rawMatch = rest.match(HTML_RAW_TAG_RE);
-        if (rawMatch) {
-          return new RegExp('<\\/' + rawMatch[1] + '\\s*>', 'i');
-        }
-        const specialMatch = rest.match(HTML_SPECIAL_OPEN_RE);
-        if (specialMatch) {
-          return HTML_SPECIAL_CLOSE_MAP[specialMatch[1]] || />/;
-        }
-        return HTML_BLOCK_TAG_RE.test(rest) ? /^[ \t]*$/ : null;
-      };
-
       const fmOpen = lines[0].match(/^\uFEFF?(---|\+\+\+)[ \t]*$/);
       const fmCloseRe = fmOpen ? (fmOpen[1] === '---' ? /^(?:---|\.\.\.)[ \t]*$/ : /^\+\+\+[ \t]*$/) : null;
       const fmEndIdx = fmCloseRe ? lines.slice(1).findIndex(function (l) {
@@ -1072,7 +1076,7 @@
           return;
         }
         const codeAndHtmlMaskedBlock = seg.text
-          .replace(/<(script|style|pre|textarea|xmp|noscript|noembed|noframes|plaintext|iframe)\b(?:[^>"']|"[^"]*"|'[^']*')*>[\s\S]*?(?:<\/\1>|$)|<!--[\s\S]*?(?:-->|$)|<\?[\s\S]*?(?:\?>|$)|<![A-Za-z][\s\S]*?(?:>|$)|<!\[CDATA\[[\s\S]*?(?:\]\]>|$)/gi, function (match) {
+          .replace(/<(script|style|pre|textarea|xmp|noscript|noembed|noframes|plaintext|iframe|code|kbd|samp|tt)\b(?:[^>"']|"[^"]*"|'[^']*')*>[\s\S]*?(?:<\/\1>|$)|<!--[\s\S]*?(?:-->|$)|<\?[\s\S]*?(?:\?>|$)|<![A-Za-z][\s\S]*?(?:>|$)|<!\[CDATA\[[\s\S]*?(?:\]\]>|$)/gi, function (match) {
             return maskSpan(match, false);
           })
           .replace(/(?<=(?:^|[^\\])(?:\\\\)*)(`+)(?!`)(?:[\s\S]*?[^`])?\1(?!`)/g, function (match) {
@@ -1108,14 +1112,13 @@
             }
           );
           const normalized = maskedLine
+            .replace(/(?<=(?:^|[^\\])(?:\\\\)*\\)(?=[（）])/g, '\\')
             .replace(
-              /(?<=(?:^|[^\\])(?:\\\\)*)(?<![*_])(\*+|_+)(?![*_])(?=\S)((?:(?!\1).)+?)(?<=\S)\1(\*+|_+)?/g,
-              function (match, delim, inner, extraClose, offset, fullStr) {
+              /(?<=(?:^|[^\\])(?:\\\\)*)(\*+|_+)(?![*_])(?=\S)((?:(?!\1).)+?)(?<=\S)\1(?:(?!(?:(\*+|_+)(?=\S)(?:(?!\3).)+?(?<=\S)\3))(\*+|_+))?/g,
+              function (match, delim, inner, _nextDelim, extraClose, offset, fullStr) {
                 const prevChar = offset > 0 ? fullStr[offset - 1] : '';
-                const mergeExtra = Boolean(extraClose && extraClose[0] === delim[0]);
-                const closeDelim = delim + (mergeExtra ? extraClose : '');
-                const unmergedExtra = mergeExtra ? '' : (extraClose || '');
-                const rest = unmergedExtra + fullStr.slice(offset + match.length);
+                const closeDelim = delim + (extraClose || '');
+                const rest = fullStr.slice(offset + match.length);
                 if (delim[0] === '_' && (/[\p{L}\p{N}]/u.test(prevChar) || /^[\p{L}\p{N}]/u.test(rest))) {
                   return match;
                 }
@@ -1124,7 +1127,7 @@
                 }
                 const updatedInner = inner.endsWith('）') ? inner.slice(0, -1) + ')' : inner;
                 const needsSpace = /^[\p{L}\p{N}`*_\[\uE000（]/u.test(rest);
-                return delim + updatedInner + closeDelim + (needsSpace ? ' ' : '') + unmergedExtra;
+                return delim + updatedInner + closeDelim + (needsSpace ? ' ' : '');
               }
             )
             .replace(/([\]\p{L}\p{N}]|\uE001|\uE003\))（/gu, '$1 (')
