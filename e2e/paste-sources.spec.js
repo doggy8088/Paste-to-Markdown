@@ -1718,6 +1718,12 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       'x（1） | y',
       '</custom-box>',
       '',
+      '> - <div>',
+      '>   A | B',
+      '>   --- | ---',
+      '>   x（1） | y',
+      '> </div>',
+      '',
       '段落前 (一)',
       '<span>',
       '段落後 (二)',
@@ -1727,7 +1733,7 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '<pre>',
       '未閉合（保留）'
     ].join('\n');
-    const markdown = await convertPaste(page, { text: input });
+    const markdown = await convertPaste(page, { text: input.replace('<custom-box>\nA | B\n--- | ---\nx（1） | y\n</custom-box>\n', '<custom-box>\nA | B\n--- | ---\nx（1） | y\n</custom-box>\n\n> - <div>\n>   A | B\n>   --- | ---\n>   x（1） | y\n> </div>\n') });
     expect(markdown).toBe(expected);
   });
 
@@ -1735,14 +1741,15 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     await gotoApp(page);
     const input = [
       '請參考 [文件（一）](foo(a(b（c）))\\))（連結）、[角度連結](<./foo bar（baz）>)（說明）、[網址連結](<https://example.com/a（b）>)（說明）、[跨行連結](',
-      'foo（bar） "標題（一）")（說明）、[https://example.com/foo](url)（說明）後、[參照][id（a）]、[未閉合](foo 與 [標籤]（測試）及 `呼叫（值）`（參數）、`<kbd>x（1）</kbd>`（按鍵）以及 `跨行（',
+      'foo（bar） "標題（一）")（說明）、[跨行無標題](',
+      'foo(bar))（說明）、[https://example.com/foo](url)（說明）後、[參照][id（a）]、說明](版本（x）)後、[未閉合](foo 與 [標籤]（測試）及 `呼叫（值）`（參數）、`<kbd>x（1）</kbd>`（按鍵）以及 `跨行（',
       '測試）` 範例，並顯示 \\`符號（test）\\` 與 literal \\（x\\） 後文與 \uE002P2MSPAN0\uE003（測試） 與 foo_bar（baz）_qux、foo_テスト（x）_bar、foo_（x）_bar、_（x）_bar 識別字。',
-      '裸網址 https://example.com/foo（bar） 與 www.example.com/a（b（c）d） 與 ftp://example.com/a（b） 與（請見 https://example.com/x（y））後文與 <https://example.com/auto（link）> 皆保持不變。',
+      '裸網址 https://example.com/foo（bar） 與 www.example.com/a（b（c）d） 與 ftp://example.com/a（b） 與 (https://example.com/foo(bar))（說明）與（請見 https://example.com/x（y））後文與 <https://example.com/auto（link）> 皆保持不變。',
       'HTML <a title="1 > 0" href="page（test）.html">連結（一）</a> 與 <code>call（arg）</code> 與 <code>a `b` c（d）</code> 與 <pre>原樣（保留）</pre> 屬性不變。',
       '[id（a）]: https://example.com/ref（目標）',
       '[cont]:',
       '  page（目標）',
-      '公式 $x（1）$（說明）、跨行行內公式 $a',
+      '公式 $x（1）$（說明）、$x（1）$$、跨行行內公式 $a',
       'A | B',
       '--- | ---',
       'x（1） | y',
@@ -1756,14 +1763,15 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     ].join('\n');
     const expected = [
       '請參考 [文件 (一)](foo(a(b（c）))\\)) (連結)、[角度連結](<./foo bar（baz）>) (說明)、[網址連結](<https://example.com/a（b）>) (說明)、[跨行連結](',
-      'foo（bar） "標題（一）") (說明)、[https://example.com/foo](url) (說明) 後、[參照][id (a)]、[未閉合](foo 與 [標籤] (測試) 及 `呼叫（值）` (參數)、`<kbd>x（1）</kbd>` (按鍵) 以及 `跨行（',
+      'foo（bar） "標題（一）") (說明)、[跨行無標題](',
+      'foo(bar)) (說明)、[https://example.com/foo](url) (說明) 後、[參照][id (a)]、說明](版本 (x))後、[未閉合](foo 與 [標籤] (測試) 及 `呼叫（值）` (參數)、`<kbd>x（1）</kbd>` (按鍵) 以及 `跨行（',
       '測試）` 範例，並顯示 \\`符號 (test)\\` 與 literal \\\\(x\\\\) 後文與 \uE002P2MSPAN0\uE003(測試) 與 foo_bar (baz)_qux、foo_テスト (x)_bar、foo_(x)_bar、_(x)_bar 識別字。',
-      '裸網址 https://example.com/foo（bar） 與 www.example.com/a（b（c）d） 與 ftp://example.com/a（b） 與 (請見 https://example.com/x（y）) 後文與 <https://example.com/auto（link）> 皆保持不變。',
+      '裸網址 https://example.com/foo（bar） 與 www.example.com/a（b（c）d） 與 ftp://example.com/a（b） 與 (https://example.com/foo(bar)) (說明) 與 (請見 https://example.com/x（y）) 後文與 <https://example.com/auto（link）> 皆保持不變。',
       'HTML <a title="1 > 0" href="page（test）.html">連結 (一)</a> 與 <code>call（arg）</code> 與 <code>a `b` c（d）</code> 與 <pre>原樣（保留）</pre> 屬性不變。',
       '[id (a)]: https://example.com/ref（目標）',
       '[cont]:',
       '  page（目標）',
-      '公式 $x（1）$ (說明)、跨行行內公式 $a',
+      '公式 $x（1）$ (說明)、$x（1）$$、跨行行內公式 $a',
       'A | B',
       '--- | ---',
       'x（1） | y',
@@ -1802,6 +1810,10 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '    a | b',
       '    --- | ---',
       '    - a | b',
+      '    --- | ---',
+      '- 清單後主題分隔線重置縮排',
+      '* * *',
+      '    A | B',
       '    --- | ---',
       '- 清單後頂層圍欄重置縮排',
       '```',
@@ -1852,6 +1864,10 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '    --- | ---',
       '    - a | b',
       '    --- | ---',
+      '- 清單後主題分隔線重置縮排',
+      '* * *',
+      '    A | B',
+      '    --- | ---',
       '- 清單後頂層圍欄重置縮排',
       '```',
       'code',
@@ -1886,6 +1902,10 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const longTail = 'a'.repeat(30000);
     const longStarMarkdown = await convertPaste(page, { text: longStars + '（x）' + longTail });
     expect(longStarMarkdown).toBe(longStars + '(x) ' + longTail);
+
+    const longUnclosedLinks = '[a](b'.repeat(20000);
+    const longUnclosedMarkdown = await convertPaste(page, { text: longUnclosedLinks + '（測試）' });
+    expect(longUnclosedMarkdown).toBe(longUnclosedLinks + ' (測試)');
 
     const longEmphasisBody = 'a'.repeat(501);
     const longEmphasisMarkdown = await convertPaste(page, { text: '**' + longEmphasisBody + '**（Cisco）產品' });

@@ -837,6 +837,8 @@
       const HTML_TYPE6_TAG_RE = /^ {0,3}<\/?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|meta|nav|noframes|ol|optgroup|option|p|param|section|source|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?=[\s/>]|$)/i;
       const HTML_TYPE7_TAG_RE = /^ {0,3}(?:<[A-Za-z][\w-]*(?: +[A-Za-z:_][\w.:-]*(?: *= *"[^"\n]*"| *= *'[^'\n]*'| *= *[^\s"'=<>`]+)?)*? *\/?>|<\/[A-Za-z][\w-]*\s*>)[ \t]*$/;
       const HTML_SPECIAL_OPEN_RE = /^ {0,3}(<!--|<\?|<![A-Za-z]|<!\[CDATA\[)/;
+      const THEMATIC_BREAK_RE = /^[ \t]{0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$/;
+      const LINK_TAIL_RE = /^(?:[ \t]|\n(?![ \t]*\n))*(?:(?:"(?:\\.|[^"\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n]|\n(?![ \t]*\n))*'|\((?:\\.|[^()\n]|\n(?![ \t]*\n))*\))(?:[ \t]|\n(?![ \t]*\n))*)?\)/;
       const HTML_SPECIAL_CLOSE_MAP = {
         '<!--': /-->/,
         '<?': /\?>/,
@@ -856,15 +858,6 @@
       };
 
       let listContentIndent = 0;
-      const updateListIndent = function (line, isProtectedBlock) {
-        const listMatch = !isProtectedBlock && line.match(/^([ \t]*)(?:>[ \t]*)*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)+/);
-        if (listMatch && countIndentCols(listMatch[1]) <= listContentIndent + 3) {
-          listContentIndent = countIndentCols(listMatch[0]);
-        } else if (line.trim() !== '' && countIndentCols(line.match(/^[ \t]*/)[0]) < listContentIndent) {
-          listContentIndent = 0;
-        }
-      };
-
       const getQuotePrefix = function (line) {
         const match = line.match(/^((?:[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+)+)?([ \t]*> ?(?:(?:[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+)*[ \t]*> ?)*)(.*)$/);
         if (!match) {
@@ -880,6 +873,16 @@
           prefix: (match[1] || '') + match[2],
           rest: match[3]
         };
+      };
+
+      const updateListIndent = function (line, isProtectedBlock) {
+        const q = getQuotePrefix(line);
+        const listMatch = !isProtectedBlock && !THEMATIC_BREAK_RE.test(q.rest) && line.match(/^([ \t]*)(?:>[ \t]*)*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)+/);
+        if (listMatch && countIndentCols(listMatch[1]) <= listContentIndent + 3) {
+          listContentIndent = countIndentCols(listMatch[0]);
+        } else if (line.trim() !== '' && countIndentCols(line.match(/^[ \t]*/)[0]) < listContentIndent) {
+          listContentIndent = 0;
+        }
       };
 
       const hasFenceContainerEnded = function (line, activeFence) {
@@ -959,7 +962,7 @@
       const getTableRowParts = function (line) {
         const q = getQuotePrefix(line);
         const maxMarkerIndent = q.depth > 0 ? 3 : listContentIndent + 3;
-        const listMatch = q.rest.match(/^([ \t]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)+)(.*)$/);
+        const listMatch = !THEMATIC_BREAK_RE.test(q.rest) && q.rest.match(/^([ \t]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)+)(.*)$/);
         if (listMatch && countIndentCols(listMatch[1].match(/^[ \t]*/)[0]) <= maxMarkerIndent) {
           return { depth: q.depth, prefix: q.prefix + listMatch[1], rest: listMatch[2], hasList: true };
         }
@@ -996,6 +999,57 @@
       };
 
       const maskLinkDestinations = function (str) {
+        const validLabelClose = new Set();
+        const directClose = new Map();
+        const runEndBeforeTitle = new Map();
+        const bracketStack = [];
+        let k = 0;
+        while (k < str.length) {
+          if (/\s/.test(str[k])) {
+            let newlines = 0;
+            while (k < str.length && /\s/.test(str[k])) {
+              if (str[k] === '\n') {
+                newlines++;
+              }
+              k++;
+            }
+            if (newlines >= 2) {
+              bracketStack.length = 0;
+            }
+            continue;
+          }
+          const runKey = -k - 1;
+          const parenStack = [];
+          let hasUnmatchedClose = false;
+          while (k < str.length && !/\s/.test(str[k])) {
+            if (str[k] === '\\' && k + 1 < str.length) {
+              k += 2;
+              continue;
+            }
+            if (str[k] === '[') {
+              bracketStack.push(k);
+            } else if (str[k] === ']' && bracketStack.length > 0) {
+              bracketStack.pop();
+              validLabelClose.add(k);
+            } else if (str[k] === '(') {
+              parenStack.push(k);
+            } else if (str[k] === ')') {
+              if (parenStack.length > 0) {
+                directClose.set(parenStack.pop(), k);
+              } else if (!hasUnmatchedClose) {
+                hasUnmatchedClose = true;
+                directClose.set(runKey, k);
+              }
+            }
+            k++;
+          }
+          if (parenStack.length > 0) {
+            runEndBeforeTitle.set(parenStack[parenStack.length - 1], k);
+          } else if (!hasUnmatchedClose) {
+            runEndBeforeTitle.set(runKey, k);
+          }
+        }
+
         let out = '';
         let i = 0;
         while (i < str.length) {
@@ -1005,48 +1059,38 @@
             break;
           }
           out += str.slice(i, openIdx + 2);
-          let cursor = openIdx + 2;
-          let depth = 1;
-          let seenHref = false;
-          while (cursor < str.length && depth > 0) {
-            if (str[cursor] === '\\' && cursor + 1 < str.length) {
-              seenHref = true;
-              cursor += 2;
-              continue;
-            }
-            if (!seenHref && str[cursor] === '<') {
-              const angleMatch = str.slice(cursor).match(/^<(?:\\.|[^<>\\\r\n])*>/);
-              if (angleMatch) {
-                cursor += angleMatch[0].length;
-                seenHref = true;
-                continue;
-              }
-            }
-            if (depth === 1 && /\s/.test(str[cursor])) {
-              const tailRe = seenHref
-                ? /^(?:[ \t]|\n(?![ \t]*\n))*(?:(?:"(?:\\.|[^"\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n]|\n(?![ \t]*\n))*'|\((?:\\.|[^()\n]|\n(?![ \t]*\n))*\))(?:[ \t]|\n(?![ \t]*\n))*)?(?=\))/
-                : /^(?:[ \t]|\n(?![ \t]*\n))+/;
-              const wsMatch = str.slice(cursor).match(tailRe);
-              if (!wsMatch) {
-                break;
-              }
-              cursor += wsMatch[0].length;
-              continue;
-            }
-            seenHref = true;
-            if (str[cursor] === '(') {
-              depth++;
-            } else if (str[cursor] === ')') {
-              depth--;
-              if (depth === 0) {
-                break;
-              }
-            }
-            cursor++;
+          if (!validLabelClose.has(openIdx)) {
+            i = openIdx + 2;
+            continue;
           }
-          if (depth === 0) {
-            out += maskSpan(str.slice(openIdx + 2, cursor), false) + ')';
-            i = cursor + 1;
+          const parenIdx = openIdx + 1;
+          let cursor = openIdx + 2;
+          const leadWs = str.slice(cursor).match(/^(?:[ \t]|\n(?![ \t]*\n))+/);
+          if (leadWs) {
+            cursor += leadWs[0].length;
+          }
+          const lookupKey = leadWs ? -cursor - 1 : parenIdx;
+          let endIdx = -1;
+          let tailStart = -1;
+          if (str[cursor] === '<') {
+            const angleMatch = str.slice(cursor).match(/^<(?:\\.|[^<>\\\r\n])*>/);
+            if (angleMatch) {
+              tailStart = cursor + angleMatch[0].length;
+            }
+          } else if (directClose.has(lookupKey)) {
+            endIdx = directClose.get(lookupKey);
+          } else if (runEndBeforeTitle.has(lookupKey)) {
+            tailStart = runEndBeforeTitle.get(lookupKey);
+          }
+          if (tailStart !== -1) {
+            const tailMatch = str.slice(tailStart).match(LINK_TAIL_RE);
+            if (tailMatch) {
+              endIdx = tailStart + tailMatch[0].length - 1;
+            }
+          }
+          if (endIdx !== -1) {
+            out += maskSpan(str.slice(openIdx + 2, endIdx), false) + ')';
+            i = endIdx + 1;
           } else {
             i = openIdx + 2;
           }
@@ -1100,13 +1144,13 @@
           segments.push({ fenced: true, line: line.replace(/（/g, '(').replace(/）/g, ')') });
           return;
         }
-        const q = getQuotePrefix(line);
+        const t = getTableRowParts(line);
         const atBlockStart = currentProseLines.length === 0 || getQuotePrefix(currentProseLines[currentProseLines.length - 1]).rest.trim() === '';
-        const htmlCloseRe = getHtmlBlockCloseRe(q.rest, atBlockStart);
+        const htmlCloseRe = getHtmlBlockCloseRe(t.rest, atBlockStart);
         if (htmlCloseRe) {
           flushProse();
           segments.push({ fenced: true, line: line });
-          if (!htmlCloseRe.test(q.rest)) {
+          if (!htmlCloseRe.test(t.rest)) {
             activeHtmlEnd = htmlCloseRe;
           }
           return;
@@ -1129,7 +1173,7 @@
             .replace(/<(script|style|pre|textarea|xmp|noscript|noembed|noframes|plaintext|iframe|code|kbd|samp|tt)\b(?:[^>"']|"[^"]*"|'[^']*')*>[\s\S]*?(?:<\/\1>|$)|<!--[\s\S]*?(?:-->|$)|<\?[\s\S]*?(?:\?>|$)|<![A-Za-z][\s\S]*?(?:>|$)|<!\[CDATA\[[\s\S]*?(?:\]\]>|$)/gi, function (match) {
               return maskSpan(match, false);
             })
-            .replace(/\$\$[\s\S]+?\$\$|(?<!\\|\$)\$(?:[^\s$\\]|\\.)(?:[\s\S]*?(?:[^\s$\\]|\\.))?\$(?!\d|\$)/g, function (match) {
+            .replace(/\$\$[\s\S]+?\$\$|(?<!\\|\$)\$(?:[^\s$\\]|\\.)(?:[\s\S]*?(?:[^\s$\\]|\\.))?\$(?!\d)/g, function (match) {
               return maskSpan(match, !match.startsWith('$$'));
             })
             .replace(/<\/?[A-Za-z](?:[^>"'\r\n]|"[^"\r\n]*"|'[^'\r\n]*')*>/gi, function (match) {
@@ -1144,6 +1188,7 @@
             /(?:(?:ftp|https?):\/\/|www\.)(?:[a-zA-Z0-9-]+\.?)+[^\s<\[\]\uE000-\uE003]*/gi,
             function (match) {
               let fwDepth = 0;
+              let hwDepth = 0;
               let end = 0;
               while (end < match.length) {
                 if (match[end] === '（') {
@@ -1153,6 +1198,13 @@
                     break;
                   }
                   fwDepth--;
+                } else if (match[end] === '(') {
+                  hwDepth++;
+                } else if (match[end] === ')') {
+                  if (hwDepth === 0) {
+                    break;
+                  }
+                  hwDepth--;
                 }
                 end++;
               }
