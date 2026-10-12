@@ -1748,7 +1748,7 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const input = [
       '請參考 [文件（一）](foo(a(b（c）))\\))（連結）、[角度連結](<./foo bar（baz）>)（說明）、[網址連結](<https://example.com/a（b）>)（說明）、[跨行連結](',
       'foo（bar） "標題（一）")（說明）、[跨行無標題](',
-      'foo(bar))（說明）、[https://example.com/foo](url)（說明）後、[參照][id（a）]、說明](版本（x）)後、[未閉合](foo 與 [標籤]（測試）及 `呼叫（值）`（參數）、`<kbd>x（1）</kbd>`（按鍵）以及 `跨行（',
+      'foo(bar))（說明）、[https://example.com/foo](url)（說明）後、[參照（一）][id（a）]、[空參照][]、說明](版本（x）)後、[未閉合](foo 與 [標籤]（測試）及 `呼叫（值）`（參數）、`<kbd>x（1）</kbd>`（按鍵）以及 `跨行（',
       '測試）` 範例、測試 ``代碼（x）` 後，並顯示 \\`符號（test）\\` 與 literal \\（x\\） 後文與 \uE002P2MSPAN0\uE003（測試） 與 foo_bar（baz）_qux、foo_テスト（x）_bar、foo_（x）_bar、_（x）_bar 識別字。',
       '裸網址 https://example.com/foo（bar） 與 www.example.com/a（b（c）d） 與 ftp://example.com/a（b） 與 (https://example.com/foo(bar))（說明）與（請見 https://example.com/x（y））後文與 <https://example.com/auto（link）>（說明）後 皆保持不變。',
       'HTML <a title="1 > 0" href="page（test）.html">連結（一）</a> 與 <a',
@@ -1778,7 +1778,7 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const expected = [
       '請參考 [文件 (一)](foo(a(b（c）))\\)) (連結)、[角度連結](<./foo bar（baz）>) (說明)、[網址連結](<https://example.com/a（b）>) (說明)、[跨行連結](',
       'foo（bar） "標題（一）") (說明)、[跨行無標題](',
-      'foo(bar)) (說明)、[https://example.com/foo](url) (說明) 後、[參照][id (a)]、說明](版本 (x))後、[未閉合](foo 與 [標籤] (測試) 及 `呼叫（值）` (參數)、`<kbd>x（1）</kbd>` (按鍵) 以及 `跨行（',
+      'foo(bar)) (說明)、[https://example.com/foo](url) (說明) 後、[參照 (一)][id（a）]、[空參照][]、說明](版本 (x))後、[未閉合](foo 與 [標籤] (測試) 及 `呼叫（值）` (參數)、`<kbd>x（1）</kbd>` (按鍵) 以及 `跨行（',
       '測試）` 範例、測試 ``代碼 (x) ` 後，並顯示 \\`符號 (test)\\` 與 literal \\\\(x\\\\) 後文與 \uE002P2MSPAN0\uE003(測試) 與 foo_bar (baz)_qux、foo_テスト (x)_bar、foo_(x)_bar、_(x)_bar 識別字。',
       '裸網址 https://example.com/foo（bar） 與 www.example.com/a（b（c）d） 與 ftp://example.com/a（b） 與 (https://example.com/foo(bar)) (說明) 與 (請見 https://example.com/x（y）) 後文與 <https://example.com/auto（link）> (說明) 後 皆保持不變。',
       'HTML <a title="1 > 0" href="page（test）.html">連結 (一)</a> 與 <a',
@@ -1788,7 +1788,7 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '# 標題後定義',
       '[after-head]: https://example.com/head（目標）',
       '',
-      '[id (a)]: https://example.com/ref（目標）',
+      '[id（a）]: https://example.com/ref（目標）',
       '[a\\]b]: https://example.com/escaped（目標）',
       '[cont]:',
       '  page（目標）',
@@ -2075,6 +2075,12 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '--- |',
       'x（1） | y',
       '',
+      '> A | B',
+      '- | -',
+      'x（1） | y',
+      '',
+      'abc\uE004def（x）',
+      '',
       'https://example.com/a)（b）後 與 https://example.com/a(b（說明）'
     ].join('\n');
     const expected = [
@@ -2340,6 +2346,12 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       ' | ',
       '--- |',
       'x (1) | y',
+      '',
+      '> A | B',
+      '- | -',
+      'x (1) | y',
+      '',
+      'abc\uE004def (x)',
       '',
       'https://example.com/a)（b）後 與 https://example.com/a(b (說明)'
     ].join('\n');

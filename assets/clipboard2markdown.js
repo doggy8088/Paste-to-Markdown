@@ -823,7 +823,11 @@
       const spanTokenRe = new RegExp('[\\uE000\\uE002]' + spanTag + '(\\d+)[BMS][\\uE001\\uE003]', 'g');
       const blockSpanLineRe = new RegExp('^\\uE002' + spanTag + '\\d+B\\uE003$');
       const multilineSpanRe = new RegExp('[\\uE000\\uE002]' + spanTag + '\\d+M[\\uE001\\uE003]');
-      const lines = normalizedInput.split('\n');
+      let literalE004 = '\uE004';
+      while (normalizedInput.includes(literalE004)) {
+        literalE004 = String.fromCharCode(literalE004.charCodeAt(0) + 1);
+      }
+      const lines = normalizedInput.replace(/\uE004/g, literalE004).split('\n');
       const UNESCAPED_PIPE_RE = /(?<=(?:^|[^\\])(?:\\\\)*)\|/;
 
       const countIndentCols = function (ws) {
@@ -1101,16 +1105,29 @@
         let out = '';
         let i = 0;
         while (i < str.length) {
-          const openIdx = str.indexOf('](', i);
-          if (openIdx === -1) {
+          const nextMatch = str.slice(i).match(/\][(\[]/);
+          if (!nextMatch) {
             out += str.slice(i);
             break;
           }
-          out += str.slice(i, openIdx + 2);
+          const openIdx = i + nextMatch.index;
           if (!validLabelClose.has(openIdx)) {
-            i = openIdx + 2;
+            out += str.slice(i, openIdx + 1);
+            i = openIdx + 1;
             continue;
           }
+          if (str[openIdx + 1] === '[') {
+            const refMatch = str.slice(openIdx + 1).match(/^\[((?!\s*\])(?:\\.|[^\[\]\\\n\uE004]|\n(?![ \t]*\n))+)\]/);
+            if (refMatch) {
+              out += str.slice(i, openIdx + 2) + maskSpan(refMatch[1], false);
+              i = openIdx + refMatch[0].length;
+              continue;
+            }
+            out += str.slice(i, openIdx + 1);
+            i = openIdx + 1;
+            continue;
+          }
+          out += str.slice(i, openIdx + 2);
           const parenIdx = openIdx + 1;
           let cursor = openIdx + 2;
           const leadWs = str.slice(cursor).match(/^(?:[ \t]|\n(?![ \t]*\n))+/);
@@ -1207,7 +1224,7 @@
           !inProseTable &&
           qBefore.depth <= prevT.depth &&
           isTableRowCandidate(currentProseLines[currentProseLines.length - 1]) &&
-          isTableDelimiterLine(line, prevT.depth ? 0 : (listContentIndent || prevListIndent)) &&
+          isTableDelimiterLine(line, qBefore.depth < prevT.depth ? Infinity : (prevT.depth ? 0 : (listContentIndent || prevListIndent))) &&
           splitTableCells(currentProseLines[currentProseLines.length - 1]).length === splitTableCells(line, true).length;
         if (!activeFence && !isTableStartDelim) {
           updateListIndent(line, false, allowAnyOrdered);
@@ -1350,7 +1367,9 @@
                 return match;
               }
               validDefEnd = offset + match.length + 1;
-              return prefix + maskSpan(destAndTitle, false);
+              return prefix.replace(/\[((?:\\.|[^\\\n\]])+)\]/, function (_m, lbl) {
+                return '[' + maskSpan(lbl, false) + ']';
+              }) + maskSpan(destAndTitle, false);
             })
             .replace(/^([ \t]*(?:(?:>|(?:[-*+]|\d{1,9}[.)])[ \t])[ \t]*)*\d{1,9})）(?=[ \t]|$)/gm, function (_match, prefix) {
               return prefix + maskSpan('）', false);
@@ -1449,7 +1468,7 @@
           lineIndex + 1 < normalizedLines.length &&
           isTableRowCandidate(currentLine) &&
           getQuotePrefix(normalizedLines[lineIndex + 1]).depth <= tableQuoteDepth &&
-          isTableDelimiterLine(normalizedLines[lineIndex + 1], tableListIndent) &&
+          isTableDelimiterLine(normalizedLines[lineIndex + 1], getQuotePrefix(normalizedLines[lineIndex + 1]).depth < tableQuoteDepth ? Infinity : tableListIndent) &&
           splitTableCells(currentLine).length === splitTableCells(normalizedLines[lineIndex + 1], true).length &&
           splitTableCells(restoreSpans(currentLine)).length === splitTableCells(normalizedLines[lineIndex + 1], true).length
         ) {
@@ -1533,7 +1552,7 @@
         }
       }
 
-      const result = restoreSpans(formattedLines.join('\n'));
+      const result = restoreSpans(formattedLines.join('\n')).replaceAll(literalE004, '\uE004');
       if (result === normalizedInput) {
         return null;
       }
