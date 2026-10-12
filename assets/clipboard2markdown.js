@@ -1111,8 +1111,8 @@
             .replace(/<\/?[A-Za-z](?:[^>"'\r\n]|"[^"\r\n]*"|'[^'\r\n]*')*>/gi, function (match) {
               return maskSpan(match, false);
             })
-            .replace(/^((?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}\[[^\n\]]+\]:[ \t]*(?:\n(?:[ \t]{0,3}>[ \t]?)*[ \t]*)?)(<[^>\r\n]+>|\S+)/gm, function (match, prefix, dest) {
-              return prefix + maskSpan(dest, false);
+            .replace(/^(?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}\[[^\n\]]+\]:[ \t]*(?:\n(?:[ \t]{0,3}>[ \t]?)*[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n(?:[ \t]{0,3}>[ \t]?)*[ \t]*)(?:"(?:\\.|[^"\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n]|\n(?![ \t]*\n))*'|\((?:\\.|[^()\n]|\n(?![ \t]*\n))*\))[ \t]*(?=\n|$))?/gm, function (match) {
+              return maskSpan(match, false);
             })
         );
         codeAndHtmlMaskedBlock.split('\n').forEach(function (line) {
@@ -1138,7 +1138,7 @@
           const normalized = maskedLine
             .replace(/(?<=(?:^|[^\\])(?:\\\\)*\\)(?=[（）])/g, '\\')
             .replace(
-              /(?<=(?:^|[^\\])(?:\\\\)*)(\*+|_+)(?![*_])(?=\S)((?:(?!\1).)+?)(?<=\S)\1(?:(?!(?:(\*+|_+)(?=\S)(?:(?!\3).)+?(?<=\S)\3))(\*+|_+))?/g,
+              /(?<=(?:^|[^\\])(?:\\\\)*)(\*+|_+|(?<!~)~~(?!~))(?![*_])(?=\S)((?:(?!\1).)+?)(?<=\S)\1(?:(?!(?:(\*+|_+|(?<!~)~~(?!~))(?=\S)(?:(?!\3).)+?(?<=\S)\3))(\*+|_+))?/g,
               function (match, delim, inner, _nextDelim, extraClose, offset, fullStr) {
                 const prevChar = offset > 0 ? fullStr[offset - 1] : '';
                 const closeDelim = delim + (extraClose || '');
@@ -1146,17 +1146,20 @@
                 if (delim[0] === '_' && (/[\p{L}\p{N}]/u.test(prevChar) || /^[\p{L}\p{N}]/u.test(rest))) {
                   return match;
                 }
-                if (!inner.endsWith('）') && !rest.startsWith('（')) {
+                const innerTrailingMatch = inner.match(/）((?:\*+|_+|~~)*)$/);
+                if (!innerTrailingMatch && !rest.startsWith('（')) {
                   return match;
                 }
-                const updatedInner = inner.endsWith('）') ? inner.slice(0, -1) + ')' : inner;
-                const needsSpace = /^[\p{L}\p{N}`*_\[\uE000（]/u.test(rest);
+                const updatedInner = innerTrailingMatch
+                  ? inner.slice(0, innerTrailingMatch.index) + ')' + innerTrailingMatch[1]
+                  : inner;
+                const needsSpace = /^(?:[\p{L}\p{N}`*_\[\uE000（]|~~(?=\S))/u.test(rest);
                 return delim + updatedInner + closeDelim + (needsSpace ? ' ' : '');
               }
             )
             .replace(/([\]\p{L}\p{N}]|\uE001|\uE003\))（/gu, '$1 (')
             .replace(/（/g, '(')
-            .replace(/）(?=[\p{L}\p{N}`\[\uE000]|(\*+)(?=\S)(?:(?!\1).)+?(?<=\S)\1|(_+)(?=\S)(?:(?!\2).)+?(?<=\S)\2(?![\p{L}\p{N}(（]))/gu, ') ')
+            .replace(/）(?=[\p{L}\p{N}`\[\uE000]|(\*+|(?<!~)~~(?!~))(?=\S)(?:(?!\1).)+?(?<=\S)\1|(_+)(?=\S)(?:(?!\2).)+?(?<=\S)\2(?![\p{L}\p{N}(（]))/gu, ') ')
             .replace(/）/g, ')');
           normalizedLines.push(normalized.replace(spanTokenRe, function (match, idx) {
             const original = protectedSpans[Number(idx)];
