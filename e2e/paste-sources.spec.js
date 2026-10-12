@@ -1558,10 +1558,11 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '> 引用縮排後文字（仍應修正）',
       '> ```',
       '> 未關閉引用（程式碼）',
+      '2. 非中斷（內）',
       'A | B',
       '--- | ---',
       'x（內） | y',
-      '',
+      '1. 中斷引用（仍應修正）',
       '離開引用（仍應修正）',
       '- ```',
       '  清單未關閉（程式碼）',
@@ -1651,10 +1652,11 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '> 引用縮排後文字 (仍應修正)',
       '> ```',
       '> 未關閉引用(程式碼)',
+      '2. 非中斷(內)',
       'A | B',
       '--- | ---',
       'x(內) | y',
-      '',
+      '1. 中斷引用 (仍應修正)',
       '離開引用 (仍應修正)',
       '- ```',
       '  清單未關閉(程式碼)',
@@ -1799,6 +1801,17 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       'a | b',
       '    a | b',
       '    --- | ---',
+      '    - a | b',
+      '    --- | ---',
+      '- 清單後頂層圍欄重置縮排',
+      '```',
+      'code',
+      '```',
+      '    A | B',
+      '    --- | ---',
+      '- 直接表頭 | 欄位',
+      '  --- | ---',
+      '  1 | 2345',
       '- 清單內表格：',
       '  Name | Value',
       '  --- | ---',
@@ -1837,6 +1850,17 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       'a | b',
       '    a | b',
       '    --- | ---',
+      '    - a | b',
+      '    --- | ---',
+      '- 清單後頂層圍欄重置縮排',
+      '```',
+      'code',
+      '```',
+      '    A | B',
+      '    --- | ---',
+      '- | 直接表頭 | 欄位   |',
+      '  | ---- | ---- |',
+      '  | 1    | 2345 |',
       '- 清單內表格：',
       '  | Name    | Value |',
       '  | ------- | ----- |',
@@ -1862,6 +1886,10 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const longTail = 'a'.repeat(30000);
     const longStarMarkdown = await convertPaste(page, { text: longStars + '（x）' + longTail });
     expect(longStarMarkdown).toBe(longStars + '(x) ' + longTail);
+
+    const longEmphasisBody = 'a'.repeat(501);
+    const longEmphasisMarkdown = await convertPaste(page, { text: '**' + longEmphasisBody + '**（Cisco）產品' });
+    expect(longEmphasisMarkdown).toBe('**' + longEmphasisBody + '** (Cisco) 產品');
 
     const tomlInput = '+++\ntitle = "標題（測試）"\n+++\n段落（散文）';
     const tomlMarkdown = await convertPaste(page, { text: tomlInput });
