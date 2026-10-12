@@ -934,12 +934,16 @@
         if (activeBlock.quoteDepth > 0 && q.depth < activeBlock.quoteDepth) {
           return q.rest.trim() === '' || hasBlockInterrupt(q.rest);
         }
+        let restAtDepth = line;
+        for (let d = 0; d < activeBlock.quoteDepth; d++) {
+          restAtDepth = restAtDepth.replace(/^[ \t]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)*>[ \t]?/, '');
+        }
         if (
           activeBlock.containerIndent > 0 &&
-          q.rest.trim() !== '' &&
-          countIndentCols(q.rest.match(/^[ \t]*/)[0]) < activeBlock.containerIndent
+          restAtDepth.trim() !== '' &&
+          countIndentCols(restAtDepth.match(/^[ \t]*/)[0]) < activeBlock.containerIndent
         ) {
-          return prevBlank || activeBlock.hasContent === false || hasBlockInterrupt(q.rest);
+          return prevBlank || activeBlock.hasContent === false || hasBlockInterrupt(restAtDepth);
         }
         return false;
       };
@@ -1024,7 +1028,7 @@
           !THEMATIC_BREAK_RE.test(t.rest) &&
           countIndentCols(t.rest.match(/^[ \t]*/)[0]) <= maxIndent &&
           !/^[ \t]*#{1,6}(?:[ \t]|$)/.test(t.rest) &&
-          (!requirePipe || UNESCAPED_PIPE_RE.test(t.rest))
+          (!requirePipe || (t.rest.trim() !== '|' && UNESCAPED_PIPE_RE.test(t.rest)))
         );
       };
 
@@ -1201,9 +1205,9 @@
         const isTableStartDelim =
           !isBlockBoundary &&
           !inProseTable &&
-          qBefore.depth === prevT.depth &&
+          qBefore.depth <= prevT.depth &&
           isTableRowCandidate(currentProseLines[currentProseLines.length - 1]) &&
-          isTableDelimiterLine(line, qBefore.depth ? 0 : (listContentIndent || prevListIndent)) &&
+          isTableDelimiterLine(line, prevT.depth ? 0 : (listContentIndent || prevListIndent)) &&
           splitTableCells(currentProseLines[currentProseLines.length - 1]).length === splitTableCells(line, true).length;
         if (!activeFence && !isTableStartDelim) {
           updateListIndent(line, false, allowAnyOrdered);
@@ -1249,7 +1253,7 @@
         if (isTableStartDelim) {
           inProseTable = true;
           tableStartIdx = currentProseLines.length - 1;
-          tableHasOpenPara = Boolean(beforePrevProse.trim() !== '' && getQuotePrefix(currentProseLines[currentProseLines.length - 2]).depth === t.depth && !isHeadingOrHrLine(beforePrevProse, currentProseLines.length > 2 ? getTableRowParts(currentProseLines[currentProseLines.length - 3]).rest : ''));
+          tableHasOpenPara = Boolean(beforePrevProse.trim() !== '' && getQuotePrefix(currentProseLines[currentProseLines.length - 2]).depth <= prevT.depth && !isHeadingOrHrLine(beforePrevProse, currentProseLines.length > 2 ? getTableRowParts(currentProseLines[currentProseLines.length - 3]).rest : ''));
           currentProseLines[tableStartIdx] = currentProseLines[tableStartIdx].replace(UNESCAPED_PIPE_RE, '\uE004');
           currentProseLines.push(line);
         } else if (!isBlockBoundary && inProseTable && !t.hasList && countIndentCols(t.prefix + t.rest.match(/^[ \t]*/)[0]) >= listContentIndent && isTableRowCandidate(line, false)) {
@@ -1444,7 +1448,7 @@
         if (
           lineIndex + 1 < normalizedLines.length &&
           isTableRowCandidate(currentLine) &&
-          getQuotePrefix(normalizedLines[lineIndex + 1]).depth === tableQuoteDepth &&
+          getQuotePrefix(normalizedLines[lineIndex + 1]).depth <= tableQuoteDepth &&
           isTableDelimiterLine(normalizedLines[lineIndex + 1], tableListIndent) &&
           splitTableCells(currentLine).length === splitTableCells(normalizedLines[lineIndex + 1], true).length &&
           splitTableCells(restoreSpans(currentLine)).length === splitTableCells(normalizedLines[lineIndex + 1], true).length
@@ -1453,7 +1457,7 @@
           const prevTableT = getTableRowParts(prevTableLine);
           const hasOpenParaBefore =
             !blockSpanLineRe.test(prevTableLine) &&
-            prevTableT.depth === tableQuoteDepth &&
+            prevTableT.depth <= tableQuoteDepth &&
             prevTableT.rest.trim() !== '' &&
             !isHeadingOrHrLine(prevTableT.rest, getTableRowParts(normalizedLines[lineIndex - 2] || '').rest);
           const tableLines = [currentLine];
