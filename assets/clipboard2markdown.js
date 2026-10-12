@@ -819,8 +819,9 @@
       while (normalizedInput.includes(spanTag)) {
         spanTag += 'X';
       }
-      const spanTokenRe = new RegExp('[\\uE000\\uE002]' + spanTag + '(\\d+)[\\uE001\\uE003]', 'g');
-      const blockSpanLineRe = new RegExp('^\\uE002' + spanTag + '\\d+\\uE003$');
+      const spanTokenRe = new RegExp('[\\uE000\\uE002]' + spanTag + '(\\d+)[BMS][\\uE001\\uE003]', 'g');
+      const blockSpanLineRe = new RegExp('^\\uE002' + spanTag + '\\d+B\\uE003$');
+      const multilineSpanRe = new RegExp('[\\uE000\\uE002]' + spanTag + '\\d+M[\\uE001\\uE003]');
       const lines = normalizedInput.split('\n');
       const UNESCAPED_PIPE_RE = /(?<=(?:^|[^\\])(?:\\\\)*)\|/;
 
@@ -940,17 +941,19 @@
       };
 
       const protectedSpans = [];
-      const maskSpan = function (str, isCode) {
-        const prefix = isCode ? '\uE000' : '\uE002';
-        const suffix = isCode ? '\uE001' : '\uE003';
-        const token = prefix + spanTag + protectedSpans.length + suffix;
-        protectedSpans.push(str);
-        return token;
-      };
       const restoreSpans = function (str) {
         return str.replace(spanTokenRe, function (match, idx) {
           return protectedSpans[Number(idx)];
         });
+      };
+      const maskSpan = function (str, isCode, isBlock) {
+        const rawStr = restoreSpans(str);
+        const prefix = isCode ? '\uE000' : '\uE002';
+        const suffix = isCode ? '\uE001' : '\uE003';
+        const kind = isBlock ? 'B' : (rawStr.includes('\n') ? 'M' : 'S');
+        const token = prefix + spanTag + protectedSpans.length + kind + suffix;
+        protectedSpans.push(rawStr);
+        return token;
       };
 
       const splitTableCells = function (line) {
@@ -965,6 +968,7 @@
         const q = getQuotePrefix(line);
         const maxIndent = q.depth > 0 ? 3 : listContentIndent + 3;
         return (
+          !multilineSpanRe.test(line) &&
           countIndentCols(q.rest.match(/^[ \t]*/)[0]) <= maxIndent &&
           !/^[ \t]*(?:#{1,6}[ \t]|(?:[-*+]|\d{1,9}[.)])[ \t]|\[[^\n\]]+\]:[ \t]*)/.test(q.rest) &&
           UNESCAPED_PIPE_RE.test(q.rest)
@@ -1104,16 +1108,16 @@
       const normalizedLines = [];
       segments.forEach(function (seg) {
         if (seg.fenced) {
-          normalizedLines.push(maskSpan(seg.line, false));
+          normalizedLines.push(maskSpan(seg.line, false, true));
           return;
         }
         const codeAndHtmlMaskedBlock = maskLinkDestinations(
           seg.text
-            .replace(/<(script|style|pre|textarea|xmp|noscript|noembed|noframes|plaintext|iframe|code|kbd|samp|tt)\b(?:[^>"']|"[^"]*"|'[^']*')*>[\s\S]*?(?:<\/\1>|$)|<!--[\s\S]*?(?:-->|$)|<\?[\s\S]*?(?:\?>|$)|<![A-Za-z][\s\S]*?(?:>|$)|<!\[CDATA\[[\s\S]*?(?:\]\]>|$)/gi, function (match) {
-              return maskSpan(match, false);
-            })
             .replace(/(?<=(?:^|[^\\])(?:\\\\)*)(`+)(?!`)(?:[\s\S]*?[^`])?\1(?!`)/g, function (match) {
               return maskSpan(match, true);
+            })
+            .replace(/<(script|style|pre|textarea|xmp|noscript|noembed|noframes|plaintext|iframe|code|kbd|samp|tt)\b(?:[^>"']|"[^"]*"|'[^']*')*>[\s\S]*?(?:<\/\1>|$)|<!--[\s\S]*?(?:-->|$)|<\?[\s\S]*?(?:\?>|$)|<![A-Za-z][\s\S]*?(?:>|$)|<!\[CDATA\[[\s\S]*?(?:\]\]>|$)/gi, function (match) {
+              return maskSpan(match, false);
             })
             .replace(/\$\$[\s\S]+?\$\$|(?<!\\|\$)\$(?:[^\s$\\]|\\.)(?:[\s\S]*?(?:[^\s$\\]|\\.))?\$(?!\d|\$)/g, function (match) {
               return maskSpan(match, !match.startsWith('$$'));
@@ -1121,7 +1125,7 @@
             .replace(/<\/?[A-Za-z](?:[^>"'\r\n]|"[^"\r\n]*"|'[^'\r\n]*')*>/gi, function (match) {
               return maskSpan(match, false);
             })
-            .replace(/^((?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}\[[^\n\]]+\]:[ \t]*)((?:\n(?:[ \t]{0,3}>[ \t]?)*[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n(?:[ \t]{0,3}>[ \t]?)*[ \t]*)(?:"(?:\\.|[^"\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n]|\n(?![ \t]*\n))*'|\((?:\\.|[^()\n]|\n(?![ \t]*\n))*\))[ \t]*(?=\n|$))?)/gm, function (match, prefix, destAndTitle) {
+            .replace(/^((?:[ \t]*>[ \t]*|[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+|[ \t])*\[[^\n\]]+\]:[ \t]*)((?:\n(?:[ \t]*>[ \t]*)*[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n(?:[ \t]*>[ \t]*)*[ \t]*)(?:"(?:\\.|[^"\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n]|\n(?![ \t]*\n))*'|\((?:\\.|[^()\n]|\n(?![ \t]*\n))*\))[ \t]*(?=\n|$))?)/gm, function (match, prefix, destAndTitle) {
               return prefix + maskSpan(destAndTitle, false);
             })
         );
@@ -1148,7 +1152,7 @@
           const normalized = maskedLine
             .replace(/(?<=(?:^|[^\\])(?:\\\\)*\\)(?=[（）])/g, '\\')
             .replace(
-              /(?<=(?:^|[^\\])(?:\\\\)*)(\*+(?!\*)|_+(?!_)|(?<!~)~~(?!~))(?=\S)((?:(?!\1).)+?)(?<=\S)\1(?:(?!(?:(\*+|_+|(?<!~)~~(?!~))(?=\S)(?:(?!\3).)+?(?<=\S)\3))(\*+|_+))?/g,
+              /(?<=(?:^|[^\\])(?:\\\\)*)(\*{1,3}(?!\*)|_{1,3}(?!_)|(?<!~)~~(?!~))(?=\S)((?:(?!\1).){1,500}?)(?<=\S)\1(?:(?!(?:(\*{1,3}(?!\*)|_{1,3}(?!_)|(?<!~)~~(?!~))(?=\S)(?:(?!\3).){1,500}?(?<=\S)\3))(\*{1,3}(?!\*)|_{1,3}(?!_)))?/g,
               function (match, delim, inner, _nextDelim, extraClose, offset, fullStr) {
                 const prevChar = offset > 0 ? fullStr[offset - 1] : '';
                 const closeDelim = delim + (extraClose || '');
@@ -1169,7 +1173,7 @@
             )
             .replace(/([\]\p{L}\p{N}]|\uE001|\uE003\))（/gu, '$1 (')
             .replace(/（/g, '(')
-            .replace(/）(?=[\p{L}\p{N}`\[\uE000]|(\*+|(?<!~)~~(?!~))(?=\S)(?:(?!\1).)+?(?<=\S)\1|(_+)(?=\S)(?:(?!\2).)+?(?<=\S)\2(?![\p{L}\p{N}(（]))/gu, ') ')
+            .replace(/）(?=[\p{L}\p{N}`\[\uE000]|(\*{1,3}(?!\*)|(?<!~)~~(?!~))(?=\S)(?:(?!\1).){1,500}?(?<=\S)\1|(_{1,3}(?!_))(?=\S)(?:(?!\2).){1,500}?(?<=\S)\2(?![\p{L}\p{N}(（]))/gu, ') ')
             .replace(/）/g, ')');
           normalizedLines.push(normalized);
         });
@@ -1242,7 +1246,7 @@
             } else {
               formattedLines.push(rowPrefix + '| ' + colWidths.map(function (width, cIdx) {
                 return (row[cIdx] || '').padEnd(width, ' ');
-              }).join(' | ') + ' |');
+              }).concat(row.slice(colCount)).join(' | ') + ' |');
             }
           });
         } else {
