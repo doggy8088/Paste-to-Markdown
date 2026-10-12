@@ -839,6 +839,7 @@
       const HTML_TYPE7_TAG_RE = /^ {0,3}(?:<[A-Za-z][\w-]*(?: +[A-Za-z:_][\w.:-]*(?: *= *"[^"\n]*"| *= *'[^'\n]*'| *= *[^\s"'=<>`]+)?)*? *\/?>|<\/[A-Za-z][\w-]*\s*>)[ \t]*$/;
       const HTML_SPECIAL_OPEN_RE = /^ {0,3}(<!--|<\?|<![A-Za-z]|<!\[CDATA\[)/;
       const THEMATIC_BREAK_RE = /^[ \t]{0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$/;
+      const TABLE_DELIMITER_REST_RE = /^[ \t]*\|?(?:[ \t]*:?-+:?[ \t]*\|)+[ \t]*:?-+:?[ \t]*\|?[ \t]*$/;
       const LINK_TAIL_RE = /^(?:[ \t]|\n(?![ \t]*\n))*(?:(?:"(?:\\.|[^"\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n]|\n(?![ \t]*\n))*'|\((?:\\.|[^()\n]|\n(?![ \t]*\n))*\))(?:[ \t]|\n(?![ \t]*\n))*)?\)/;
       const URL_BACKPEDAL_RE = /(?:[^?!.,:;*_'"~()&]+|\([^)]*\)|&(?![a-zA-Z0-9]+;$)|[?!.,:;*_'"~)]+(?!$))+/;
       const HTML_SPECIAL_CLOSE_MAP = {
@@ -886,7 +887,7 @@
           listContentIndent = 0;
           listQuoteDepth = q.depth;
         }
-        const listMatch = !isProtectedBlock && !THEMATIC_BREAK_RE.test(q.rest) && (allowAnyOrdered || !/^[ \t]*(?!1[.)])\d{1,9}[.)]/.test(q.rest)) && q.rest.match(/^([ \t]*)(?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )|[ \t]))+/);
+        const listMatch = !isProtectedBlock && !THEMATIC_BREAK_RE.test(q.rest) && !TABLE_DELIMITER_REST_RE.test(q.rest) && (allowAnyOrdered || !/^[ \t]*(?!1[.)])\d{1,9}[.)]/.test(q.rest)) && q.rest.match(/^([ \t]*)(?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )|[ \t]))+/);
         if (listMatch && countIndentCols(listMatch[1]) <= listContentIndent + 3) {
           const nextIndent = countIndentCols(listMatch[0]);
           listIndents = listIndents.filter(function (n) {
@@ -993,7 +994,7 @@
       const getTableRowParts = function (line) {
         const q = getQuotePrefix(line);
         const maxMarkerIndent = listContentIndent + 3;
-        const listMatch = !THEMATIC_BREAK_RE.test(q.rest) && q.rest.match(/^([ \t]*(?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )|[ \t]))+(?:(?:\[[ xX]\])[ \t]+)?)(.*)$/);
+        const listMatch = !THEMATIC_BREAK_RE.test(q.rest) && !TABLE_DELIMITER_REST_RE.test(q.rest) && q.rest.match(/^([ \t]*(?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )|[ \t]))+(?:(?:\[[ xX]\])[ \t]+)?)(.*)$/);
         if (listMatch && countIndentCols(listMatch[1].match(/^[ \t]*/)[0]) <= maxMarkerIndent) {
           return { depth: q.depth, prefix: q.prefix + listMatch[1], rest: listMatch[2], hasList: true };
         }
@@ -1142,11 +1143,13 @@
       let currentProseLines = [];
       let activeFence = null;
       let activeHtml = null;
+      let inProseTable = false;
       const flushProse = function () {
         if (currentProseLines.length > 0) {
           segments.push({ fenced: false, text: currentProseLines.join('\n') });
           currentProseLines = [];
         }
+        inProseTable = false;
       };
       lines.forEach(function (line, lineIdx) {
         if (fmEndIdx > 0 && lineIdx <= fmEndIdx) {
@@ -1205,7 +1208,7 @@
         const t = getTableRowParts(line);
         const maxProseIndent = t.hasList ? 3 : listContentIndent + 3;
         const atBlockStart = isBlockBoundary || t.hasList;
-        if (atBlockStart && t.rest.trim() !== '' && countIndentCols(t.rest.match(/^[ \t]*/)[0]) > maxProseIndent) {
+        if ((atBlockStart || inProseTable) && t.rest.trim() !== '' && countIndentCols(t.rest.match(/^[ \t]*/)[0]) > maxProseIndent) {
           flushProse();
           segments.push({ fenced: true, line: line.replace(/（/g, '(').replace(/）/g, ')') });
           return;
@@ -1223,6 +1226,9 @@
           }
           return;
         }
+        inProseTable = (!isBlockBoundary && inProseTable)
+          ? (!t.hasList && !isHeadingOrHrLine(t.rest, prevProse))
+          : (!isBlockBoundary && t.depth === prevT.depth && isTableRowCandidate(currentProseLines[currentProseLines.length - 1]) && isTableDelimiterLine(line) && splitTableCells(currentProseLines[currentProseLines.length - 1]).length === splitTableCells(line).length);
         currentProseLines.push(line);
       });
       flushProse();
@@ -1268,7 +1274,7 @@
         const codeAndHtmlMaskedBlock = maskLinkDestinations(
           maskMath(
             seg.text
-              .replace(/(?<=(?:^|[^\\`])(?:\\\\)*(?:\\`)?)(`+)(?!`)(?:(?:[^\n]|\n(?![ \t]*\n))*?[^`])?\1(?!`)/g, function (match) {
+              .replace(/(?<=(?:^|[^\\`])(?:\\\\)*(?:\\`)?)(`+)(?!`)(?:(?:\\[\\|]|[^|`\n]|\n(?![ \t]*\n))*?(?:(?<=\\)\||[^|`]))?\1(?!`)/g, function (match) {
                 return maskSpan(match, true);
               })
               .replace(/(?<=(?:^|[^\\])(?:\\\\)*)(?:<(script|style|pre|textarea|xmp|noscript|noembed|noframes|plaintext|iframe|code|kbd|samp|tt)\b(?:[^>"'|]|"(?:\\.|[^"|\\\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'|\\\n]|\n(?![ \t]*\n))*')*>(?:\\.|[^|\\\n]|\n(?![ \t]*\n))*?(?:<\/\1>|(?=\n[ \t]*\n)|$)|<!--(?:\\.|[^|\\\n]|\n(?![ \t]*\n))*?(?:-->|(?=\n[ \t]*\n)|$)|<\?(?:\\.|[^|\\\n]|\n(?![ \t]*\n))*?(?:\?>|(?=\n[ \t]*\n)|$)|<![A-Za-z](?:\\.|[^|\\\n]|\n(?![ \t]*\n))*?(?:>|(?=\n[ \t]*\n)|$)|<!\[CDATA\[(?:\\.|[^|\\\n]|\n(?![ \t]*\n))*?(?:\]\]>|(?=\n[ \t]*\n)|$))/gi, function (match) {
