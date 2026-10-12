@@ -927,7 +927,7 @@
           line.trim() !== '' &&
           countIndentCols(line.match(/^[ \t]*/)[0]) < activeBlock.containerIndent
         ) {
-          return !activeBlock.htmlRe || prevBlank || hasBlockInterrupt(q.rest);
+          return prevBlank || hasBlockInterrupt(q.rest);
         }
         return false;
       };
@@ -1267,7 +1267,7 @@
                 return maskSpan(match, /^<(?:code|kbd|samp|tt)\b/i.test(match));
               })
           )
-            .replace(/(?<=(?:^|[^\\])(?:\\\\)*)(?:<[A-Za-z][\w-]*(?:(?:[ \t]|\n(?![ \t]*\n))+[A-Za-z:_][\w.:-]*(?:(?:[ \t]|\n(?![ \t]*\n))*=(?:[ \t]|\n(?![ \t]*\n))*(?:"(?:[^"\n]|\n(?![ \t]*\n))*"|'(?:[^'\n]|\n(?![ \t]*\n))*'|[^\s"'=<>`]+))?)*(?:[ \t]|\n(?![ \t]*\n))*\/?>|<\/[A-Za-z][\w:-]*(?:[ \t]|\n(?![ \t]*\n))*>|<([a-zA-Z][a-zA-Z0-9+.-]{1,31}:[^\s\x00-\x1f<>]+|[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+)>)/gi, function (match, autolink) {
+            .replace(/(?<=(?:^|[^\\])(?:\\\\)*)(?:<[A-Za-z][\w-]*(?:(?:[ \t]|\n(?![ \t]*\n))+[A-Za-z:_][\w.:-]*(?:(?:[ \t]|\n(?![ \t]*\n))*=(?:[ \t]|\n(?![ \t]*\n))*(?:"(?:[^"\n]|\n(?![ \t]*\n))*"|'(?:[^'\n]|\n(?![ \t]*\n))*'|[^\s"'=<>`]+))?)*(?:[ \t]|\n(?![ \t]*\n))*\/?>|<\/[A-Za-z][\w:-]*(?:[ \t]|\n(?![ \t]*\n))*>|<([a-zA-Z][a-zA-Z0-9+.-]{1,31}:[^\s\x00-\x1f<>|]+|[a-zA-Z0-9.!#$%&'*+/=?^_`{}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+)>)/gi, function (match, autolink) {
               const isAutolink = Boolean(autolink);
               return maskSpan(match, isAutolink, false, isAutolink || match.startsWith('</'));
             })
@@ -1373,6 +1373,14 @@
           splitTableCells(currentLine).length === splitTableCells(normalizedLines[lineIndex + 1]).length &&
           splitTableCells(restoreSpans(currentLine)).length === splitTableCells(normalizedLines[lineIndex + 1]).length
         ) {
+          const prevTableLine = normalizedLines[lineIndex - 1] || '';
+          const prevTableT = getTableRowParts(prevTableLine);
+          const hasOpenParaBefore =
+            !blockSpanLineRe.test(prevTableLine) &&
+            prevTableT.depth === tableQuoteDepth &&
+            !prevTableT.hasList &&
+            prevTableT.rest.trim() !== '' &&
+            !isHeadingOrHrLine(prevTableT.rest, getTableRowParts(normalizedLines[lineIndex - 2] || '').rest);
           const tableListIndent = tableQuoteDepth ? 0 : (listContentIndent || prevListIndent);
           const tableLines = [currentLine];
           lineIndex++;
@@ -1388,6 +1396,15 @@
           ) {
             tableLines.push(normalizedLines[lineIndex]);
             lineIndex++;
+          }
+          if (
+            hasOpenParaBefore &&
+            tableLines.slice(2).concat(normalizedLines[lineIndex] || '').some(function (l) {
+              return getQuotePrefix(l).depth === tableQuoteDepth && /^[ \t]{0,3}(?:=+|-+)[ \t]*$/.test(getTableRowParts(l).rest);
+            })
+          ) {
+            formattedLines.push.apply(formattedLines, tableLines);
+            continue;
           }
           const rows = tableLines.map(splitTableCells);
           const colCount = rows[0].length;
