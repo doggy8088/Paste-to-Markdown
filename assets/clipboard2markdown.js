@@ -814,8 +814,7 @@
 
     // Auto-correct pasted Markdown syntax (full-width parentheses spacing & GFM table alignment)
     markdownSyntax: function (text) {
-      const baseText = plainTextRules.genericPlainText(text);
-      const lines = baseText.split('\n');
+      const lines = text.split('\n');
       const UNESCAPED_PIPE_RE = /(?<=(?:^|[^\\])(?:\\\\)*)\|/;
 
       let listContentIndent = 0;
@@ -893,17 +892,19 @@
       };
 
       const splitTableCells = function (line) {
-        const trimmed = line.trim().replace(/^\|/, '').replace(/(?<=(?:^|[^\\])(?:\\\\)*)\|$/, '');
+        const q = getQuotePrefix(line);
+        const trimmed = q.rest.trim().replace(/^\|/, '').replace(/(?<=(?:^|[^\\])(?:\\\\)*)\|$/, '');
         return trimmed.split(UNESCAPED_PIPE_RE).map(function (cell) {
           return cell.trim();
         });
       };
 
       const isTableRowCandidate = function (line) {
+        const q = getQuotePrefix(line);
         return (
           updateFenceState(line, null) === null &&
-          !/^\s*(?:#{1,6}\s|>|(?:[-*+]|\d+[.)])\s)/.test(line) &&
-          UNESCAPED_PIPE_RE.test(line)
+          !/^\s*(?:#{1,6}\s|(?:[-*+]|\d+[.)])\s)/.test(q.rest) &&
+          UNESCAPED_PIPE_RE.test(q.rest)
         );
       };
 
@@ -961,9 +962,20 @@
       const segments = [];
       let currentProseLines = [];
       let activeFence = null;
+      let activeHtmlEnd = null;
       lines.forEach(function (line) {
+        if (activeHtmlEnd) {
+          currentProseLines.push(line);
+          if (activeHtmlEnd.test(line)) {
+            activeHtmlEnd = null;
+          }
+          return;
+        }
         if (hasFenceContainerEnded(line, activeFence)) {
           activeFence = null;
+        }
+        if (!activeFence) {
+          updateListIndent(line);
         }
         const nextFence = updateFenceState(line, activeFence);
         if (nextFence !== activeFence) {
@@ -979,7 +991,13 @@
           segments.push({ fenced: true, line: line.replace(/（/g, '(').replace(/）/g, ')') });
           return;
         }
-        updateListIndent(line);
+        const htmlBlockOpen = line.match(/<(script|style|pre|textarea)\b(?:[^>"']|"[^"]*"|'[^']*')*>/i);
+        if (htmlBlockOpen) {
+          const closeRe = new RegExp('<\\/' + htmlBlockOpen[1] + '\\s*>', 'i');
+          if (!closeRe.test(line)) {
+            activeHtmlEnd = closeRe;
+          }
+        }
         currentProseLines.push(line);
       });
       if (currentProseLines.length > 0) {
@@ -993,41 +1011,48 @@
           return;
         }
         const codeAndHtmlMaskedBlock = seg.text
+          .replace(/<(script|style|pre|textarea)\b(?:[^>"']|"[^"]*"|'[^']*')*>[\s\S]*?<\/\1>|<!--[\s\S]*?-->/gi, function (match) {
+            return maskSpan(match, false);
+          })
           .replace(/(?<=(?:^|[^\\])(?:\\\\)*)(`+)(?!`)(?:[\s\S]*?[^`])?\1(?!`)/g, function (match) {
             return maskSpan(match, true);
           })
-          .replace(/<(script|style|pre|textarea)\b[\s\S]*?<\/\1>|<!--[\s\S]*?-->|<\/?[A-Za-z][^>\r\n]*>/gi, function (match) {
+          .replace(/<\/?[A-Za-z](?:[^>"'\r\n]|"[^"\r\n]*"|'[^'\r\n]*')*>/gi, function (match) {
             return maskSpan(match, false);
+          })
+          .replace(/^((?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}\[[^\n\]]+\]:[ \t]*(?:\n(?:[ \t]{0,3}>[ \t]?)*[ \t]*)?)(<[^>\r\n]+>|\S+)/gm, function (match, prefix, dest) {
+            return prefix + maskSpan(dest, false);
           });
         codeAndHtmlMaskedBlock.split('\n').forEach(function (line) {
-          const maskedLine = maskLinkDestinations(
-            line.replace(/^(\s*\[[^\]]+\]:\s*)(<[^>\r\n]+>|\S+)/, function (match, prefix, dest) {
-              return prefix + maskSpan(dest, false);
-            })
-          ).replace(/<https?:\/\/[^>\s]+>|https?:\/\/(?:[^\s<>)\]（）]|（[^\s<>)\]（）]*）)+/g, function (match) {
-            return maskSpan(match, false);
-          });
+          const maskedLine = maskLinkDestinations(line).replace(
+            /<https?:\/\/[^>\s]+>|https?:\/\/(?:[^\s<>)\]（）]|（[^\s<>)\]（）]*）)+/g,
+            function (match) {
+              return maskSpan(match, false);
+            }
+          );
           const normalized = maskedLine
             .replace(
               /(?<=(?:^|[^\\])(?:\\\\)*)(?<![*_])(\*+|_+)(?![*_])(?=\S)((?:(?!\1).)+?)(?<=\S)\1(\*+|_+)?/g,
               function (match, delim, inner, extraClose, offset, fullStr) {
                 const prevChar = offset > 0 ? fullStr[offset - 1] : '';
-                if (delim[0] === '_' && /[\p{L}\p{N}]/u.test(prevChar) && /^[\p{L}\p{N}]/u.test(inner)) {
+                const mergeExtra = Boolean(extraClose && extraClose[0] === delim[0]);
+                const closeDelim = delim + (mergeExtra ? extraClose : '');
+                const unmergedExtra = mergeExtra ? '' : (extraClose || '');
+                const rest = unmergedExtra + fullStr.slice(offset + match.length);
+                if (delim[0] === '_' && (/[\p{L}\p{N}]/u.test(prevChar) || /^[\p{L}\p{N}]/u.test(rest))) {
                   return match;
                 }
                 if (!inner.endsWith('）')) {
                   return match;
                 }
-                const closeDelim = delim + (extraClose || '');
                 const updatedInner = inner.slice(0, -1) + ')';
-                const rest = fullStr.slice(offset + match.length);
                 const needsSpace = /^[\p{L}\p{N}`*_\[\uE000]/u.test(rest);
-                return delim + updatedInner + closeDelim + (needsSpace ? ' ' : '');
+                return delim + updatedInner + closeDelim + (needsSpace ? ' ' : '') + unmergedExtra;
               }
             )
             .replace(/([\]\p{L}\p{N}])（/gu, '$1 (')
             .replace(/（/g, '(')
-            .replace(/）(?=[\p{L}\p{N}`\[\uE000]|(\*+)(?=\S)(?:(?!\1).)+?(?<=\S)\1|(_+)(?=\S)(?:(?!\2).)+?(?<=\S)\2(?![\p{L}\p{N}]))/gu, ') ')
+            .replace(/）(?=[\p{L}\p{N}`\[\uE000]|(\*+)(?=\S)(?:(?!\1).)+?(?<=\S)\1|(_+)(?=\S)(?:(?!\2).)+?(?<=\S)\2(?![\p{L}\p{N}(（]))/gu, ') ')
             .replace(/）/g, ')');
           normalizedLines.push(normalized.replace(/[\uE000\uE002]P2MSPAN(\d+)\uE001/g, function (match, idx) {
             const original = protectedSpans[Number(idx)];
@@ -1045,6 +1070,9 @@
         if (hasFenceContainerEnded(currentLine, activeFence)) {
           activeFence = null;
         }
+        if (!activeFence) {
+          updateListIndent(currentLine);
+        }
         const nextFence = updateFenceState(currentLine, activeFence);
         if (nextFence !== activeFence) {
           activeFence = nextFence;
@@ -1052,19 +1080,19 @@
           lineIndex++;
           continue;
         }
-        if (!activeFence) {
-          updateListIndent(currentLine);
-        }
+        const tableQuoteDepth = getQuotePrefix(currentLine).depth;
         if (
           !activeFence &&
           lineIndex + 1 < normalizedLines.length &&
           isTableRowCandidate(currentLine) &&
+          getQuotePrefix(normalizedLines[lineIndex + 1]).depth === tableQuoteDepth &&
           isTableDelimiterLine(normalizedLines[lineIndex + 1]) &&
           splitTableCells(currentLine).length === splitTableCells(normalizedLines[lineIndex + 1]).length
         ) {
           const tableLines = [];
           while (
             lineIndex < normalizedLines.length &&
+            getQuotePrefix(normalizedLines[lineIndex]).depth === tableQuoteDepth &&
             isTableRowCandidate(normalizedLines[lineIndex])
           ) {
             tableLines.push(normalizedLines[lineIndex]);
@@ -1072,6 +1100,9 @@
           }
           const rows = tableLines.map(splitTableCells);
           const colCount = rows[0].length;
+          // Intentionally align columns by character count (.length, matching Prettier's default
+          // Markdown table formatter and the project's golden table fixtures, where 1 CJK or ASCII
+          // character = 1 unit of column width).
           const colWidths = new Array(colCount).fill(3);
           rows.forEach(function (row, rIdx) {
             if (rIdx === 1) return;
@@ -1083,9 +1114,9 @@
             }
           });
           rows.forEach(function (row, rIdx) {
-            const rowIndent = tableLines[rIdx].match(/^\s*/)[0];
+            const rowPrefix = tableLines[rIdx].match(/^((?:\s{0,3}> ?)*\s*)/)[0];
             if (rIdx === 1) {
-              formattedLines.push(rowIndent + '| ' + colWidths.map(function (width, cIdx) {
+              formattedLines.push(rowPrefix + '| ' + colWidths.map(function (width, cIdx) {
                 const rawSep = row[cIdx] || '';
                 const leftColon = rawSep.startsWith(':');
                 const rightColon = rawSep.endsWith(':') && rawSep.length > 1;
@@ -1101,7 +1132,7 @@
                 return '-'.repeat(width);
               }).join(' | ') + ' |');
             } else {
-              formattedLines.push(rowIndent + '| ' + colWidths.map(function (width, cIdx) {
+              formattedLines.push(rowPrefix + '| ' + colWidths.map(function (width, cIdx) {
                 return (row[cIdx] || '').padEnd(width, ' ');
               }).join(' | ') + ' |');
             }
@@ -1115,7 +1146,7 @@
       const result = formattedLines.join('\n').replace(/[\uE000\uE002]P2MSPAN(\d+)\uE001/g, function (match, idx) {
         return protectedSpans[Number(idx)];
       });
-      if (result === baseText) {
+      if (result === text) {
         return null;
       }
 
@@ -1165,16 +1196,12 @@
         return corrected !== null ? corrected : result;
       }
     }
-    var markdownResult = plainTextRules.markdownSyntax(text);
+    var genericResult = plainTextRules.genericPlainText(text);
+    var markdownResult = plainTextRules.markdownSyntax(genericResult);
     if (markdownResult !== null) {
       return markdownResult;
     }
-    var genericResult = plainTextRules.genericPlainText(text);
-    if (genericResult !== null) {
-      return genericResult;
-    }
-    // If no rule matched, return original text
-    return text;
+    return genericResult;
   }
 
   var insert = function (myField, myValue) {
