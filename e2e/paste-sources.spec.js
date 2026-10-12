@@ -1581,18 +1581,18 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     expect(markdown).toBe(expected);
   });
 
-  test('protects link destinations, bare/angle/reference URLs, and inline/multiline code while handling nested emphasis', async function ({ page }) {
+  test('protects link destinations, bare/angle/reference URLs, and inline/multiline code while handling nested emphasis and intraword underscores', async function ({ page }) {
     await gotoApp(page);
     const input = [
       '請參考 [文件（一）](https://example.com/頁面（測試）) 與 `呼叫（值）` 以及 `跨行（',
-      '測試）` 範例。',
+      '測試）` 範例，並顯示 \\`符號（test）\\` 後文與 foo_bar（baz）_qux 識別字。',
       '裸網址 https://example.com/foo（bar） 與 <https://example.com/auto（link）> 皆保持不變。',
       '[ref]: https://example.com/ref（目標）',
       '公司（Cisco）**產品**與**思科**公司（Cisco）**設備**、**交換器（switch）**主要功能與***路由器（router）***主要用途。'
     ].join('\n');
     const expected = [
       '請參考 [文件 (一)](https://example.com/頁面（測試）) 與 `呼叫（值）` 以及 `跨行（',
-      '測試）` 範例。',
+      '測試）` 範例，並顯示 \\`符號 (test)\\` 後文與 foo_bar (baz)_qux 識別字。',
       '裸網址 https://example.com/foo（bar） 與 <https://example.com/auto（link）> 皆保持不變。',
       '[ref]: https://example.com/ref（目標）',
       '公司 (Cisco) **產品**與**思科**公司 (Cisco) **設備**、**交換器 (switch)** 主要功能與***路由器 (router)*** 主要用途。'
@@ -1601,24 +1601,34 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     expect(markdown).toBe(expected);
   });
 
-  test('handles optional boundary pipes, nested table indentation, even backslashes, header column schema, and stops at following list', async function ({ page }) {
+  test('handles optional boundary pipes, nested table indentation, even backslashes, header column schema, following list, top-level 4-space fence, and Copilot CLI post-processing', async function ({ page }) {
     await gotoApp(page);
     const input = [
       '- 清單內表格：',
       '  Name | Value',
       '  --- | ---',
       '  A \\\\| B | 多餘欄位 | 忽略',
-      '- 選項 A | 選項 B'
+      '- 選項 A | 選項 B',
+      '一般段落重置清單縮排',
+      '    ```',
+      '後段文字（仍應修正）'
     ].join('\n');
     const expected = [
       '- 清單內表格：',
       '  | Name | Value |',
       '  | ---- | ----- |',
       '  | A \\\\ | B     |',
-      '- 選項 A | 選項 B'
+      '- 選項 A | 選項 B',
+      '一般段落重置清單縮排',
+      '    ```',
+      '後段文字 (仍應修正)'
     ].join('\n');
     const markdown = await convertPaste(page, { text: input });
     expect(markdown).toBe(expected);
+
+    const copilotInput = ' ● **交換器（switch）**主要\n   後續（說明）文字';
+    const copilotMarkdown = await convertPaste(page, { text: copilotInput });
+    expect(copilotMarkdown).toBe('**交換器 (switch)** 主要\n後續 (說明) 文字');
   });
 });
 

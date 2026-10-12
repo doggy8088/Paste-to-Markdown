@@ -818,12 +818,26 @@
       const lines = baseText.split('\n');
       const UNESCAPED_PIPE_RE = /(?<=(?:^|[^\\])(?:\\\\)*)\|/;
 
+      let listContentIndent = 0;
+      const updateListIndent = function (line) {
+        const listMatch = line.match(/^(\s*(?:[-*+]|\d+[.)])\s+)/);
+        if (listMatch) {
+          listContentIndent = listMatch[1].length;
+        } else if (line.trim() !== '' && line.match(/^\s*/)[0].length < listContentIndent) {
+          listContentIndent = 0;
+        }
+      };
+
       const updateFenceState = function (line, activeFence) {
         if (!activeFence) {
           const openMatch = line.match(/^((?:\s{0,3}>\s*)*)(\s*)((?:[-*+]|\d+[.)])\s+)?(`{3,}|~{3,})(.*)$/);
           if (openMatch && !(openMatch[4][0] === '`' && openMatch[5].includes('`'))) {
             const quoteDepth = (openMatch[1].match(/>/g) || []).length;
             const listOffset = openMatch[3] ? openMatch[3].length : 0;
+            const maxOpenIndent = (quoteDepth > 0 || listOffset > 0) ? 3 : listContentIndent + 3;
+            if (openMatch[2].length > maxOpenIndent) {
+              return null;
+            }
             return {
               char: openMatch[4][0],
               length: openMatch[4].length,
@@ -892,6 +906,7 @@
           segments.push({ fenced: true, line: line.replace(/（/g, '(').replace(/）/g, ')') });
           return;
         }
+        updateListIndent(line);
         currentProseLines.push(line);
       });
       if (currentProseLines.length > 0) {
@@ -904,7 +919,7 @@
           normalizedLines.push(seg.line);
           return;
         }
-        const codeMaskedBlock = seg.text.replace(/(`+)(?!`)(?:[\s\S]*?[^`])?\1(?!`)/g, function (match) {
+        const codeMaskedBlock = seg.text.replace(/(?<=(?:^|[^\\])(?:\\\\)*)(`+)(?!`)(?:[\s\S]*?[^`])?\1(?!`)/g, function (match) {
           return maskSpan(match);
         });
         codeMaskedBlock.split('\n').forEach(function (line) {
@@ -920,8 +935,12 @@
             });
           const normalized = maskedLine
             .replace(
-              /(?<![*_])(\*+|_+)(?![*_])(?=\S)((?:(?!\1).)+?)(?<=\S)\1(\*+|_+)?/g,
+              /(?<=(?:^|[^\\])(?:\\\\)*)(?<![*_])(\*+|_+)(?![*_])(?=\S)((?:(?!\1).)+?)(?<=\S)\1(\*+|_+)?/g,
               function (match, delim, inner, extraClose, offset, fullStr) {
+                const prevChar = offset > 0 ? fullStr[offset - 1] : '';
+                if (delim[0] === '_' && /[\u4e00-\u9fffA-Za-z0-9]/.test(prevChar) && /^[\u4e00-\u9fffA-Za-z0-9]/.test(inner)) {
+                  return match;
+                }
                 if (!inner.endsWith('）')) {
                   return match;
                 }
@@ -934,7 +953,7 @@
             )
             .replace(/([\u4e00-\u9fffA-Za-z0-9])（/g, '$1 (')
             .replace(/（/g, '(')
-            .replace(/）(?=[\u4e00-\u9fffA-Za-z0-9`*_\[\uE000])/g, ') ')
+            .replace(/）(?=[\u4e00-\u9fffA-Za-z0-9`\[\uE000]|(\*+|_+)(?=\S)(?:(?!\1).)+?(?<=\S)\1)/g, ') ')
             .replace(/）/g, ')');
           normalizedLines.push(normalized.replace(/\uE000P2MSPAN(\d+)\uE001/g, function (match, idx) {
             const original = protectedSpans[Number(idx)];
@@ -946,6 +965,7 @@
       const formattedLines = [];
       let lineIndex = 0;
       activeFence = null;
+      listContentIndent = 0;
       while (lineIndex < normalizedLines.length) {
         const currentLine = normalizedLines[lineIndex];
         const nextFence = updateFenceState(currentLine, activeFence);
@@ -954,6 +974,9 @@
           formattedLines.push(currentLine);
           lineIndex++;
           continue;
+        }
+        if (!activeFence) {
+          updateListIndent(currentLine);
         }
         if (
           !activeFence &&
@@ -1056,10 +1079,22 @@
   var applyPlainTextRules = function (text) {
     // Try each rule in order
     for (var ruleName in plainTextRules) {
+      if (ruleName === 'markdownSyntax' || ruleName === 'genericPlainText') {
+        continue;
+      }
       var result = plainTextRules[ruleName](text);
       if (result !== null) {
-        return result;
+        var corrected = plainTextRules.markdownSyntax(result);
+        return corrected !== null ? corrected : result;
       }
+    }
+    var markdownResult = plainTextRules.markdownSyntax(text);
+    if (markdownResult !== null) {
+      return markdownResult;
+    }
+    var genericResult = plainTextRules.genericPlainText(text);
+    if (genericResult !== null) {
+      return genericResult;
     }
     // If no rule matched, return original text
     return text;
