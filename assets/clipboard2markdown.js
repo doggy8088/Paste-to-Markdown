@@ -984,7 +984,7 @@
         return (
           !multilineSpanRe.test(line) &&
           countIndentCols(t.rest.match(/^[ \t]*/)[0]) <= maxIndent &&
-          !/^[ \t]*(?:#{1,6}[ \t]|\[[^\n\]]+\]:[ \t]*)/.test(t.rest) &&
+          !/^[ \t]*(?:#{1,6}[ \t]|\[(?:\\.|[^\\\n\]])+\]:[ \t]*)/.test(t.rest) &&
           UNESCAPED_PIPE_RE.test(t.rest)
         );
       };
@@ -1159,7 +1159,7 @@
           prevProse.trim() === '' ||
           /^[ \t]{0,3}(?:#{1,6}(?:[ \t]|$)|(?:=+|-+)[ \t]*$)/.test(prevProse) ||
           THEMATIC_BREAK_RE.test(prevProse) ||
-          /(?:^|\n)[ \t]{0,3}\[[^\n\]]+\]:[ \t]*(?:\n[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*)(?:"[^"\n]*"|'[^'\n]*'|\([^()\n]*\)))?[ \t]*$/.test(proseTail);
+          /(?:^|\n)[ \t]{0,3}\[(?:\\.|[^\\\n\]])+\]:[ \t]*(?:\n[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*)(?:"[^"\n]*"|'[^'\n]*'|\([^()\n]*\)))?[ \t]*$/.test(proseTail);
         if (atBlockStart && t.rest.trim() !== '' && countIndentCols(t.rest.match(/^[ \t]*/)[0]) > maxProseIndent) {
           flushProse();
           segments.push({ fenced: true, line: line.replace(/（/g, '(').replace(/）/g, ')') });
@@ -1186,7 +1186,7 @@
         }
         const codeAndHtmlMaskedBlock = maskLinkDestinations(
           seg.text
-            .replace(/(?<=(?:^|[^\\])(?:\\\\)*)(`+)(?!`)(?:[\s\S]*?[^`])?\1(?!`)/g, function (match) {
+            .replace(/(?<=(?:^|[^\\`])(?:\\\\)*)(`+)(?!`)(?:[\s\S]*?[^`])?\1(?!`)/g, function (match) {
               return maskSpan(match, true);
             })
             .replace(/<(script|style|pre|textarea|xmp|noscript|noembed|noframes|plaintext|iframe|code|kbd|samp|tt)\b(?:[^>"']|"[^"]*"|'[^']*')*>[\s\S]*?(?:<\/\1>|$)|<!--[\s\S]*?(?:-->|$)|<\?[\s\S]*?(?:\?>|$)|<![A-Za-z][\s\S]*?(?:>|$)|<!\[CDATA\[[\s\S]*?(?:\]\]>|$)/gi, function (match) {
@@ -1195,70 +1195,68 @@
             .replace(/\$\$[\s\S]+?\$\$|(?<!\\|\$)\$(?:[^\s$\\]|\\.)(?:[\s\S]*?(?:[^\s$\\]|\\.))?\$(?!\d)/g, function (match) {
               return maskSpan(match, !match.startsWith('$$'));
             })
-            .replace(/<[A-Za-z][\w-]*(?:(?:[ \t]|\n(?![ \t]*\n))+[A-Za-z:_][\w.:-]*(?:(?:[ \t]|\n(?![ \t]*\n))*=(?:[ \t]|\n(?![ \t]*\n))*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+))?)*(?:[ \t]|\n(?![ \t]*\n))*\/?>|<\/[A-Za-z][\w:-]*(?:[ \t]|\n(?![ \t]*\n))*>|<[A-Za-z](?:[^>"'\r\n]|"[^"\r\n]*"|'[^'\r\n]*')*>/gi, function (match) {
-              const isAutolink = /^<(?:[a-zA-Z][a-zA-Z0-9+.-]{1,31}:|[^\s<>@]+@)/.test(match);
+            .replace(/<[A-Za-z][\w-]*(?:(?:[ \t]|\n(?![ \t]*\n))+[A-Za-z:_][\w.:-]*(?:(?:[ \t]|\n(?![ \t]*\n))*=(?:[ \t]|\n(?![ \t]*\n))*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+))?)*(?:[ \t]|\n(?![ \t]*\n))*\/?>|<\/[A-Za-z][\w:-]*(?:[ \t]|\n(?![ \t]*\n))*>|<([a-zA-Z][a-zA-Z0-9+.-]{1,31}:[^\s\x00-\x1f<>]+|[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+)>/gi, function (match, autolink) {
+              const isAutolink = Boolean(autolink);
               return maskSpan(match, isAutolink, false, isAutolink || match.startsWith('</'));
             })
-            .replace(/^((?:[ \t]*>[ \t]*|[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+|[ \t])*\[[^\n\]]+\]:[ \t]*)((?:\n(?:[ \t]*>[ \t]*)*[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n(?:[ \t]*>[ \t]*)*[ \t]*)(?:"(?:\\.|[^"\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n]|\n(?![ \t]*\n))*'|\((?:\\.|[^()\n]|\n(?![ \t]*\n))*\))[ \t]*(?=\n|$))?)/gm, function (match, prefix, destAndTitle) {
+            .replace(/^((?:[ \t]*>[ \t]*|[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+|[ \t])*\[(?:\\.|[^\\\n\]])+\]:[ \t]*)((?:\n(?:[ \t]*>[ \t]*)*[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n(?:[ \t]*>[ \t]*)*[ \t]*)(?:"(?:\\.|[^"\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n]|\n(?![ \t]*\n))*'|\((?:\\.|[^()\n]|\n(?![ \t]*\n))*\))[ \t]*(?=\n|$))?)/gm, function (match, prefix, destAndTitle) {
               return prefix + maskSpan(destAndTitle, false);
             })
         );
-        codeAndHtmlMaskedBlock.split('\n').forEach(function (line) {
-          const maskedLine = line.replace(
-            /(?:(?:ftp|https?):\/\/|www\.)(?:[a-zA-Z0-9-]+\.?)+[^\s<\[\]\uE000-\uE003]*/gi,
-            function (match) {
-              let fwDepth = 0;
-              let hwDepth = 0;
-              let end = 0;
-              while (end < match.length) {
-                if (match[end] === '（') {
-                  fwDepth++;
-                } else if (match[end] === '）') {
-                  if (fwDepth === 0) {
-                    break;
-                  }
-                  fwDepth--;
-                } else if (match[end] === '(') {
-                  hwDepth++;
-                } else if (match[end] === ')') {
-                  if (hwDepth === 0) {
-                    break;
-                  }
-                  hwDepth--;
+        const maskedBlock = codeAndHtmlMaskedBlock.replace(
+          /(?:(?:ftp|https?):\/\/|www\.)(?:[a-zA-Z0-9-]+\.?)+[^\s<\[\]\uE000-\uE003]*/gi,
+          function (match) {
+            let fwDepth = 0;
+            let hwDepth = 0;
+            let end = 0;
+            while (end < match.length) {
+              if (match[end] === '（') {
+                fwDepth++;
+              } else if (match[end] === '）') {
+                if (fwDepth === 0) {
+                  break;
                 }
-                end++;
+                fwDepth--;
+              } else if (match[end] === '(') {
+                hwDepth++;
+              } else if (match[end] === ')') {
+                if (hwDepth === 0) {
+                  break;
+                }
+                hwDepth--;
               }
-              return maskSpan(match.slice(0, end), false) + match.slice(end);
+              end++;
             }
-          );
-          const normalized = maskedLine
-            .replace(/(?<=(?:^|[^\\])(?:\\\\)*\\)(?=[（）])/g, '\\')
-            .replace(
-              /(?<=(?:^|[^\\])(?:\\\\)*)(\*{1,3}(?!\*)|_{1,3}(?!_)|(?<!~)~~(?!~))(?=\S)((?:(?!\1).)+?)(?<=\S)\1((?:\*|_)?[^\s*_~]+?(?:\*|_)?\1\1|(?!(?:(\*{1,3}(?!\*)|_{1,3}(?!_)|(?<!~)~~(?!~))(?=\S)(?:(?!\4).)+?(?<=\S)\4))(?:\*{1,3}(?!\*)|_{1,3}(?!_)))?/g,
-              function (match, delim, inner, extraClose, _nextDelim, offset, fullStr) {
-                const prevChar = offset > 0 ? fullStr[offset - 1] : '';
-                const closeDelim = delim + (extraClose || '');
-                const rest = fullStr.slice(offset + match.length);
-                if (delim[0] === '_' && (/[\p{L}\p{N}]/u.test(prevChar) || /^[\p{L}\p{N}]/u.test(rest))) {
-                  return match;
-                }
-                const innerTrailingMatch = inner.match(/）((?:\*+|_+|~~)*)$/);
-                if (!innerTrailingMatch && !rest.startsWith('（')) {
-                  return match;
-                }
-                const updatedInner = innerTrailingMatch
-                  ? inner.slice(0, innerTrailingMatch.index) + ')' + innerTrailingMatch[1]
-                  : inner;
-                const needsSpace = /^(?:[\p{L}\p{N}`*_\[\uE000（]|~~(?=\S))/u.test(rest);
-                return delim + updatedInner + closeDelim + (needsSpace ? ' ' : '');
+            return maskSpan(match.slice(0, end), false) + match.slice(end);
+          }
+        );
+        const normalizedBlock = maskedBlock
+          .replace(/(?<=(?:^|[^\\])(?:\\\\)*\\)(?=[（）])/g, '\\')
+          .replace(
+            /(?<=(?:^|[^\\])(?:\\\\)*)(\*{1,3}(?!\*)|_{1,3}(?!_)|(?<!~)~~(?!~))(?=\S)((?:(?!\1)(?:[^\n]|\n(?![ \t]*(?:\n|$|[-*+>|#]|\d{1,9}[.)]))))+?)(?<=\S)\1((?:\*|_)?[^\s*_~]+?(?:\*|_)?\1\1|(?!(?:(\*{1,3}(?!\*)|_{1,3}(?!_)|(?<!~)~~(?!~))(?=\S)(?:(?!\4).)+?(?<=\S)\4))(?:\*{1,3}(?!\*)|_{1,3}(?!_)))?/g,
+            function (match, delim, inner, extraClose, _nextDelim, offset, fullStr) {
+              const prevChar = offset > 0 ? fullStr[offset - 1] : '';
+              const closeDelim = delim + (extraClose || '');
+              const rest = fullStr.slice(offset + match.length);
+              if (delim[0] === '_' && (/[\p{L}\p{N}]/u.test(prevChar) || /^[\p{L}\p{N}]/u.test(rest))) {
+                return match;
               }
-            )
-            .replace(/([\]\p{L}\p{N}]|\uE001|\uE003\))（/gu, '$1 (')
-            .replace(/（/g, '(')
-            .replace(/）(?=[\p{L}\p{N}`\[\uE000]|(\*{1,3}(?!\*)|(?<!~)~~(?!~))(?=\S)(?:(?!\1).)+?(?<=\S)\1|(_{1,3}(?!_))(?=\S)(?:(?!\2).)+?(?<=\S)\2(?![\p{L}\p{N}(（]))/gu, ') ')
-            .replace(/）/g, ')');
-          normalizedLines.push(normalized);
-        });
+              const innerTrailingMatch = inner.match(/）((?:\*+|_+|~~)*)$/);
+              if (!innerTrailingMatch && !rest.startsWith('（')) {
+                return match;
+              }
+              const updatedInner = innerTrailingMatch
+                ? inner.slice(0, innerTrailingMatch.index) + ')' + innerTrailingMatch[1]
+                : inner;
+              const needsSpace = /^(?:[\p{L}\p{N}`*_\[\uE000（]|~~(?=\S))/u.test(rest);
+              return delim + updatedInner + closeDelim + (needsSpace ? ' ' : '');
+            }
+          )
+          .replace(/([\]\p{L}\p{N}]|\uE001|\uE003\))（/gu, '$1 (')
+          .replace(/（/g, '(')
+          .replace(/）(?=[\p{L}\p{N}`\[\uE000]|(\*{1,3}(?!\*)|(?<!~)~~(?!~))(?=\S)(?:(?!\1)(?:[^\n]|\n(?![ \t]*(?:\n|$|[-*+>|#]|\d{1,9}[.)]))))+?(?<=\S)\1|(_{1,3}(?!_))(?=\S)(?:(?!\2)(?:[^\n]|\n(?![ \t]*(?:\n|$|[-*+>|#]|\d{1,9}[.)]))))+?(?<=\S)\2(?![\p{L}\p{N}(（]))/gu, ') ')
+          .replace(/）/g, ')');
+        normalizedLines.push.apply(normalizedLines, normalizedBlock.split('\n'));
       });
 
       const formattedLines = [];
@@ -1267,6 +1265,7 @@
       while (lineIndex < normalizedLines.length) {
         const currentLine = normalizedLines[lineIndex];
         const isBlockLine = blockSpanLineRe.test(currentLine);
+        const prevListIndent = listContentIndent;
         updateListIndent(isBlockLine ? restoreSpans(currentLine) : currentLine, isBlockLine);
         if (isBlockLine) {
           formattedLines.push(currentLine);
@@ -1282,6 +1281,7 @@
           splitTableCells(currentLine).length === splitTableCells(normalizedLines[lineIndex + 1]).length &&
           splitTableCells(restoreSpans(currentLine)).length === splitTableCells(normalizedLines[lineIndex + 1]).length
         ) {
+          const tableListIndent = tableQuoteDepth ? 0 : (listContentIndent || prevListIndent);
           const tableLines = [currentLine];
           lineIndex++;
           while (
@@ -1310,7 +1310,8 @@
           });
           rows.forEach(function (row, rIdx) {
             const t = getTableRowParts(tableLines[rIdx]);
-            const rowPrefix = t.prefix + t.rest.match(/^[ \t]*/)[0];
+            const rawPrefix = t.prefix + t.rest.match(/^[ \t]*/)[0];
+            const rowPrefix = rawPrefix + ' '.repeat(Math.max(0, tableListIndent - countIndentCols(rawPrefix)));
             if (rIdx === 1) {
               formattedLines.push(rowPrefix + '| ' + colWidths.map(function (width, cIdx) {
                 const rawSep = row[cIdx] || '';

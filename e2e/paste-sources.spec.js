@@ -1743,11 +1743,12 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '請參考 [文件（一）](foo(a(b（c）))\\))（連結）、[角度連結](<./foo bar（baz）>)（說明）、[網址連結](<https://example.com/a（b）>)（說明）、[跨行連結](',
       'foo（bar） "標題（一）")（說明）、[跨行無標題](',
       'foo(bar))（說明）、[https://example.com/foo](url)（說明）後、[參照][id（a）]、說明](版本（x）)後、[未閉合](foo 與 [標籤]（測試）及 `呼叫（值）`（參數）、`<kbd>x（1）</kbd>`（按鍵）以及 `跨行（',
-      '測試）` 範例，並顯示 \\`符號（test）\\` 與 literal \\（x\\） 後文與 \uE002P2MSPAN0\uE003（測試） 與 foo_bar（baz）_qux、foo_テスト（x）_bar、foo_（x）_bar、_（x）_bar 識別字。',
+      '測試）` 範例、測試 ``代碼（x）` 後，並顯示 \\`符號（test）\\` 與 literal \\（x\\） 後文與 \uE002P2MSPAN0\uE003（測試） 與 foo_bar（baz）_qux、foo_テスト（x）_bar、foo_（x）_bar、_（x）_bar 識別字。',
       '裸網址 https://example.com/foo（bar） 與 www.example.com/a（b（c）d） 與 ftp://example.com/a（b） 與 (https://example.com/foo(bar))（說明）與（請見 https://example.com/x（y））後文與 <https://example.com/auto（link）>（說明）後 皆保持不變。',
       'HTML <a title="1 > 0" href="page（test）.html">連結（一）</a> 與 <a',
-      'href="page（x）.html">連結（二）</a> 與 <strong>公司</strong>（Cisco）產品 與 <code>call（arg）</code>（說明）後 與 <code>a `b` c（d）</code> 與 <pre>原樣（保留）</pre> 屬性不變。',
+      'href="page（x）.html">連結（二）</a> 與 <strong>公司</strong>（Cisco）產品 與 <code>call（arg）</code>（說明）後 與 <code>a `b` c（d）</code> 與 <pre>原樣（保留）</pre> 屬性不變，而比較 <a（b）>產品 則正常轉換。',
       '[id（a）]: https://example.com/ref（目標）',
+      '[a\\]b]: https://example.com/escaped（目標）',
       '[cont]:',
       '  page（目標）',
       '公式 $x（1）$（說明）、$x（1）$$、跨行行內公式 $a',
@@ -1760,17 +1761,19 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '--- | ---',
       'c | d',
       '$$',
-      '**公司**（Cisco）產品與**思科**公司（Cisco）**設備**、~~公司（Cisco）~~產品、~~**公司（x）**~~產品、~~公司~~（Cisco）~~設備~~、**交換器（switch）**主要功能、***路由器（router）***主要用途、**甲（x）****乙**、**甲（x）**__乙__、**甲（x）**~~乙~~、~~丙 **丁（x）**~~後 與 *丙 **丁（x）***後 與 *公司（x）*尾**（後）產品。'
+      '**公司**（Cisco）產品與**思科**公司（Cisco）**設備**、~~公司（Cisco）~~產品、~~**公司（x）**~~產品、~~公司~~（Cisco）~~設備~~、**交換器（switch）**主要功能、***路由器（router）***主要用途、**甲（x）****乙**、**甲（x）**__乙__、**甲（x）**~~乙~~、~~丙 **丁（x）**~~後 與 *丙 **丁（x）***後 與 *公司（x）*尾**（後）產品 與 **交換器',
+      '型號（switch）**主要。'
     ].join('\n');
     const expected = [
       '請參考 [文件 (一)](foo(a(b（c）))\\)) (連結)、[角度連結](<./foo bar（baz）>) (說明)、[網址連結](<https://example.com/a（b）>) (說明)、[跨行連結](',
       'foo（bar） "標題（一）") (說明)、[跨行無標題](',
       'foo(bar)) (說明)、[https://example.com/foo](url) (說明) 後、[參照][id (a)]、說明](版本 (x))後、[未閉合](foo 與 [標籤] (測試) 及 `呼叫（值）` (參數)、`<kbd>x（1）</kbd>` (按鍵) 以及 `跨行（',
-      '測試）` 範例，並顯示 \\`符號 (test)\\` 與 literal \\\\(x\\\\) 後文與 \uE002P2MSPAN0\uE003(測試) 與 foo_bar (baz)_qux、foo_テスト (x)_bar、foo_(x)_bar、_(x)_bar 識別字。',
+      '測試）` 範例、測試 ``代碼 (x) ` 後，並顯示 \\`符號 (test)\\` 與 literal \\\\(x\\\\) 後文與 \uE002P2MSPAN0\uE003(測試) 與 foo_bar (baz)_qux、foo_テスト (x)_bar、foo_(x)_bar、_(x)_bar 識別字。',
       '裸網址 https://example.com/foo（bar） 與 www.example.com/a（b（c）d） 與 ftp://example.com/a（b） 與 (https://example.com/foo(bar)) (說明) 與 (請見 https://example.com/x（y）) 後文與 <https://example.com/auto（link）> (說明) 後 皆保持不變。',
       'HTML <a title="1 > 0" href="page（test）.html">連結 (一)</a> 與 <a',
-      'href="page（x）.html">連結 (二)</a> 與 <strong>公司</strong> (Cisco) 產品 與 <code>call（arg）</code> (說明) 後 與 <code>a `b` c（d）</code> 與 <pre>原樣（保留）</pre> 屬性不變。',
+      'href="page（x）.html">連結 (二)</a> 與 <strong>公司</strong> (Cisco) 產品 與 <code>call（arg）</code> (說明) 後 與 <code>a `b` c（d）</code> 與 <pre>原樣（保留）</pre> 屬性不變，而比較 <a (b)>產品 則正常轉換。',
       '[id (a)]: https://example.com/ref（目標）',
+      '[a\\]b]: https://example.com/escaped（目標）',
       '[cont]:',
       '  page（目標）',
       '公式 $x（1）$ (說明)、$x（1）$$、跨行行內公式 $a',
@@ -1783,7 +1786,8 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '--- | ---',
       'c | d',
       '$$',
-      '**公司** (Cisco) 產品與**思科**公司 (Cisco) **設備**、~~公司 (Cisco)~~ 產品、~~**公司 (x)**~~ 產品、~~公司~~ (Cisco) ~~設備~~、**交換器 (switch)** 主要功能、***路由器 (router)*** 主要用途、**甲 (x)** **乙**、**甲 (x)** __乙__、**甲 (x)** ~~乙~~、~~丙 **丁 (x)**~~ 後 與 *丙 **丁 (x)*** 後 與 *公司 (x)*尾** (後) 產品。'
+      '**公司** (Cisco) 產品與**思科**公司 (Cisco) **設備**、~~公司 (Cisco)~~ 產品、~~**公司 (x)**~~ 產品、~~公司~~ (Cisco) ~~設備~~、**交換器 (switch)** 主要功能、***路由器 (router)*** 主要用途、**甲 (x)** **乙**、**甲 (x)** __乙__、**甲 (x)** ~~乙~~、~~丙 **丁 (x)**~~ 後 與 *丙 **丁 (x)*** 後 與 *公司 (x)*尾** (後) 產品 與 **交換器',
+      '型號 (switch)** 主要。'
     ].join('\n');
     const markdown = await convertPaste(page, { text: input });
     expect(markdown).toBe(expected);
@@ -1841,6 +1845,10 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '  `a | b` | `c` | 忽略',
       '  A \\\\| B | 多餘欄位 | 忽略',
       '- 選項 A | 選項 B',
+      '1. 編號清單懶惰表格',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
       '- > 欄甲 | 欄乙',
       '  > --- | ---',
       '  > 1 | 2345',
@@ -1947,6 +1955,10 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '  | `a | b` | `c`   | 忽略 |',
       '  | A \\\\    | B     | 多餘欄位 | 忽略 |',
       '- 選項 A | 選項 B',
+      '1. 編號清單懶惰表格',
+      '   | A     | B   |',
+      '   | ----- | --- |',
+      '   | x (1) | y   |',
       '- > | 欄甲  | 欄乙   |',
       '  > | --- | ---- |',
       '  > | 1   | 2345 |',
