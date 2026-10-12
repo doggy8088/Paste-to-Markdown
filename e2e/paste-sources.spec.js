@@ -1989,7 +1989,20 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '',
       'pre ```',
       'x（y）',
-      '```'
+      '```',
+      '',
+      '- ```',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      '',
+      'text <code>a（x）',
+      '',
+      'b（y）',
+      '',
+      '> - A | B',
+      '>     --- | ---',
+      '>     x（1） | y'
     ].join('\n');
     const expected = [
       '---',
@@ -2171,7 +2184,20 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '',
       'pre ```',
       'x（y）',
-      '```'
+      '```',
+      '',
+      '- ```',
+      '| A     | B   |',
+      '| ----- | --- |',
+      '| x (1) | y   |',
+      '',
+      'text <code>a（x）',
+      '',
+      'b (y)',
+      '',
+      '> - | A     | B   |',
+      '>     | ----- | --- |',
+      '>     | x (1) | y   |'
     ].join('\n');
     const markdown = await convertPaste(page, { text: input });
     expect(markdown).toBe(expected);

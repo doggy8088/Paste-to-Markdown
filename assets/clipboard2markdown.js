@@ -859,6 +859,7 @@
       };
 
       let listContentIndent = 0;
+      let listQuoteDepth = 0;
       let listIndents = [];
       const getQuotePrefix = function (line) {
         const match = line.match(/^((?:[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+)+)?([ \t]*>(?:[ \t]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)*>)*[ \t]?)(.*)$/);
@@ -879,15 +880,20 @@
 
       const updateListIndent = function (line, isProtectedBlock, allowAnyOrdered = true) {
         const q = getQuotePrefix(line);
-        const listMatch = !isProtectedBlock && !THEMATIC_BREAK_RE.test(q.rest) && (allowAnyOrdered || !/^[ \t]*(?!1[.)])\d{1,9}[.)]/.test(q.rest)) && line.match(/^([ \t]*)(?:>[ \t]*)*(?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )|[ \t]))+/);
+        if (q.depth !== listQuoteDepth) {
+          listIndents = [];
+          listContentIndent = 0;
+          listQuoteDepth = q.depth;
+        }
+        const listMatch = !isProtectedBlock && !THEMATIC_BREAK_RE.test(q.rest) && (allowAnyOrdered || !/^[ \t]*(?!1[.)])\d{1,9}[.)]/.test(q.rest)) && q.rest.match(/^([ \t]*)(?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )|[ \t]))+/);
         if (listMatch && countIndentCols(listMatch[1]) <= listContentIndent + 3) {
           const nextIndent = countIndentCols(listMatch[0]);
           listIndents = listIndents.filter(function (n) {
             return n < nextIndent;
           }).concat(nextIndent);
           listContentIndent = nextIndent;
-        } else if (line.trim() !== '' && countIndentCols(line.match(/^[ \t]*/)[0]) < listContentIndent) {
-          const lineIndent = countIndentCols(line.match(/^[ \t]*/)[0]);
+        } else if (q.rest.trim() !== '' && countIndentCols(q.rest.match(/^[ \t]*/)[0]) < listContentIndent) {
+          const lineIndent = countIndentCols(q.rest.match(/^[ \t]*/)[0]);
           listIndents = listIndents.filter(function (n) {
             return n <= lineIndent;
           });
@@ -927,7 +933,7 @@
           line.trim() !== '' &&
           countIndentCols(line.match(/^[ \t]*/)[0]) < activeBlock.containerIndent
         ) {
-          return prevBlank || hasBlockInterrupt(q.rest);
+          return prevBlank || activeBlock.hasContent === false || hasBlockInterrupt(q.rest);
         }
         return false;
       };
@@ -940,7 +946,7 @@
             const openIndent = countIndentCols(openMatch[1]);
             const listOffset = openMatch[2] ? countIndentCols(openMatch[1] + openMatch[2]) - openIndent : 0;
             const containerIndent = q.depth > 0 ? 0 : (listOffset > 0 ? openIndent + listOffset : listContentIndent);
-            const maxOpenIndent = (q.depth > 0 || listOffset > 0) ? 3 : listContentIndent + 3;
+            const maxOpenIndent = listOffset > 0 ? 3 : listContentIndent + 3;
             if (openIndent > maxOpenIndent) {
               return null;
             }
@@ -949,7 +955,8 @@
               length: openMatch[3].length,
               quoteDepth: q.depth,
               containerIndent: containerIndent,
-              maxCloseIndent: containerIndent + 3
+              maxCloseIndent: containerIndent + 3,
+              hasContent: false
             };
           }
           return null;
@@ -985,7 +992,7 @@
 
       const getTableRowParts = function (line) {
         const q = getQuotePrefix(line);
-        const maxMarkerIndent = q.depth > 0 ? 3 : listContentIndent + 3;
+        const maxMarkerIndent = listContentIndent + 3;
         const listMatch = !THEMATIC_BREAK_RE.test(q.rest) && q.rest.match(/^([ \t]*(?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )|[ \t]))+(?:(?:\[[ xX]\])[ \t]+)?)(.*)$/);
         if (listMatch && countIndentCols(listMatch[1].match(/^[ \t]*/)[0]) <= maxMarkerIndent) {
           return { depth: q.depth, prefix: q.prefix + listMatch[1], rest: listMatch[2], hasList: true };
@@ -1003,7 +1010,7 @@
 
       const isTableRowCandidate = function (line, requirePipe = true) {
         const t = getTableRowParts(line);
-        const maxIndent = (t.depth > 0 || t.hasList) ? 3 : listContentIndent + 3;
+        const maxIndent = t.hasList ? 3 : listContentIndent + 3;
         return (
           !blockSpanLineRe.test(line) &&
           !multilineSpanRe.test(line) &&
@@ -1191,11 +1198,12 @@
           return;
         }
         if (activeFence) {
+          activeFence.hasContent = true;
           segments.push({ fenced: true, line: line.replace(/（/g, '(').replace(/）/g, ')') });
           return;
         }
         const t = getTableRowParts(line);
-        const maxProseIndent = (t.depth > 0 || t.hasList) ? 3 : listContentIndent + 3;
+        const maxProseIndent = t.hasList ? 3 : listContentIndent + 3;
         const atBlockStart = isBlockBoundary || t.hasList;
         if (atBlockStart && t.rest.trim() !== '' && countIndentCols(t.rest.match(/^[ \t]*/)[0]) > maxProseIndent) {
           flushProse();
@@ -1263,7 +1271,7 @@
               .replace(/(?<=(?:^|[^\\`])(?:\\\\)*(?:\\`)?)(`+)(?!`)(?:(?:[^\n]|\n(?![ \t]*\n))*?[^`])?\1(?!`)/g, function (match) {
                 return maskSpan(match, true);
               })
-              .replace(/(?<=(?:^|[^\\])(?:\\\\)*)(?:<(script|style|pre|textarea|xmp|noscript|noembed|noframes|plaintext|iframe|code|kbd|samp|tt)\b(?:[^>"']|"(?:[^"\n]|\n(?![ \t]*\n))*"|'(?:[^'\n]|\n(?![ \t]*\n))*')*>[\s\S]*?(?:<\/\1>|$)|<!--[\s\S]*?(?:-->|$)|<\?[\s\S]*?(?:\?>|$)|<![A-Za-z][\s\S]*?(?:>|$)|<!\[CDATA\[[\s\S]*?(?:\]\]>|$))/gi, function (match) {
+              .replace(/(?<=(?:^|[^\\])(?:\\\\)*)(?:<(script|style|pre|textarea|xmp|noscript|noembed|noframes|plaintext|iframe|code|kbd|samp|tt)\b(?:[^>"']|"(?:[^"\n]|\n(?![ \t]*\n))*"|'(?:[^'\n]|\n(?![ \t]*\n))*')*>(?:[^\n]|\n(?![ \t]*\n))*?(?:<\/\1>|(?=\n[ \t]*\n)|$)|<!--(?:[^\n]|\n(?![ \t]*\n))*?(?:-->|(?=\n[ \t]*\n)|$)|<\?(?:[^\n]|\n(?![ \t]*\n))*?(?:\?>|(?=\n[ \t]*\n)|$)|<![A-Za-z](?:[^\n]|\n(?![ \t]*\n))*?(?:>|(?=\n[ \t]*\n)|$)|<!\[CDATA\[(?:[^\n]|\n(?![ \t]*\n))*?(?:\]\]>|(?=\n[ \t]*\n)|$))/gi, function (match) {
                 return maskSpan(match, /^<(?:code|kbd|samp|tt)\b/i.test(match));
               })
           )
@@ -1353,6 +1361,7 @@
       const formattedLines = [];
       let lineIndex = 0;
       listContentIndent = 0;
+      listQuoteDepth = 0;
       listIndents = [];
       while (lineIndex < normalizedLines.length) {
         const currentLine = normalizedLines[lineIndex];
