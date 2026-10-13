@@ -972,6 +972,12 @@
           if (outerListMatch) {
             outerListIndent = countIndentCols(outerListMatch[0]);
           }
+          if (
+            outerListIndent > 0 &&
+            new RegExp('^ {0,' + Math.min(3, outerListIndent - 1) + '}(?:`{3,}|~{3,}|#|(?:[-*_] *){3,}$)|^ {4}').test(restoreSpans(line).slice(outerListIndent))
+          ) {
+            outerMinLazy = outerListIndent;
+          }
         }
         if (
           closesOuterSetext ||
@@ -1014,8 +1020,11 @@
           return false;
         }
         const q = getQuotePrefix(line);
-        if (activeBlock.quoteDepth > 0 && q.depth < activeBlock.quoteDepth) {
-          return q.rest.trim() === '' || hasBlockInterrupt(q.rest);
+        if (
+          (outerMinLazy > 0 && q.rest.trim() !== '' && countIndentCols(line.match(/^[ \t]*/)[0]) < outerMinLazy) ||
+          (activeBlock.quoteDepth > 0 && q.depth < activeBlock.quoteDepth && (q.rest.trim() === '' || hasBlockInterrupt(q.rest)))
+        ) {
+          return true;
         }
         let restAtDepth = line;
         for (let d = 0; d < activeBlock.quoteDepth; d++) {
@@ -1398,8 +1407,8 @@
           tk.rest.trim() !== '' &&
           !hasBlockInterrupt(qk.rest)
         ) ? prev.depth : tk.depth;
-        const noSetext = !heading && tk.rest.trim() !== '' && (
-          (!listContentIndent && !outerListIndent && /^(?:[*+-]|\d{1,9}[.)])[ \t]/.test(qk.rest)) ||
+        const noSetext = !heading && tk.rest.trim() !== '' && !listContentIndent && !outerListIndent && (
+          (idx > 0 && !prev.heading && getTableRowParts(arr[idx - 1]).rest.trim() !== '' && !/^[ \t]{0,3}(?:[*+-]|\d{1,9}[.)])[ \t]/.test(getQuotePrefix(arr[idx - 1]).rest) && /^(?!1[.)])\d{1,9}[.)][ \t]/.test(qk.rest)) ||
           Boolean(prev && prev.noSetext && tk.depth <= prev.depth)
         );
         cache[idx] = { heading: heading, isDef: isDef, depth: depth, noSetext: noSetext, defCont: defCont };
@@ -1786,6 +1795,7 @@
               offset !== validDefEnd &&
               !/[-*+]|\d[.)]/.test(prefix.slice(0, prefix.indexOf('['))) &&
               curQ.depth <= prevQ.depth &&
+              countIndentCols(prefix.match(/^[ \t]*/)[0]) >= outerMinLazy &&
               countIndentCols(curQ.rest.match(/^[ \t]*/)[0]) >= minLazyIndent &&
               prevQ.rest.trim() !== '' &&
               !isHeadingLineAt(preDefLines, preDefLines.length - 1)

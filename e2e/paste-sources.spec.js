@@ -3131,6 +3131,18 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const quotedYamlFrontMatterKeyMarkdown = await convertPaste(page, { text: quotedYamlFrontMatterKey });
     expect(quotedYamlFrontMatterKeyMarkdown).toBe('---\n"schema:name": "版本（舊）"\n---\n正文 (新)');
 
+    const setextHeadingAfterCompletedList = '- item\n``` a`\nA | B\n--- | ---\n===\n中（文）';
+    const setextHeadingAfterCompletedListMarkdown = await convertPaste(page, { text: setextHeadingAfterCompletedList });
+    expect(setextHeadingAfterCompletedListMarkdown).toBe('- item\n``` a`\nA | B\n--- | ---\n===\n中 (文)');
+
+    const refDefAfterExitedQuotedFenceInList = '- item\n> ```\n[a]: /u\n（x）\n中（文）';
+    const refDefAfterExitedQuotedFenceInListMarkdown = await convertPaste(page, { text: refDefAfterExitedQuotedFenceInList });
+    expect(refDefAfterExitedQuotedFenceInListMarkdown).toBe('- item\n> ```\n[a]: /u\n（x）\n中 (文)');
+
+    const refDefAfterExitedQuotedInvalidFenceInList = '- item\n> ```a`\n[a（y）]: /u\n[a（y）]\n中（文）';
+    const refDefAfterExitedQuotedInvalidFenceInListMarkdown = await convertPaste(page, { text: refDefAfterExitedQuotedInvalidFenceInList });
+    expect(refDefAfterExitedQuotedInvalidFenceInListMarkdown).toBe('- item\n> ```a`\n[a（y）]: /u\n[a（y）]\n中 (文)');
+
     const deepBlockquoteLines = Array.from({ length: 400 }, function (_, i) {
       return '> '.repeat(i + 1) + '段落（測試）';
     }).join('\n');
