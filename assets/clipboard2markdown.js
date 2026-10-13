@@ -1396,10 +1396,11 @@
           updateListIndent(line, false, allowAnyOrdered);
         }
         const t = getTableRowParts(line, isTableStartDelim);
+        const inSetextHeading = !isBlockBoundary && listContentIndent === prevListIndent && !inProseTable && !t.hasList && hasFollowingSetextUnderline(lineIdx, qBefore.depth, listContentIndent);
         const nextFence = updateFenceState(line, activeFence, allowAnyOrdered);
         if (
           nextFence !== activeFence &&
-          !(nextFence && !isBlockBoundary && listContentIndent === prevListIndent && !inProseTable && !t.hasList && hasFollowingSetextUnderline(lineIdx, qBefore.depth, listContentIndent)) &&
+          !(nextFence && inSetextHeading) &&
           !(nextFence && !isBlockBoundary && nextFence.char === '`' && new RegExp('(?<=(?:^|[^\\\\`])(?:\\\\\\\\)*)' + '`'.repeat(nextFence.length) + '(?!`)').test(
             currentProseLines.join('\n').split(/\n[ \t]*\n/).pop().replace(/(?<=(?:^|[^\\`])(?:\\\\)*(?:\\`)?)(`+)(?!`)(?:(?:[^\n]|\n(?![ \t]*\n))*?[^`])?\1(?!`)/g, '')
           ))
@@ -1421,7 +1422,7 @@
           segments.push({ fenced: true, line: line.replace(/（/g, '(').replace(/）/g, ')') });
           return;
         }
-        const htmlCloseRe = getHtmlBlockCloseRe(t.rest.slice(Math.min(t.rest.match(/^ */)[0].length, listContentIndent)), atBlockStart || prevListIndent > 0);
+        const htmlCloseRe = !inSetextHeading && getHtmlBlockCloseRe(t.rest.slice(Math.min(t.rest.match(/^ */)[0].length, listContentIndent)), atBlockStart || prevListIndent > 0);
         if (htmlCloseRe) {
           flushProse();
           segments.push({ fenced: true, line: line });
@@ -1721,6 +1722,7 @@
       outerMinLazy = 0;
       let noSetextUntilIdx = -1;
       let noSetextDepth = -1;
+      let listOpenedViaTableLookahead = false;
       const hasPostTableSetextUnderline = function (tableLines, startIdx, quoteDepth) {
         if (tableLines.slice(2).some(function (l) {
           const rawL = restoreSpans(l);
@@ -1752,8 +1754,18 @@
         const rawCurrentLine = isBlockLine ? restoreSpans(currentLine) : currentLine;
         const prevLine = lineIndex > 0 ? normalizedLines[lineIndex - 1] : '';
         const prevListIndent = (prevLine && restoreSpans(prevLine).trim() !== '') ? listContentIndent : 0;
-        const allowAnyOrdered = !prevLine || blockSpanLineRe.test(prevLine) || prevListIndent > 0 || getQuotePrefix(rawCurrentLine).depth > listQuoteDepth || getTableRowParts(prevLine).rest.trim() === '' || isHeadingLineAt(normalizedLines, lineIndex - 1) || (lineIndex + 1 < normalizedLines.length && TABLE_DELIMITER_REST_RE.test(getQuotePrefix(normalizedLines[lineIndex + 1]).rest));
+        const proseTail = (lineIndex > 4 ? '\n' : '') + normalizedLines.slice(Math.max(0, lineIndex - 4), lineIndex).map(function (l) {
+          return restoreSpans(getTableRowParts(l).rest);
+        }).join('\n');
+        const baseAllowAnyOrdered = !prevLine || blockSpanLineRe.test(prevLine) || prevListIndent > 0 || getQuotePrefix(rawCurrentLine).depth > listQuoteDepth || getTableRowParts(prevLine).rest.trim() === '' || isHeadingLineAt(normalizedLines, lineIndex - 1) || /(?:^|\n[ \t]*\n)[ \t]{0,3}\[(?:\\.|[^\\\n\]])+\]:[ \t]*(?:\n[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*)(?:"[^"\n]*"|'[^'\n]*'|\([^()\n]*\)))?[ \t]*$/.test(proseTail);
+        const allowAnyOrdered = baseAllowAnyOrdered || (lineIndex + 1 < normalizedLines.length && TABLE_DELIMITER_REST_RE.test(getQuotePrefix(normalizedLines[lineIndex + 1]).rest));
+        const prevIndentBeforeUpdate = listContentIndent;
         updateListIndent(rawCurrentLine, isBlockLine, allowAnyOrdered);
+        if (listContentIndent === 0) {
+          listOpenedViaTableLookahead = false;
+        } else if (prevIndentBeforeUpdate === 0) {
+          listOpenedViaTableLookahead = !baseAllowAnyOrdered;
+        }
         if (isBlockLine) {
           formattedLines.push(currentLine);
           lineIndex++;
@@ -1762,7 +1774,7 @@
         const tableQuoteDepth = listQuoteDepth;
         const headerT = getTableRowParts(currentLine);
         const headerListIndent = listContentIndent || prevListIndent || (headerT.hasList ? countIndentCols(headerT.prefix) : 0);
-        const tableListIndent = (tableQuoteDepth ? 0 : headerListIndent) || outerListIndent;
+        const tableListIndent = listOpenedViaTableLookahead ? 0 : ((tableQuoteDepth ? 0 : headerListIndent) || outerListIndent);
         if (
           lineIndex + 1 < normalizedLines.length &&
           isTableRowCandidate(currentLine) &&

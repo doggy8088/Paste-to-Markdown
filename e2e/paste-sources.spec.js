@@ -2829,6 +2829,18 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const supplementaryCjkTable = '| 𠀀𠀀 | A |\n| --- | --- |\n| 測測 | B |';
     const supplementaryCjkTableMarkdown = await convertPaste(page, { text: supplementaryCjkTable });
     expect(supplementaryCjkTableMarkdown).toBe('| 𠀀𠀀  | A   |\n| --- | --- |\n| 測測  | B   |');
+
+    const refDefThenOrderedSiblingBullet = '[d]: /u\n2. item\nA | B\n- | -';
+    const refDefThenOrderedSiblingBulletMarkdown = await convertPaste(page, { text: refDefThenOrderedSiblingBullet });
+    expect(refDefThenOrderedSiblingBulletMarkdown).toBe(refDefThenOrderedSiblingBullet);
+
+    const setextHtmlTagBeforeRefDef = 'text\n[a（x）]: /u\n<div>\n---\n[a（x）]: /u';
+    const setextHtmlTagBeforeRefDefMarkdown = await convertPaste(page, { text: setextHtmlTagBeforeRefDef });
+    expect(setextHtmlTagBeforeRefDefMarkdown).toBe(setextHtmlTagBeforeRefDef);
+
+    const lazyTableEnablingNonOneOrderedList = 'text\n10. item\n--- | ---\n:-- | --:';
+    const lazyTableEnablingNonOneOrderedListMarkdown = await convertPaste(page, { text: lazyTableEnablingNonOneOrderedList });
+    expect(lazyTableEnablingNonOneOrderedListMarkdown).toBe('text\n10. item\n| --- | --- |\n| :-- | --: |');
   });
 });
 
