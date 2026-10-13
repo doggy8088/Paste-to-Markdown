@@ -3226,7 +3226,21 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       'text',
       '',
       '**http://x**[x](',
-      '（）'
+      '（）',
+      '',
+      '_http://x_[x](',
+      '（）',
+      '',
+      '~~http://x~~[x](',
+      '（）',
+      '',
+      'foo_bar http://example.com/a_）',
+      '',
+      '<!--',
+      '> q',
+      '-->',
+      'x | y',
+      '> --- | ---'
     ].join('\n');
     const nonInterruptingOrderedLookaheadAndLazyListExitMarkdown = await convertPaste(page, { text: nonInterruptingOrderedLookaheadAndLazyListExit });
     expect(nonInterruptingOrderedLookaheadAndLazyListExitMarkdown).toBe([
@@ -3244,7 +3258,21 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       'text',
       '',
       '**http://x**[x](',
-      '（）'
+      '（）',
+      '',
+      '_http://x_[x](',
+      '（）',
+      '',
+      '~~http://x~~[x](',
+      '（）',
+      '',
+      'foo_bar http://example.com/a_）',
+      '',
+      '<!--',
+      '> q',
+      '-->',
+      'x | y',
+      '> --- | ---'
     ].join('\n'));
   });
 });

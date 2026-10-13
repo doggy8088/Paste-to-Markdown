@@ -1017,7 +1017,7 @@
         ) {
           openParaQuoteDepth = listQuoteDepth;
         }
-        quoteCanLazyContinue = listQuoteDepth > 0 && q.rest !== '';
+        quoteCanLazyContinue = !isProtectedBlock && listQuoteDepth > 0 && q.rest !== '';
       };
 
       const hasBlockInterrupt = function (rest, activeOuterListIndent = 0) {
@@ -1168,6 +1168,19 @@
         return restoreSpans(lbl).replace(/\s+/g, ' ').toLowerCase();
       };
 
+      const closesPreUrlEmphasis = function (preWithNext, delimChar) {
+        if (delimChar === '*') {
+          const stripped = preWithNext.replace(/((?<=^|[\s\p{P}$+<=>`^|~])\*+(?=[^\s*])|\*+(?=[^\s\p{P}$+<=>`^|~]))[\s\S]*?(?<![\s*])\1/gu, '');
+          return /(?<=^|[\s\p{P}$+<=>`^|~])\*+(?=[^\s*])|\*+(?=[^\s\p{P}$+<=>`^|~])/u.test(stripped);
+        }
+        if (delimChar === '_') {
+          const stripped = preWithNext.replace(/(?<=^|[\s\p{P}$+<=>`^|~])(?<!_)(_+)(?=[^\s_])[\s\S]*?(?<![\s_])\1(?=$|[\s\p{P}$+<=>`^|~])(?!_)/gu, '');
+          return /(?<=^|[\s\p{P}$+<=>`^|~])(?<!_)_+(?=[^\s_])/u.test(stripped);
+        }
+        const stripped = preWithNext.replace(/(?<!~)(~~?)(?=[^\s~])[\s\S]*?(?<![\s~])\1(?!~)/g, '');
+        return /(?<!~)~~?(?=[^\s~])/.test(stripped);
+      };
+
       const maskLinkDestinations = function (str) {
         const labelOpenByClose = new Map();
         const flatLabelClose = new Set();
@@ -1217,8 +1230,8 @@
               str[k] === '[' &&
               !(
                 bareUrlBeforeBracket &&
-                !(bareUrlBeforeBracket[2].match(/[*~]|_(?![A-Za-z0-9_])/g) || []).some(function (ch) {
-                  return str.slice(paraStart, runStart + bareUrlBeforeBracket[1].length).includes(ch);
+                !(bareUrlBeforeBracket[2].match(/[*~]|_(?![\p{L}\p{N}_])/gu) || []).some(function (ch) {
+                  return closesPreUrlEmphasis(str.slice(paraStart, runStart + bareUrlBeforeBracket[1].length + 1), ch[0]);
                 })
               )
             ) {
@@ -1571,7 +1584,7 @@
       lines.forEach(function (line, lineIdx) {
         curForEachLine = line;
         if (fmEndIdx > 0 && lineIdx <= fmEndIdx) {
-          segments.push({ fenced: true, line: line });
+          segments.push({ fenced: true, skipListUpdate: true, line: line });
           return;
         }
         const qBefore = getQuotePrefix(line);
@@ -1580,13 +1593,15 @@
           activeHtml = null;
         }
         if (activeHtml) {
-          segments.push({ fenced: true, line: line });
+          let skipListUpdate = true;
           if (qBefore.depth <= activeHtml.quoteDepth && activeHtml.htmlRe.test(qBefore.rest)) {
             activeHtml = null;
             if (qBefore.rest.trim() === '') {
               updateListIndent(line, true);
+              skipListUpdate = false;
             }
           }
+          segments.push({ fenced: true, skipListUpdate: skipListUpdate, line: line });
           return;
         }
         if (hasContainerEnded(line, activeFence, prevLineBlank)) {
@@ -1640,13 +1655,18 @@
           ))
         ) {
           flushProse();
+          const isClosingFence = Boolean(activeFence);
           activeFence = nextFence;
-          segments.push({ fenced: true, line: line });
+          segments.push({ fenced: true, skipListUpdate: isClosingFence, line: line });
           return;
         }
         if (activeFence) {
           activeFence.hasContent = true;
-          segments.push({ fenced: true, line: line.replace(/（/g, '(').replace(/）/g, ')') });
+          const isBlankFenceLine = qBefore.rest.trim() === '';
+          if (isBlankFenceLine) {
+            updateListIndent(line, true);
+          }
+          segments.push({ fenced: true, skipListUpdate: !isBlankFenceLine, line: line.replace(/（/g, '(').replace(/）/g, ')') });
           return;
         }
         const maxProseIndent = t.hasList ? 3 : listContentIndent + 3;
@@ -1895,8 +1915,12 @@
       });
 
       const normalizedLines = [];
+      const skipListUpdateLines = new Set();
       segments.forEach(function (seg) {
         if (seg.fenced) {
+          if (seg.skipListUpdate) {
+            skipListUpdateLines.add(normalizedLines.length);
+          }
           normalizedLines.push(maskSpan(seg.line, false, true));
           return;
         }
@@ -1916,12 +1940,12 @@
                 outerFwDepth--;
               }
             }
-            const preUrlPara = fullStr.slice(fullStr.lastIndexOf('\n\n', offset - 1) + 1, offset);
+            const preUrlWithNext = fullStr.slice(fullStr.lastIndexOf('\n\n', offset - 1) + 1, offset + 1);
             let fwDepth = 0;
             let hwDepth = 0;
             let end = 0;
             while (end < match.length) {
-              if (/^([*~]|_(?![A-Za-z0-9_]))/.test(match.slice(end)) && preUrlPara.includes(match[end])) {
+              if (/^(?:[*~]|_(?![\p{L}\p{N}_]))/u.test(match.slice(end)) && closesPreUrlEmphasis(preUrlWithNext, match[end])) {
                 break;
               }
               if (match[end] === '（') {
@@ -2066,7 +2090,9 @@
         const baseAllowAnyOrdered = !prevLine || blockSpanLineRe.test(prevLine) || prevListIndent > 0 || (getQuotePrefix(rawCurrentLine).depth < listQuoteDepth && outerListIndent > 0) || getQuotePrefix(rawCurrentLine).depth > listQuoteDepth || getTableRowParts(prevLine).rest.trim() === '' || isHeadingLineAt(normalizedLines, lineIndex - 1);
         const allowAnyOrdered = baseAllowAnyOrdered || (lineIndex + 1 < normalizedLines.length && TABLE_DELIMITER_REST_RE.test(getQuotePrefix(normalizedLines[lineIndex + 1]).rest));
         const prevIndentBeforeUpdate = listContentIndent;
-        updateListIndent(rawCurrentLine, isBlockLine, allowAnyOrdered);
+        if (!skipListUpdateLines.has(lineIndex)) {
+          updateListIndent(rawCurrentLine, isBlockLine, allowAnyOrdered);
+        }
         if (listContentIndent === 0) {
           listOpenedViaTableLookahead = false;
         } else if (prevIndentBeforeUpdate === 0) {
