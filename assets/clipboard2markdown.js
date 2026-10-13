@@ -843,7 +843,6 @@
       const REF_DEF_RE = /^[ \t]{0,3}\[(?:\\.|[^\\\n\]])+\]:[ \t]*(?:\n[ \t]*(?:>[ \t]*)*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*(?:>[ \t]*)*)(?:"(?:\\.|[^"\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n]|\n(?![ \t]*\n))*'|\((?:\\.|[^()\n]|\n(?![ \t]*\n))*\)))?[ \t]*$/;
       const TABLE_DELIMITER_REST_RE = /^[ \t]*\|?(?:[ \t]*:?-+:?[ \t]*\|)+[ \t]*:?-+:?[ \t]*\|?[ \t]*$/;
       const LINK_TAIL_RE = /^(?:[ \t]|\n(?![ \t]*\n))*(?:(?:"(?:\\.|[^"\n\uE004]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n\uE004]|\n(?![ \t]*\n))*'|(?:\((?:\\.|[^)\n\uE004]|\n(?![ \t]*\n))*\)|[（(](?:\\.|[^)）\n\uE004]|\n(?![ \t]*\n))*[)）]))(?:[ \t]|\n(?![ \t]*\n))*)?(?:(?<=(?:^|[^\\])(?:\\\\)*)\)|\\*）+)/;
-      const URL_BACKPEDAL_RE = /(?:[^?!.,:;*_'"~()&]+|\([^)]*\)|&(?![a-zA-Z0-9]+;$)|[?!.,:;*_'"~)]+(?!$))+/;
       const HTML_SPECIAL_CLOSE_MAP = {
         '<!--': /-->/,
         '<?': /\?>/,
@@ -873,7 +872,7 @@
       let minLazyIndent = 0;
       let outerMinLazy = 0;
       const getQuotePrefix = function (line) {
-        const match = line.match(/^([ \t]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)+)?([ \t]*>(?:[ \t]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)*>)*[ \t]?)(.*)$/);
+        const match = line.match(/^((?:[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+)+)?([ \t]*>(?:[ \t]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)*>)*[ \t]?)(.*)$/);
         if (!match) {
           return { depth: 0, prefix: '', rest: line };
         }
@@ -921,7 +920,7 @@
           minLazyIndent = listSawBlank ? outerListIndent : 0;
           listQuoteDepth = targetQuoteDepth;
         }
-        const listMatch = !isProtectedBlock && !THEMATIC_BREAK_RE.test(q.rest) && (allowAnyOrdered || !/^[ \t]*(?!1[.)])\d{1,9}[.)]/.test(q.rest)) && q.rest.match(/^([ \t]*)(?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )| (?= {4})|\t))+/);
+        const listMatch = !isProtectedBlock && !THEMATIC_BREAK_RE.test(q.rest) && (allowAnyOrdered || /^[ \t]*(?:[-*+]|1[.)]) /.test(q.rest)) && q.rest.match(/^([ \t]*)(?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )| (?= {4})|\t))+/);
         const isListLine = Boolean(listMatch && countIndentCols(listMatch[1]) <= listContentIndent + 3);
         if (isListLine) {
           const markerIndent = countIndentCols(listMatch[1]);
@@ -1033,7 +1032,7 @@
         const q = getQuotePrefix(line);
         if (!activeFence) {
           const openMatch = q.rest.match(/^([ \t]*)(?:((?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )| (?= {4})|\t))+)(?:\[[ xX]\][ \t]+)?)?(`{3,}|~{3,})(.*)$/);
-          if (openMatch && (!openMatch[2] || allowAnyOrdered || !/^(?!1[.)])\d/.test(openMatch[2])) && !(openMatch[3][0] === '`' && openMatch[4].includes('`'))) {
+          if (openMatch && (!openMatch[2] || allowAnyOrdered || /^(?:[-*+]|1[.)]) /.test(openMatch[2])) && !(openMatch[3][0] === '`' && openMatch[4].includes('`'))) {
             const openIndent = countIndentCols(openMatch[1]);
             const listOffset = openMatch[2] ? countIndentCols(openMatch[1] + openMatch[2]) - openIndent : 0;
             const containerIndent = listOffset > 0 ? openIndent + listOffset : listContentIndent;
@@ -1086,7 +1085,7 @@
       const getTableRowParts = function (line, isDelimCandidate = false, allowAnyOrdered = true) {
         const q = getQuotePrefix(line);
         const maxMarkerIndent = (q.depth === 0 ? (listContentIndent || outerListIndent) : listContentIndent) + 3;
-        const listMatch = !THEMATIC_BREAK_RE.test(q.rest) && !(isDelimCandidate && TABLE_DELIMITER_REST_RE.test(q.rest)) && (allowAnyOrdered || !/^[ \t]*(?!1[.)])\d{1,9}[.)]/.test(q.rest)) && q.rest.match(/^([ \t]*(?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )| (?= {4})|\t))+(?:(?:\[[ xX]\])[ \t]+)?)(.*)$/);
+        const listMatch = !THEMATIC_BREAK_RE.test(q.rest) && !(isDelimCandidate && TABLE_DELIMITER_REST_RE.test(q.rest)) && (allowAnyOrdered || /^[ \t]*(?:[-*+]|1[.)]) /.test(q.rest)) && q.rest.match(/^([ \t]*(?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )| (?= {4})|\t))+(?:(?:\[[ xX]\])[ \t]+)?)(.*)$/);
         if (listMatch && countIndentCols(listMatch[1].match(/^[ \t]*/)[0]) <= maxMarkerIndent) {
           return { depth: q.depth, prefix: q.prefix + listMatch[1], rest: listMatch[2], hasList: true };
         }
@@ -1575,7 +1574,7 @@
           tableOpenParaDepth = getOpenSetextParaDepth(currentProseLines, tableStartIdx - 1, prevT.depth);
           currentProseLines[tableStartIdx] = currentProseLines[tableStartIdx].replace(new RegExp(UNESCAPED_PIPE_RE, 'g'), '\uE004');
           currentProseLines.push(line);
-        } else if (!isBlockBoundary && inProseTable && !t.hasList && countIndentCols(line.match(/^[ \t]*/)[0]) >= outerMinLazy && countIndentCols(t.prefix.slice(qBefore.prefix.length) + t.rest.match(/^[ \t]*/)[0]) >= Math.max(minLazyIndent, countIndentCols(getTableRowParts(currentProseLines[tableStartIdx]).prefix.slice(getQuotePrefix(currentProseLines[tableStartIdx]).prefix.length) + getTableRowParts(currentProseLines[tableStartIdx]).rest.match(/^[ \t]*/)[0]) >= listContentIndent ? listContentIndent : 0) && isTableRowCandidate(line, false)) {
+        } else if (!isBlockBoundary && inProseTable && !t.hasList && countIndentCols(line.match(/^[ \t]*/)[0]) >= outerMinLazy && countIndentCols(t.prefix.slice(qBefore.prefix.length) + t.rest.match(/^[ \t]*/)[0]) >= ((countIndentCols(getTableRowParts(currentProseLines[tableStartIdx]).prefix.slice(getQuotePrefix(currentProseLines[tableStartIdx]).prefix.length) + getTableRowParts(currentProseLines[tableStartIdx]).rest.match(/^[ \t]*/)[0]) >= listContentIndent && countIndentCols(getQuotePrefix(currentProseLines[tableStartIdx + 1]).rest.match(/^[ \t]*/)[0]) >= listContentIndent) ? listContentIndent : minLazyIndent) && isTableRowCandidate(line, false)) {
           if (t.depth <= tableOpenParaDepth && /^[ \t]*(?:=+|-+)[ \t]*$/.test(t.rest)) {
             for (let i = tableStartIdx; i < currentProseLines.length; i++) {
               currentProseLines[i] = currentProseLines[i].replace(/\uE004/g, '|');
@@ -1827,11 +1826,27 @@
               end++;
             }
             let url = match.slice(0, end);
-            let prevUrl;
-            do {
-              prevUrl = url;
-              url = URL_BACKPEDAL_RE.exec(url)[0];
-            } while (prevUrl !== url);
+            const unclosedParenIdx = url.indexOf('(', url.lastIndexOf(')') + 1);
+            if (unclosedParenIdx !== -1) {
+              url = url.slice(0, unclosedParenIdx);
+            }
+            const lastOpenParen = url.lastIndexOf('(');
+            const minEnd = lastOpenParen !== -1 ? url.indexOf(')', lastOpenParen) + 1 : 0;
+            let trimEnd = url.length;
+            while (trimEnd > minEnd) {
+              if (url[trimEnd - 1] === ';') {
+                let j = trimEnd - 2;
+                while (j >= minEnd && /[a-zA-Z0-9]/.test(url[j])) {
+                  j--;
+                }
+                trimEnd = (j < trimEnd - 2 && j >= minEnd && url[j] === '&') ? j : trimEnd - 1;
+              } else if (/[?!.,:*_'"~)]/.test(url[trimEnd - 1])) {
+                trimEnd--;
+              } else {
+                break;
+              }
+            }
+            url = url.slice(0, trimEnd);
             const tail = match.slice(url.length).replace(/^[^（]*\((?:(?![A-Za-z0-9\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff\uac00-\ud7af\uE001]（).)*/, function (m) {
               return m.replace(/[（）]+/g, function (parens) {
                 return maskSpan(parens, false);
@@ -1930,7 +1945,7 @@
         if (listContentIndent === 0) {
           listOpenedViaTableLookahead = false;
         } else if (prevIndentBeforeUpdate === 0) {
-          listOpenedViaTableLookahead = !baseAllowAnyOrdered && /^[ \t]*(?!1[.)])\d{1,9}[.)]/.test(getQuotePrefix(rawCurrentLine).rest);
+          listOpenedViaTableLookahead = !baseAllowAnyOrdered && !/^[ \t]*(?:[-*+]|1[.)]) /.test(getQuotePrefix(rawCurrentLine).rest);
         }
         if (isBlockLine) {
           formattedLines.push(currentLine);
@@ -1954,12 +1969,15 @@
           splitTableCells(restoreSpans(currentLine)).length === splitTableCells(normalizedLines[lineIndex + 1], true).length
         ) {
           const openParaDepth = getOpenSetextParaDepth(normalizedLines, lineIndex - 1, tableQuoteDepth);
-          const minTableRowIndent = Math.max(minLazyIndent, countIndentCols(headerT.prefix.slice(getQuotePrefix(currentLine).prefix.length) + headerT.rest.match(/^[ \t]*/)[0]) >= listContentIndent ? listContentIndent : 0);
+          const minTableRowIndent = (
+            countIndentCols(headerT.prefix.slice(getQuotePrefix(currentLine).prefix.length) + headerT.rest.match(/^[ \t]*/)[0]) >= listContentIndent &&
+            countIndentCols(getQuotePrefix(normalizedLines[lineIndex + 1]).rest.match(/^[ \t]*/)[0]) >= listContentIndent
+          ) ? listContentIndent : minLazyIndent;
           const tableLines = [currentLine, normalizedLines[lineIndex + 1]];
           lineIndex += 2;
           // Intentionally allow `depth <= tableQuoteDepth` for blockquoted tables because the bundled
           // Marked parser includes lazy blockquote continuation rows (without repeating `>`) in the
-          // same table, while requiring `>= minTableRowIndent` so dedented lines exit list tables.
+          // same table, while requiring `>= minTableRowIndent` so dedented lines exit indented list tables.
           while (
             lineIndex < normalizedLines.length &&
             !getTableRowParts(normalizedLines[lineIndex], false, countIndentCols(getQuotePrefix(normalizedLines[lineIndex]).rest.match(/^[ \t]*/)[0]) < (headerListIndent || (getQuotePrefix(normalizedLines[lineIndex]).depth === 0 ? outerListIndent : 0))).hasList &&

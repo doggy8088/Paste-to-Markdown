@@ -3078,5 +3078,21 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     }).concat(['段落 (測試)']).join('\n');
     const manyReferenceDefsMarkdown = await convertPaste(page, { text: manyReferenceDefsInput });
     expect(manyReferenceDefsMarkdown).toBe(manyReferenceDefsExpected);
+
+    const lazyListTableThenNestedBullet = '- A | B\n:-- | --:\n--- | ---\n    - | -';
+    const lazyListTableThenNestedBulletMarkdown = await convertPaste(page, { text: lazyListTableThenNestedBullet });
+    expect(lazyListTableThenNestedBulletMarkdown).toBe('- | A   | B   |\n  | :-- | --: |\n  | --- | --- |\n    - | -');
+
+    const lazyListTableWithDelimLookingRows = '- A | B\n--- | ---\n:-- | --:\n--- | ---\ntext';
+    const lazyListTableWithDelimLookingRowsMarkdown = await convertPaste(page, { text: lazyListTableWithDelimLookingRows });
+    expect(lazyListTableWithDelimLookingRowsMarkdown).toBe('- | A    | B   |\n  | ---- | --- |\n  | :--  | --: |\n  | ---  | --- |\n  | text |     |');
+
+    const longTrailingParensUrlInput = '（https://x.com/' + ')'.repeat(64000) + '）說明 https://x.com/path&amp;; https://x.com/path(unclosed';
+    const longTrailingParensUrlMarkdown = await convertPaste(page, { text: longTrailingParensUrlInput });
+    expect(longTrailingParensUrlMarkdown).toBe('(https://x.com/' + ')'.repeat(64000) + ') 說明 https://x.com/path&amp;; https://x.com/path(unclosed');
+
+    const tabbedBulletInParagraphBeforeTable = 'plain\n-\titem\nA | B\n--- | ---';
+    const tabbedBulletInParagraphBeforeTableMarkdown = await convertPaste(page, { text: tabbedBulletInParagraphBeforeTable });
+    expect(tabbedBulletInParagraphBeforeTableMarkdown).toBe('plain\n-\titem\n| A   | B   |\n| --- | --- |');
   });
 });
