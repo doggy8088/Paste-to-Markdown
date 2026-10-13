@@ -1241,6 +1241,29 @@
           }
         }
 
+        const titleCloseReMap = {
+          '"': /["\uE004]|\n[ \t]*\n/g,
+          "'": /['\uE004]|\n[ \t]*\n/g,
+          '(': /[)）\uE004]|\n[ \t]*\n/g,
+          '（': /[)）\uE004]|\n[ \t]*\n/g
+        };
+        const noTitleCloseUntil = { '"': -1, "'": -1, '(': -1, '（': -1 };
+        const matchLinkTailAt = function (pos) {
+          const wsEnd = pos + str.slice(pos).match(/^(?:[ \t]|\n(?![ \t]*\n))*/)[0].length;
+          const ch = str[wsEnd];
+          if (ch in noTitleCloseUntil && wsEnd < noTitleCloseUntil[ch]) {
+            return null;
+          }
+          const m = str.slice(pos).match(LINK_TAIL_RE);
+          if (!m && ch in noTitleCloseUntil) {
+            const closeRe = titleCloseReMap[ch];
+            closeRe.lastIndex = wsEnd + 1;
+            const cm = closeRe.exec(str);
+            noTitleCloseUntil[ch] = cm ? cm.index : str.length;
+          }
+          return m;
+        };
+
         let out = '';
         let i = 0;
         let searchIdx = 0;
@@ -1286,7 +1309,7 @@
             }
             if (tailStart !== -1) {
               const attachedOpen = str.slice(cursor, tailStart).search(/^（|(?<=[\]\p{L}\p{N}\uE001])（/u);
-              const tailMatch = str.slice(tailStart).match(LINK_TAIL_RE) || (attachedOpen !== -1 && str.slice(tailStart = cursor + attachedOpen).match(LINK_TAIL_RE));
+              const tailMatch = matchLinkTailAt(tailStart) || (attachedOpen !== -1 && matchLinkTailAt(tailStart = cursor + attachedOpen));
               if (tailMatch) {
                 endIdx = tailStart + tailMatch[0].length - 1;
               } else if (fallbackClose.has(lookupKey)) {
@@ -1810,7 +1833,7 @@
               return '[' + maskSpan(lbl, false) + ']';
             }) + maskSpan(destAndTitle, false);
           })
-          .replace(/^([ \t]*(?:>[ \t]*|(?:[-*+]|\d{1,9}[.)])[ \t]+)*(?:\d{1,9}|\[(?:\\.|[^\\\n\]])+\]:[ \t]*(?:\n[ \t]*(?:>[ \t]*)*)?(?:<[^>\r\n]+>|\S+?)(?:[ \t]+|[ \t]*\n[ \t]*(?:>[ \t]*)*|(?<=[\]\p{L}\p{N}\uE001]|\uE003\))(?=（(?:\\.|[^()（）\n]|\n(?![ \t]*\n))*?\s))))((?<=\d)）|(?<!\d)[（(](?:\\.|[^()（）\n]|\n(?![ \t]*\n))*[)）](?=[ \t]*(?:\n|$)))(?=[ \t]|$)/gmu, function (_match, prefix, token) {
+          .replace(/^([ \t]*(?:>[ \t]*|(?:[-*+]|\d{1,9}[.)])[ \t]+)*(?:\d{1,9}|\[(?:\\.|[^\\\n\]])+\]:[ \t]*(?:\n[ \t]*(?:>[ \t]*)*)?(?:<[^>\r\n]+>|\S+?)(?:[ \t]+|[ \t]*\n[ \t]*(?:>[ \t]*)*|(?<=[\]\p{L}\p{N}\uE001]|\uE003\))(?=（(?:\\.|[^()（）\n]|\n(?![ \t]*\n))*?\s))))((?<=\d)）|(?<!\d)[（(](?:\\.|[^()（）\n]|\n(?![ \t]*\n))*[)）](?=[ \t]*(?:\n|$)))/gmu, function (_match, prefix, token) {
             return prefix + maskSpan(token, false);
           });
       });
@@ -1994,7 +2017,7 @@
         const tableQuoteDepth = listQuoteDepth;
         const headerT = getTableRowParts(currentLine);
         const headerListIndent = listContentIndent || (headerT.hasList ? countIndentCols(headerT.prefix) : 0);
-        const baseTableListIndent = Math.min((tableQuoteDepth ? 0 : headerListIndent) || (outerListIndent >= 3 ? outerListIndent : 0), (listIndents[0] || Infinity) + 3);
+        const baseTableListIndent = Math.min((tableQuoteDepth ? (listContentIndent >= 3 ? listContentIndent : 0) : headerListIndent) || (outerListIndent >= 3 ? outerListIndent : 0), (listIndents[0] || Infinity) + 3);
         const keepLookaheadUnindented = listOpenedViaTableLookahead;
         if (!headerT.hasList) {
           listOpenedViaTableLookahead = false;
@@ -2058,7 +2081,7 @@
             const tableListIndent = (keepLookaheadUnindented && (rIdx === 0 || (rows.length === 2 && (lineIndex >= normalizedLines.length || normalizedLines[lineIndex].trim() === '')))) ? 0 : baseTableListIndent;
             const rowPrefix = t.depth > 0 && outerListIndent >= 3 && !t.hasList
               ? ' '.repeat(Math.max(0, outerListIndent - countIndentCols(rawPrefix.match(/^[ \t]*/)[0]))) + rawPrefix
-              : rawPrefix + ' '.repeat(Math.max(0, tableListIndent - countIndentCols(rawPrefix)));
+              : rawPrefix + ' '.repeat(Math.max(0, tableListIndent - countIndentCols(t.depth > 0 && listContentIndent >= 3 ? rawPrefix.slice(getQuotePrefix(tableLines[rIdx]).prefix.length) : rawPrefix)));
             if (rIdx === 1) {
               formattedLines.push(rowPrefix + '| ' + colWidths.map(function (width, cIdx) {
                 const rawSep = row[cIdx] || '';

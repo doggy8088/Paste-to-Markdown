@@ -3162,6 +3162,18 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const longBackslashRunBeforeFullWidthParenMarkdown = await convertPaste(page, { text: longBackslashRunBeforeFullWidthParen });
     expect(longBackslashRunBeforeFullWidthParenMarkdown).toBe('\\'.repeat(64002) + '(測試)');
 
+    const quotedOrderedListLazyTable = '> 1. item\nA | B\n--- | ---\nlong | x\n\n> 1. item\n> A | B\n> --- | ---\n> long | x';
+    const quotedOrderedListLazyTableMarkdown = await convertPaste(page, { text: quotedOrderedListLazyTable });
+    expect(quotedOrderedListLazyTableMarkdown).toBe('> 1. item\n   | A    | B   |\n   | ---- | --- |\n   | long | x   |\n\n> 1. item\n>    | A    | B   |\n>    | ---- | --- |\n>    | long | x   |');
+
+    const compactFullWidthEnumerator = '1）item（說明）';
+    const compactFullWidthEnumeratorMarkdown = await convertPaste(page, { text: compactFullWidthEnumerator });
+    expect(compactFullWidthEnumeratorMarkdown).toBe('1）item (說明)');
+
+    const manyIncompleteLinkTitles = '[x](u （'.repeat(8000) + '尾（完）';
+    const manyIncompleteLinkTitlesMarkdown = await convertPaste(page, { text: manyIncompleteLinkTitles });
+    expect(manyIncompleteLinkTitlesMarkdown).toBe('[x](u ('.repeat(8000) + '尾 (完)');
+
     const deepBlockquoteLines = Array.from({ length: 400 }, function (_, i) {
       return '> '.repeat(i + 1) + '段落（測試）';
     }).join('\n');
