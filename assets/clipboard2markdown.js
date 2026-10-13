@@ -948,7 +948,7 @@
           listSawBlank = minLazyIndent > 0;
           listOpenedInPara = false;
         }
-        if (q.depth === 0) {
+        if (listQuoteDepth === 0) {
           outerListIndent = listContentIndent;
           outerMinLazy = minLazyIndent;
         } else {
@@ -1050,18 +1050,18 @@
         return token;
       };
 
-      const getTableRowParts = function (line, isDelimCandidate = false) {
+      const getTableRowParts = function (line, isDelimCandidate = false, allowAnyOrdered = true) {
         const q = getQuotePrefix(line);
         const maxMarkerIndent = listContentIndent + 3;
-        const listMatch = !THEMATIC_BREAK_RE.test(q.rest) && !(isDelimCandidate && TABLE_DELIMITER_REST_RE.test(q.rest)) && q.rest.match(/^([ \t]*(?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )| (?= {4})|\t))+(?:(?:\[[ xX]\])[ \t]+)?)(.*)$/);
+        const listMatch = !THEMATIC_BREAK_RE.test(q.rest) && !(isDelimCandidate && TABLE_DELIMITER_REST_RE.test(q.rest)) && (allowAnyOrdered || !/^[ \t]*(?!1[.)])\d{1,9}[.)]/.test(q.rest)) && q.rest.match(/^([ \t]*(?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )| (?= {4})|\t))+(?:(?:\[[ xX]\])[ \t]+)?)(.*)$/);
         if (listMatch && countIndentCols(listMatch[1].match(/^[ \t]*/)[0]) <= maxMarkerIndent) {
           return { depth: q.depth, prefix: q.prefix + listMatch[1], rest: listMatch[2], hasList: true };
         }
         return { depth: q.depth, prefix: q.prefix, rest: q.rest, hasList: /^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]/.test(q.prefix) };
       };
 
-      const splitTableCells = function (line, isDelimCandidate = false) {
-        const t = getTableRowParts(line, isDelimCandidate);
+      const splitTableCells = function (line, isDelimCandidate = false, allowAnyOrdered = true) {
+        const t = getTableRowParts(line, isDelimCandidate, allowAnyOrdered);
         const trimmed = t.rest.trim().replace(/^\|/, '').replace(/(?<=(?:^|[^\\])(?:\\\\)*)\|$/, '');
         return trimmed.split(UNESCAPED_PIPE_RE).map(function (cell) {
           return restoreSpans(cell.trim());
@@ -1069,7 +1069,7 @@
       };
 
       const isTableRowCandidate = function (line, requirePipe = true, isDelimCandidate = false) {
-        const t = getTableRowParts(line, isDelimCandidate);
+        const t = getTableRowParts(line, isDelimCandidate, requirePipe);
         const maxIndent = t.hasList ? 3 : listContentIndent + 3;
         return (
           !blockSpanLineRe.test(line) &&
@@ -1148,6 +1148,7 @@
               parenStack.push(k);
             } else if (str[k] === ')') {
               fallbackCloseIdx = k;
+              closesSinceSpace++;
               if (parenStack.length > 0) {
                 directClose.set(parenStack.pop(), k);
               } else if (!hasUnmatchedClose) {
@@ -1280,7 +1281,7 @@
       let activeFence = null;
       let activeHtml = null;
       let inProseTable = false;
-      let tableHasOpenPara = false;
+      let tableOpenParaDepth = -1;
       let tableStartIdx = -1;
       const flushProse = function () {
         if (currentProseLines.length > 0) {
@@ -1288,7 +1289,7 @@
           currentProseLines = [];
         }
         inProseTable = false;
-        tableHasOpenPara = false;
+        tableOpenParaDepth = -1;
         tableStartIdx = -1;
       };
       const headingCache = new WeakMap();
@@ -1304,30 +1305,35 @@
         const res = (
           /^[ \t]{0,3}#{1,6}(?:[ \t]|$)/.test(tk.rest) ||
           THEMATIC_BREAK_RE.test(tk.rest) ||
-          (/^[ \t]{0,3}(?:=+|-+)[ \t]*$/.test(tk.rest) && hasOpenSetextPara(arr, idx - 1, tk.depth))
+          (/^[ \t]{0,3}(?:=+|-+)[ \t]*$/.test(tk.rest) && getOpenSetextParaDepth(arr, idx - 1, tk.depth) >= 0)
         );
         cache[idx] = res;
         return res;
       };
-      const hasOpenSetextPara = function (arr, endIdx, maxDepth) {
+      const getOpenSetextParaDepth = function (arr, endIdx, maxDepth) {
         let canLazyQuote = true;
         for (let k = endIdx; k >= 0; k--) {
           if (blockSpanLineRe.test(arr[k])) break;
           const tk = getTableRowParts(arr[k]);
           if (tk.depth > maxDepth) {
             if (canLazyQuote && tk.rest.trim() !== '' && !isHeadingLineAt(arr, k)) {
-              return true;
+              return maxDepth;
             }
             canLazyQuote = false;
             continue;
           }
-          if (tk.rest.trim() === '') break;
+          if (tk.rest.trim() === '') {
+            if (tk.depth === 0) break;
+            maxDepth = tk.depth - 1;
+            canLazyQuote = false;
+            continue;
+          }
           maxDepth = tk.depth;
           if (!isHeadingLineAt(arr, k)) {
-            return true;
+            return maxDepth;
           }
         }
-        return false;
+        return -1;
       };
       let setextLookaheadIdx = -1;
       let setextLookaheadKey = '';
@@ -1384,7 +1390,7 @@
           isHeadingLineAt(currentProseLines, currentProseLines.length - 1) ||
           /(?:^|\n[ \t]*\n)[ \t]{0,3}\[(?:\\.|[^\\\n\]])+\]:[ \t]*(?:\n[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*)(?:"[^"\n]*"|'[^'\n]*'|\([^()\n]*\)))?[ \t]*$/.test(proseTail);
         const prevListIndent = prevProse.trim() === '' ? 0 : listContentIndent;
-        const allowAnyOrdered = isBlockBoundary || prevListIndent > 0 || (lineIdx + 1 < lines.length && TABLE_DELIMITER_REST_RE.test(getQuotePrefix(lines[lineIdx + 1]).rest));
+        const allowAnyOrdered = isBlockBoundary || prevListIndent > 0 || (!inProseTable && lineIdx + 1 < lines.length && TABLE_DELIMITER_REST_RE.test(getQuotePrefix(lines[lineIdx + 1]).rest));
         const isTableStartDelim =
           !isBlockBoundary &&
           !inProseTable &&
@@ -1392,10 +1398,11 @@
           isTableRowCandidate(currentProseLines[currentProseLines.length - 1]) &&
           isTableDelimiterLine(line, qBefore.depth < listQuoteDepth ? Infinity : (listContentIndent || prevListIndent || (prevT.hasList ? countIndentCols(prevT.prefix) : 0))) &&
           splitTableCells(currentProseLines[currentProseLines.length - 1]).length === splitTableCells(line, true).length;
+        const allowRowList = !inProseTable ? allowAnyOrdered : countIndentCols(qBefore.rest.match(/^[ \t]*/)[0]) < listContentIndent;
         if (!activeFence && !isTableStartDelim) {
-          updateListIndent(line, false, allowAnyOrdered);
+          updateListIndent(line, false, allowRowList);
         }
-        const t = getTableRowParts(line, isTableStartDelim);
+        const t = getTableRowParts(line, isTableStartDelim, allowRowList);
         const inSetextHeading = !isBlockBoundary && listContentIndent === prevListIndent && !inProseTable && !t.hasList && hasFollowingSetextUnderline(lineIdx, qBefore.depth, listContentIndent);
         const nextFence = updateFenceState(line, activeFence, allowAnyOrdered);
         if (
@@ -1438,11 +1445,11 @@
         if (isTableStartDelim) {
           inProseTable = true;
           tableStartIdx = currentProseLines.length - 1;
-          tableHasOpenPara = hasOpenSetextPara(currentProseLines, tableStartIdx - 1, prevT.depth);
+          tableOpenParaDepth = getOpenSetextParaDepth(currentProseLines, tableStartIdx - 1, prevT.depth);
           currentProseLines[tableStartIdx] = currentProseLines[tableStartIdx].replace(UNESCAPED_PIPE_RE, '\uE004');
           currentProseLines.push(line);
         } else if (!isBlockBoundary && inProseTable && !t.hasList && countIndentCols(line.match(/^[ \t]*/)[0]) >= outerMinLazy && countIndentCols(t.prefix.slice(qBefore.prefix.length) + t.rest.match(/^[ \t]*/)[0]) >= Math.max(minLazyIndent, countIndentCols(getTableRowParts(currentProseLines[tableStartIdx]).prefix.slice(getQuotePrefix(currentProseLines[tableStartIdx]).prefix.length) + getTableRowParts(currentProseLines[tableStartIdx]).rest.match(/^[ \t]*/)[0]) >= listContentIndent ? listContentIndent : 0) && isTableRowCandidate(line, false)) {
-          if (tableHasOpenPara && /^[ \t]*(?:=+|-+)[ \t]*$/.test(t.rest)) {
+          if (t.depth <= tableOpenParaDepth && /^[ \t]*(?:=+|-+)[ \t]*$/.test(t.rest)) {
             for (let i = tableStartIdx; i < currentProseLines.length; i++) {
               currentProseLines[i] = currentProseLines[i].replace(/\uE004/g, '|');
             }
@@ -1668,8 +1675,10 @@
               prevUrl = url;
               url = URL_BACKPEDAL_RE.exec(url)[0];
             } while (prevUrl !== url);
-            const tail = match.slice(url.length).replace(/^([^（]*\([^（]*?)）/, function (_m, p1) {
-              return p1 + maskSpan('）', false);
+            const tail = match.slice(url.length).replace(/^[^（]*\((?:(?![A-Za-z0-9\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff\uac00-\ud7af\uE001]（).)*/, function (m) {
+              return m.replace(/[（）]+/g, function (parens) {
+                return maskSpan(parens, false);
+              });
             });
             return maskSpan(url, false) + tail;
           }
@@ -1783,7 +1792,7 @@
           splitTableCells(currentLine).length === splitTableCells(normalizedLines[lineIndex + 1], true).length &&
           splitTableCells(restoreSpans(currentLine)).length === splitTableCells(normalizedLines[lineIndex + 1], true).length
         ) {
-          const hasOpenParaBefore = hasOpenSetextPara(normalizedLines, lineIndex - 1, tableQuoteDepth);
+          const openParaDepth = getOpenSetextParaDepth(normalizedLines, lineIndex - 1, tableQuoteDepth);
           const minTableRowIndent = Math.max(minLazyIndent, countIndentCols(headerT.prefix.slice(getQuotePrefix(currentLine).prefix.length) + headerT.rest.match(/^[ \t]*/)[0]) >= listContentIndent ? listContentIndent : 0);
           const tableLines = [currentLine, normalizedLines[lineIndex + 1]];
           lineIndex += 2;
@@ -1792,21 +1801,21 @@
           // same table, while requiring `>= minTableRowIndent` so dedented lines exit list tables.
           while (
             lineIndex < normalizedLines.length &&
-            !getTableRowParts(normalizedLines[lineIndex]).hasList &&
+            !getTableRowParts(normalizedLines[lineIndex], false, countIndentCols(getQuotePrefix(normalizedLines[lineIndex]).rest.match(/^[ \t]*/)[0]) < headerListIndent).hasList &&
             getQuotePrefix(normalizedLines[lineIndex]).depth <= tableQuoteDepth &&
             countIndentCols(normalizedLines[lineIndex].match(/^[ \t]*/)[0]) >= outerMinLazy &&
-            countIndentCols(getTableRowParts(normalizedLines[lineIndex]).prefix.slice(getQuotePrefix(normalizedLines[lineIndex]).prefix.length) + getTableRowParts(normalizedLines[lineIndex]).rest.match(/^[ \t]*/)[0]) >= minTableRowIndent &&
+            countIndentCols(getTableRowParts(normalizedLines[lineIndex], false, false).prefix.slice(getQuotePrefix(normalizedLines[lineIndex]).prefix.length) + getTableRowParts(normalizedLines[lineIndex], false, false).rest.match(/^[ \t]*/)[0]) >= minTableRowIndent &&
             isTableRowCandidate(normalizedLines[lineIndex], false)
           ) {
             tableLines.push(normalizedLines[lineIndex]);
             lineIndex++;
           }
-          if (hasOpenParaBefore && hasPostTableSetextUnderline(tableLines, lineIndex, tableQuoteDepth)) {
+          if (openParaDepth >= 0 && hasPostTableSetextUnderline(tableLines, lineIndex, openParaDepth)) {
             formattedLines.push.apply(formattedLines, tableLines);
             continue;
           }
           const rows = tableLines.map(function (l, idx) {
-            return splitTableCells(l, idx === 1);
+            return splitTableCells(l, idx === 1, idx < 2);
           });
           const colCount = rows[0].length;
           // Intentionally align columns by Unicode character count (Array.from(cell).length, matching
@@ -1822,7 +1831,7 @@
             }
           });
           rows.forEach(function (row, rIdx) {
-            const t = getTableRowParts(tableLines[rIdx], rIdx === 1);
+            const t = getTableRowParts(tableLines[rIdx], rIdx === 1, rIdx < 2);
             const rawPrefix = t.prefix + t.rest.match(/^[ \t]*/)[0];
             const rowPrefix = t.depth > 0 && outerListIndent > 0 && !t.hasList
               ? ' '.repeat(Math.max(0, outerListIndent - countIndentCols(rawPrefix.match(/^[ \t]*/)[0]))) + rawPrefix

@@ -2841,6 +2841,26 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const lazyTableEnablingNonOneOrderedList = 'text\n10. item\n--- | ---\n:-- | --:';
     const lazyTableEnablingNonOneOrderedListMarkdown = await convertPaste(page, { text: lazyTableEnablingNonOneOrderedList });
     expect(lazyTableEnablingNonOneOrderedListMarkdown).toBe('text\n10. item\n| --- | --- |\n| :-- | --: |');
+
+    const nonOneOrderedRowInActiveTable = 'H | J\n- | -\n2. item\nA | B\n- | -';
+    const nonOneOrderedRowInActiveTableMarkdown = await convertPaste(page, { text: nonOneOrderedRowInActiveTable });
+    expect(nonOneOrderedRowInActiveTableMarkdown).toBe('| H       | J   |\n| ------- | --- |\n| 2. item |     |\n| A       | B   |\n- | -');
+
+    const lazyQuoteTableInsideOrderedList = '1. item\n> note\nA | B\n--- | ---\nplain';
+    const lazyQuoteTableInsideOrderedListMarkdown = await convertPaste(page, { text: lazyQuoteTableInsideOrderedList });
+    expect(lazyQuoteTableInsideOrderedListMarkdown).toBe('1. item\n> note\n   | A     | B   |\n   | ----- | --- |\n   | plain |     |');
+
+    const asciiCloseBeforeFwCloseInLink = '[x]((a（)） 說明（測試）';
+    const asciiCloseBeforeFwCloseInLinkMarkdown = await convertPaste(page, { text: asciiCloseBeforeFwCloseInLink });
+    expect(asciiCloseBeforeFwCloseInLinkMarkdown).toBe('[x]((a（)） 說明 (測試)');
+
+    const bareUrlUnmatchedParenFwSuffix = 'https://e.com/(（x） 說明（測試）';
+    const bareUrlUnmatchedParenFwSuffixMarkdown = await convertPaste(page, { text: bareUrlUnmatchedParenFwSuffix });
+    expect(bareUrlUnmatchedParenFwSuffixMarkdown).toBe('https://e.com/(（x） 說明 (測試)');
+
+    const setextAcrossEmptyQuoteMarker = 'cont\n>\n> A | B\n--- | ---\n===\n說明（測試）';
+    const setextAcrossEmptyQuoteMarkerMarkdown = await convertPaste(page, { text: setextAcrossEmptyQuoteMarker });
+    expect(setextAcrossEmptyQuoteMarkerMarkdown).toBe('cont\n>\n> A | B\n--- | ---\n===\n說明 (測試)');
   });
 });
 
