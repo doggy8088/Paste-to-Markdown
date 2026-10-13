@@ -2933,5 +2933,14 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const singleLineBlockMathWithPipeBeforeDelim = '$$a | b$$\n--- | ---\n\n   $$a | b$$\n--- | ---';
     const singleLineBlockMathWithPipeBeforeDelimMarkdown = await convertPaste(page, { text: singleLineBlockMathWithPipeBeforeDelim });
     expect(singleLineBlockMathWithPipeBeforeDelimMarkdown).toBe('$$a | b$$\n--- | ---\n\n   | $$a | b$$ |\n| --- | --- |');
+
+    const defAfterBlockMath = '$$a | b$$\n[a（x）]: /u\n[use][a（x）]';
+    const defAfterBlockMathMarkdown = await convertPaste(page, { text: defAfterBlockMath });
+    expect(defAfterBlockMathMarkdown).toBe('$$a | b$$\n[a（x）]: /u\n[use][a（x）]');
+
+    const quotedLineInsideOuterSetextBeforeTableCandidate = 'plain\n> A | B\n===\nA | B\n> - | -\n\nplain\n> A | B\n---\nA | B\n> - | -\n\n> outer\nplain\n>> A | B\n===\nA | B\n>> - | -\n\nplain\n> note\n===\n[b（x）]: /u\n[use][b（x）]';
+    const quotedLineInsideOuterSetextBeforeTableCandidateMarkdown = await convertPaste(page, { text: quotedLineInsideOuterSetextBeforeTableCandidate });
+    expect(quotedLineInsideOuterSetextBeforeTableCandidateMarkdown).toBe('plain\n> A | B\n===\nA | B\n> - | -\n\nplain\n> A | B\n---\nA | B\n> - | -\n\n> outer\nplain\n>> A | B\n===\nA | B\n>> - | -\n\nplain\n> note\n===\n[b（x）]: /u\n[use][b（x）]');
   });
 });
+

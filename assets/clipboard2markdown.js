@@ -867,6 +867,7 @@
       let listContentIndent = 0;
       let outerListIndent = 0;
       let listQuoteDepth = 0;
+      let openParaQuoteDepth = -1;
       let quoteCanLazyContinue = false;
       let listIndents = [];
       let listSawBlank = false;
@@ -893,28 +894,38 @@
       const updateListIndent = function (line, isProtectedBlock, allowAnyOrdered = true) {
         const q = getQuotePrefix(line);
         const rawLeadCols = countIndentCols((q.prefix + q.rest).match(/^[ \t]*/)[0]);
+        const closesOuterSetext =
+          !isProtectedBlock &&
+          openParaQuoteDepth >= 0 &&
+          openParaQuoteDepth < listQuoteDepth &&
+          q.depth <= openParaQuoteDepth &&
+          (!THEMATIC_BREAK_RE.test(q.rest) || q.depth === openParaQuoteDepth) &&
+          /^[ \t]{0,3}(?:=+|-+)[ \t]*$/.test(q.rest);
+        const targetQuoteDepth = closesOuterSetext ? openParaQuoteDepth : q.depth;
         if (
-          q.depth > listQuoteDepth ||
-          (q.depth > 0 && rawLeadCols < outerMinLazy) ||
-          (q.depth < listQuoteDepth && (!quoteCanLazyContinue || q.rest.trim() === '' || hasBlockInterrupt(q.rest) || rawLeadCols < Math.max(outerMinLazy, minLazyIndent)))
+          closesOuterSetext ||
+          targetQuoteDepth > listQuoteDepth ||
+          (targetQuoteDepth > 0 && rawLeadCols < outerMinLazy) ||
+          (targetQuoteDepth < listQuoteDepth && (!quoteCanLazyContinue || q.rest.trim() === '' || hasBlockInterrupt(q.rest) || rawLeadCols < Math.max(outerMinLazy, minLazyIndent)))
         ) {
           if (
-            (q.depth < listQuoteDepth && (q.rest.trim() === '' || hasBlockInterrupt(q.rest))) ||
+            (targetQuoteDepth < listQuoteDepth && !closesOuterSetext && (q.rest.trim() === '' || hasBlockInterrupt(q.rest))) ||
             rawLeadCols < outerMinLazy
           ) {
             outerListIndent = 0;
             outerMinLazy = 0;
           }
-          const restoredIndent = q.depth === 0 ? outerListIndent : 0;
+          const restoredIndent = targetQuoteDepth === 0 ? outerListIndent : 0;
           listIndents = restoredIndent ? [restoredIndent] : [];
           listContentIndent = restoredIndent;
-          listSawBlank = q.depth === 0 && (outerMinLazy > 0 || q.rest.trim() === '');
+          listSawBlank = targetQuoteDepth === 0 && (outerMinLazy > 0 || q.rest.trim() === '');
           listOpenedInPara = false;
           minLazyIndent = listSawBlank ? outerListIndent : 0;
-          listQuoteDepth = q.depth;
+          listQuoteDepth = targetQuoteDepth;
         }
         const listMatch = !isProtectedBlock && !THEMATIC_BREAK_RE.test(q.rest) && (allowAnyOrdered || !/^[ \t]*(?!1[.)])\d{1,9}[.)]/.test(q.rest)) && q.rest.match(/^([ \t]*)(?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )| (?= {4})|\t))+/);
-        if (listMatch && countIndentCols(listMatch[1]) <= listContentIndent + 3) {
+        const isListLine = Boolean(listMatch && countIndentCols(listMatch[1]) <= listContentIndent + 3);
+        if (isListLine) {
           const markerIndent = countIndentCols(listMatch[1]);
           const nextIndent = countIndentCols(listMatch[0]);
           listOpenedInPara = (listOpenedInPara || !allowAnyOrdered) && listMatch[1] !== '';
@@ -959,6 +970,27 @@
           } else if (/^[ \t]*[-*+][ \t]/.test(q.prefix)) {
             outerListIndent = 0;
           }
+        }
+        if (
+          closesOuterSetext ||
+          listQuoteDepth < openParaQuoteDepth ||
+          (listQuoteDepth === openParaQuoteDepth && (
+            isProtectedBlock ||
+            q.rest.trim() === '' ||
+            isListLine ||
+            /^[ \t]{0,3}(?:=+|-+)[ \t]*$/.test(q.rest)
+          ))
+        ) {
+          openParaQuoteDepth = -1;
+        } else if (
+          openParaQuoteDepth < 0 &&
+          !isProtectedBlock &&
+          q.rest.trim() !== '' &&
+          !isListLine &&
+          !THEMATIC_BREAK_RE.test(q.rest) &&
+          !/^[ \t]{0,3}(?:#{1,6}(?:[ \t]|$)|`{3,}(?=[^`]*$)|~{3,}|(?:=+|-+)[ \t]*$|\$\$.+\$\$[ \t]*$)/.test(restoreSpans(q.rest))
+        ) {
+          openParaQuoteDepth = listQuoteDepth;
         }
         quoteCanLazyContinue = listQuoteDepth > 0 && q.rest !== '';
       };
@@ -1313,15 +1345,20 @@
         const tk = getTableRowParts(arr[idx]);
         const qk = getQuotePrefix(arr[idx]);
         const prev = idx > 0 ? cache[idx - 1] : null;
+        const isSetextUnderline = /^[ \t]{0,3}(?:=+|-+)[ \t]*$/.test(tk.rest);
+        const nonLazySetext = isSetextUnderline && getOpenSetextParaDepth(arr, idx - 1, tk.depth, false) >= 0;
         const heading = (
           /^[ \t]{0,3}#{1,6}(?:[ \t]|$)/.test(tk.rest) ||
           THEMATIC_BREAK_RE.test(tk.rest) ||
-          (/^[ \t]{0,3}(?:=+|-+)[ \t]*$/.test(tk.rest) && getOpenSetextParaDepth(arr, idx - 1, tk.depth) >= 0)
+          (/^[ \t]*\uE002/.test(tk.rest) && /^[ \t]*\$\$[\s\S]+\$\$[ \t]*$/.test(restoreSpans(tk.rest))) ||
+          nonLazySetext ||
+          (isSetextUnderline && getOpenSetextParaDepth(arr, idx - 1, tk.depth) >= 0)
         );
         const depth = (
           prev &&
           prev.depth > tk.depth &&
           !prev.heading &&
+          !nonLazySetext &&
           !blockSpanLineRe.test(arr[idx - 1]) &&
           getTableRowParts(arr[idx - 1]).rest.trim() !== '' &&
           tk.rest.trim() !== '' &&
@@ -1523,6 +1560,7 @@
         listContentIndent = 0;
         outerListIndent = 0;
         listQuoteDepth = 0;
+        openParaQuoteDepth = -1;
         quoteCanLazyContinue = false;
         listIndents = [];
         listSawBlank = false;
@@ -1628,6 +1666,7 @@
                 listContentIndent = 0;
                 outerListIndent = 0;
                 listQuoteDepth = 0;
+                openParaQuoteDepth = -1;
                 quoteCanLazyContinue = false;
                 listIndents = [];
                 listSawBlank = false;
@@ -1770,6 +1809,7 @@
       listContentIndent = 0;
       outerListIndent = 0;
       listQuoteDepth = 0;
+      openParaQuoteDepth = -1;
       quoteCanLazyContinue = false;
       listIndents = [];
       listSawBlank = false;
