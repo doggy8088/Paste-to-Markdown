@@ -1342,12 +1342,15 @@
         for (let m = cache.length; m < idx; m++) {
           isHeadingLineAt(arr, m);
         }
-        const tk = getTableRowParts(arr[idx]);
-        const qk = getQuotePrefix(arr[idx]);
+        const isBlockSpan = blockSpanLineRe.test(arr[idx]);
+        const rawLine = isBlockSpan ? restoreSpans(arr[idx]) : arr[idx];
+        const tk = getTableRowParts(rawLine);
+        const qk = getQuotePrefix(rawLine);
         const prev = idx > 0 ? cache[idx - 1] : null;
-        const isSetextUnderline = /^[ \t]{0,3}(?:=+|-+)[ \t]*$/.test(tk.rest);
+        const isSetextUnderline = !isBlockSpan && /^[ \t]{0,3}(?:=+|-+)[ \t]*$/.test(tk.rest);
         const nonLazySetext = isSetextUnderline && getOpenSetextParaDepth(arr, idx - 1, tk.depth, false) >= 0;
         const heading = (
+          isBlockSpan ||
           /^[ \t]{0,3}#{1,6}(?:[ \t]|$)/.test(tk.rest) ||
           THEMATIC_BREAK_RE.test(tk.rest) ||
           (/^[ \t]*\uE002/.test(tk.rest) && /^[ \t]*\$\$[\s\S]+\$\$[ \t]*$/.test(restoreSpans(tk.rest))) ||
@@ -1359,7 +1362,6 @@
           prev.depth > tk.depth &&
           !prev.heading &&
           !nonLazySetext &&
-          !blockSpanLineRe.test(arr[idx - 1]) &&
           getTableRowParts(arr[idx - 1]).rest.trim() !== '' &&
           tk.rest.trim() !== '' &&
           !hasBlockInterrupt(qk.rest)
@@ -1380,14 +1382,16 @@
         const visitedKeys = [];
         let res = -1;
         for (let k = endIdx; k >= 0; k--) {
-          if (blockSpanLineRe.test(arr[k])) break;
+          const isBlockSpan = blockSpanLineRe.test(arr[k]);
+          const rawK = isBlockSpan ? restoreSpans(arr[k]) : arr[k];
+          if (isBlockSpan && ((fmEndIdx > 0 && k <= fmEndIdx) || /^(?:[*+-]|\d{1,9}[.)])[ \t]/.test(getQuotePrefix(rawK).rest))) break;
           const key = k + ':' + maxDepth + ':' + (canLazyQuote ? 1 : 0);
           if (pCache.has(key)) {
             res = pCache.get(key);
             break;
           }
           visitedKeys.push(key);
-          const tk = getTableRowParts(arr[k]);
+          const tk = getTableRowParts(rawK);
           const entry = cache[k];
           if (entry.depth > maxDepth) {
             if (canLazyQuote && tk.rest.trim() !== '' && !entry.heading) {

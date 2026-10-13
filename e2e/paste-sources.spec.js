@@ -2941,6 +2941,11 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const quotedLineInsideOuterSetextBeforeTableCandidate = 'plain\n> A | B\n===\nA | B\n> - | -\n\nplain\n> A | B\n---\nA | B\n> - | -\n\n> outer\nplain\n>> A | B\n===\nA | B\n>> - | -\n\nplain\n> note\n===\n[b（x）]: /u\n[use][b（x）]';
     const quotedLineInsideOuterSetextBeforeTableCandidateMarkdown = await convertPaste(page, { text: quotedLineInsideOuterSetextBeforeTableCandidate });
     expect(quotedLineInsideOuterSetextBeforeTableCandidateMarkdown).toBe('plain\n> A | B\n===\nA | B\n> - | -\n\nplain\n> A | B\n---\nA | B\n> - | -\n\n> outer\nplain\n>> A | B\n===\nA | B\n>> - | -\n\nplain\n> note\n===\n[b（x）]: /u\n[use][b（x）]');
+
+    const singleHyphenTableAfterFenceBeforeHr = 'plain\n~~~\nx\n~~~\nA | B\n- | -\n---\n\nplain\n~~~\n- item\n~~~\nA | B\n- | -\n---\n\n~~~\nx\n~~~\nA | B\n- | -\n---';
+    const singleHyphenTableAfterFenceBeforeHrMarkdown = await convertPaste(page, { text: singleHyphenTableAfterFenceBeforeHr });
+    expect(singleHyphenTableAfterFenceBeforeHrMarkdown).toBe('plain\n~~~\nx\n~~~\nA | B\n- | -\n---\n\nplain\n~~~\n- item\n~~~\n| A   | B   |\n| --- | --- |\n---\n\n~~~\nx\n~~~\n| A   | B   |\n| --- | --- |\n---');
   });
 });
+
 
