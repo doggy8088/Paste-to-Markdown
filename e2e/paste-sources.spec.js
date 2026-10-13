@@ -3286,5 +3286,9 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const displayMathAcrossFencedLookingLines = '$$\n~~~\n~~~\nA | B\n--- | ---\n$$\n\n$$\n~~~\nunclosed（x）';
     const displayMathAcrossFencedLookingLinesMarkdown = await convertPaste(page, { text: displayMathAcrossFencedLookingLines });
     expect(displayMathAcrossFencedLookingLinesMarkdown).toBe('$$\n~~~\n~~~\nA | B\n--- | ---\n$$\n\n$$\n~~~\nunclosed(x)');
+
+    const lazyListTableBeforeQuoteAndNextBullet = '- item\nA | B | > q\n--- | --- | ---\n | # h | z | extra\n> quote\n- next';
+    const lazyListTableBeforeQuoteAndNextBulletMarkdown = await convertPaste(page, { text: lazyListTableBeforeQuoteAndNextBullet });
+    expect(lazyListTableBeforeQuoteAndNextBulletMarkdown).toBe('- item\nA | B | > q\n--- | --- | ---\n | # h | z | extra\n> quote\n- next');
   });
 });
