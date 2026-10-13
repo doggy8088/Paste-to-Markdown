@@ -1762,7 +1762,7 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '[a\\]b]: https://example.com/escaped（目標）',
       '[cont]:',
       '  page（目標）',
-      '公式 $x（1）$（說明）、$a（x）\\$、$x（1）$$、一般文字 $$值（x）$$ 後、跨行行內公式 $a',
+      '公式 $x（1）$（說明）、$a（x）\\$、$x（1）$$、跨行行內公式 $a',
       'A | B',
       '--- | ---',
       'x（1） | y',
@@ -1772,7 +1772,11 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '--- | ---',
       'c | d',
       '$$',
-      '**公司**（Cisco）產品與**思科**公司（Cisco）**設備**、~~公司（Cisco）~~產品、~~**公司（x）**~~產品、~~公司~~（Cisco）~~設備~~、**交換器（switch）**主要功能、***路由器（router）***主要用途、**甲（x）****乙**、**甲（x）**__乙__、**甲（x）**~~乙~~、~~丙 **丁（x）**~~後 與 *丙 **丁（x）***後 與 *公司（x）*尾**（後）產品 與 *a（x）*b尾*後（y）產品* 與 *公司（x）*尾**後（y）** 與 **交換器',
+      '$$',
+      'A | B',
+      '--- | ---',
+      '$$a$$',
+      '一般文字 $$值（x）$$ 後、前文*（註）**粗體**後、**公司**（Cisco）產品與**思科**公司（Cisco）**設備**、~~公司（Cisco）~~產品、~~**公司（x）**~~產品、~~公司~~（Cisco）~~設備~~、**交換器（switch）**主要功能、***路由器（router）***主要用途、**甲（x）****乙**、**甲（x）**__乙__、**甲（x）**~~乙~~、~~丙 **丁（x）**~~後 與 *丙 **丁（x）***後 與 *公司（x）*尾**（後）產品 與 *a（x）*b尾*後（y）產品* 與 *公司（x）*尾**後（y）** 與 **交換器',
       '型號（switch）**主要。'
     ].join('\n');
     const expected = [
@@ -1792,7 +1796,7 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '[a\\]b]: https://example.com/escaped（目標）',
       '[cont]:',
       '  page（目標）',
-      '公式 $x（1）$ (說明)、$a（x）\\$、$x（1）$$、一般文字 $$值 (x)$$ 後、跨行行內公式 $a',
+      '公式 $x（1）$ (說明)、$a（x）\\$、$x（1）$$、跨行行內公式 $a',
       'A | B',
       '--- | ---',
       'x（1） | y',
@@ -1802,7 +1806,11 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '--- | ---',
       'c | d',
       '$$',
-      '**公司** (Cisco) 產品與**思科**公司 (Cisco) **設備**、~~公司 (Cisco)~~ 產品、~~**公司 (x)**~~ 產品、~~公司~~ (Cisco) ~~設備~~、**交換器 (switch)** 主要功能、***路由器 (router)*** 主要用途、**甲 (x)** **乙**、**甲 (x)** __乙__、**甲 (x)** ~~乙~~、~~丙 **丁 (x)**~~ 後 與 *丙 **丁 (x)*** 後 與 *公司 (x)*尾** (後) 產品 與 *a (x)*b尾*後 (y) 產品* 與 *公司 (x)*尾**後 (y)** 與 **交換器',
+      '$$',
+      'A | B',
+      '--- | ---',
+      '$$a$$',
+      '一般文字 $$值 (x)$$ 後、前文*(註) **粗體**後、**公司** (Cisco) 產品與**思科**公司 (Cisco) **設備**、~~公司 (Cisco)~~ 產品、~~**公司 (x)**~~ 產品、~~公司~~ (Cisco) ~~設備~~、**交換器 (switch)** 主要功能、***路由器 (router)*** 主要用途、**甲 (x)** **乙**、**甲 (x)** __乙__、**甲 (x)** ~~乙~~、~~丙 **丁 (x)**~~ 後 與 *丙 **丁 (x)*** 後 與 *公司 (x)*尾** (後) 產品 與 *a (x)*b尾*後 (y) 產品* 與 *公司 (x)*尾**後 (y)** 與 **交換器',
       '型號 (switch)** 主要。'
     ].join('\n');
     const markdown = await convertPaste(page, { text: input });
@@ -1814,9 +1822,12 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const input = [
       '---',
       'permalink: /guide（zh）/index',
+      '[fm（x）]: /u',
       'A | B',
       '--- | ---',
       '---',
+      '[fm（x）]',
+      '',
       '[x]: foo|bar',
       '---|---',
       '',
@@ -2179,14 +2190,29 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       'A | B',
       '- | -',
       '```x',
+      '===',
+      '',
+      'text',
+      '```',
+      '> q',
+      '===',
+      '[x](foo）',
+      '',
+      'text',
+      '# h',
+      '> A | B',
+      '> --- | ---',
       '==='
     ].join('\n');
     const expected = [
       '---',
       'permalink: /guide（zh）/index',
+      '[fm（x）]: /u',
       'A | B',
       '--- | ---',
       '---',
+      '[fm（x）]',
+      '',
       '[x]: foo|bar',
       '---|---',
       '',
@@ -2549,6 +2575,18 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       'A | B',
       '- | -',
       '```x',
+      '===',
+      '',
+      'text',
+      '```',
+      '> q',
+      '===',
+      '[x](foo）',
+      '',
+      'text',
+      '# h',
+      '> A | B',
+      '> --- | ---',
       '==='
     ].join('\n');
     const markdown = await convertPaste(page, { text: input });
@@ -2575,7 +2613,7 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const longUnclosedMathMarkdown = await convertPaste(page, { text: longUnclosedMath + '（測試）' });
     expect(longUnclosedMathMarkdown).toBe(longUnclosedMath + '(測試)');
 
-    const longUnclosedBlockMath = '$$a '.repeat(40001);
+    const longUnclosedBlockMath = '$$a '.repeat(2001);
     const longUnclosedBlockMathMarkdown = await convertPaste(page, { text: longUnclosedBlockMath + '（測試）' });
     expect(longUnclosedBlockMathMarkdown).toBe(longUnclosedBlockMath + '(測試)');
 

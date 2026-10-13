@@ -1237,6 +1237,12 @@
       const fmEndIdx = fmCloseRe ? lines.slice(1).findIndex(function (l) {
         return fmCloseRe.test(l);
       }) + 1 : 0;
+      if (fmEndIdx > 0) {
+        lines.slice(1, fmEndIdx).join('\n').replace(/^[ \t]{0,3}\[((?:\\.|[^\\\n\]])+)\]:[ \t]*(?:\n[ \t]*)?(?:<[^>\r\n]+>|\S+)/gm, function (_m, lbl) {
+          definedRefLabels.add(normalizeRefLabel(lbl));
+          return '';
+        });
+      }
 
       const segments = [];
       let currentProseLines = [];
@@ -1254,11 +1260,23 @@
         tableHasOpenPara = false;
         tableStartIdx = -1;
       };
+      const hasOpenSetextPara = function (arr, endIdx, maxDepth) {
+        for (let k = endIdx; k >= 0; k--) {
+          if (blockSpanLineRe.test(arr[k])) break;
+          const tk = getTableRowParts(arr[k]);
+          if (tk.depth > maxDepth || tk.rest.trim() === '') break;
+          maxDepth = tk.depth;
+          if (!isHeadingOrHrLine(tk.rest, k > 0 ? getTableRowParts(arr[k - 1]).rest : '')) {
+            return true;
+          }
+        }
+        return false;
+      };
       const hasFollowingSetextUnderline = function (startIdx, quoteDepth, indentCols) {
         const stopLine = lines.slice(startIdx + 1).find(function (l) {
           const mq = getQuotePrefix(l);
           const mRest = mq.rest.slice(Math.min(mq.rest.match(/^ */)[0].length, indentCols));
-          return mq.depth !== quoteDepth || mRest.trim() === '' || /^(?:[*+-]|\d{1,9}[.)])[ \t]/.test(mRest) || /^ {0,3}(?:=+|-+)[ \t]*$/.test(mRest);
+          return mq.depth < quoteDepth || (mq.depth === quoteDepth && (mRest.trim() === '' || /^(?:[*+-]|\d{1,9}[.)])[ \t]/.test(mRest) || /^ {0,3}(?:=+|-+)[ \t]*$/.test(mRest)));
         });
         const stopQ = stopLine ? getQuotePrefix(stopLine) : null;
         return Boolean(stopQ && stopQ.depth === quoteDepth && /^ {0,3}(?:=+|-+)[ \t]*$/.test(stopQ.rest.slice(Math.min(stopQ.rest.match(/^ */)[0].length, indentCols))));
@@ -1349,7 +1367,7 @@
         if (isTableStartDelim) {
           inProseTable = true;
           tableStartIdx = currentProseLines.length - 1;
-          tableHasOpenPara = Boolean(beforePrevProse.trim() !== '' && getQuotePrefix(currentProseLines[currentProseLines.length - 2]).depth <= prevT.depth && !isHeadingOrHrLine(beforePrevProse, currentProseLines.length > 2 ? getTableRowParts(currentProseLines[currentProseLines.length - 3]).rest : ''));
+          tableHasOpenPara = hasOpenSetextPara(currentProseLines, tableStartIdx - 1, prevT.depth);
           currentProseLines[tableStartIdx] = currentProseLines[tableStartIdx].replace(UNESCAPED_PIPE_RE, '\uE004');
           currentProseLines.push(line);
         } else if (!isBlockBoundary && inProseTable && !t.hasList && countIndentCols(t.prefix + t.rest.match(/^[ \t]*/)[0]) >= (countIndentCols(getTableRowParts(currentProseLines[tableStartIdx]).prefix + getTableRowParts(currentProseLines[tableStartIdx]).rest.match(/^[ \t]*/)[0]) >= listContentIndent ? listContentIndent : 0) && isTableRowCandidate(line, false)) {
@@ -1371,11 +1389,11 @@
 
       const maskMath = function (str) {
         const openRe = /\$\$|(?<=(?:^|[^\\$])(?:\\\\)*)\$(?!\$)[^\s$\uE004]/g;
-        const blockCloseRe = /\$\$/g;
-        const closeEndRe = /[ \t]*(?:\n|$)/y;
+        const blockCloseRe = /\$\$(?=[ \t]*(?:\n|$))/g;
         const closeRe = /(?<=[^\s$])\$(?!\d)/g;
         const paraBreakRe = /(?<=^[ \t]*(?:>[ \t]*)*#{1,6}[ \t][^\n]*)\n|(?<!^[ \t]*>[^\n]*)\n(?=[ \t]*>)|\n(?=[ \t]*(?:>[ \t]*)*(?:\n|$|#{1,6}(?:[ \t]|$)|(?:[-*+]|\d{1,9}[.)])[ \t]|(?:=+|-+)[ \t]*(?:\n|$)|(?:\*[ \t]*){3,}(?:\n|$)|(?:_[ \t]*){3,}(?:\n|$)))/gm;
         const rowBreakRe = /[\n\uE004]/g;
+        let blockCloseIdx = -2;
         let inlineCloseIdx = -2;
         let paraBreakIdx = -2;
         let rowBreakIdx = -2;
@@ -1410,13 +1428,15 @@
           }
           if (m[0] === '$$') {
             if (!curHasHeading && m.index < curFirstPipeIdx && (!inListPara || m.index <= curContentStart)) {
-              blockCloseRe.lastIndex = m.index + 3;
-              const bm = blockCloseRe.exec(str);
-              if (bm) {
-                openRe.lastIndex = bm.index + 2;
-                closeEndRe.lastIndex = openRe.lastIndex;
+              if (blockCloseIdx !== -1 && blockCloseIdx < m.index + 3) {
+                blockCloseRe.lastIndex = m.index + 3;
+                const bm = blockCloseRe.exec(str);
+                blockCloseIdx = bm ? bm.index : -1;
+              }
+              if (blockCloseIdx !== -1) {
+                openRe.lastIndex = blockCloseIdx + 2;
                 const rawMath = str.slice(m.index, openRe.lastIndex);
-                if ((!rawMath.includes('\uE004') || rawMath.includes('\n')) && closeEndRe.test(str)) {
+                if (!rawMath.includes('\uE004') || rawMath.includes('\n')) {
                   out += str.slice(lastIdx, m.index) + maskSpan(rawMath.replace(/\uE004/g, '|'), false);
                   lastIdx = openRe.lastIndex;
                 }
@@ -1562,8 +1582,8 @@
         const normalizedBlock = maskedBlock
           .replace(/(?<=(?:^|[^\\])(?:\\\\)*\\)(?=[（）])/g, '\\')
           .replace(
-            /(?<=(?:^|[^\\])(?:\\\\)*)(\*{1,3}(?!\*)|_{1,3}(?!_)|(?<!~)~~(?!~))(?=\S)((?:(?!\1)(?:[^\n]|\n(?![ \t]*(?:\n|$|[-*+>|#]|\d{1,9}[.)]))))+?)(?<=\S)\1((?<=）\1)(?:\*|_)?[^\s*_~（(、；，。！？：]+?(?<![\s*_~（(、；，。！？：])(?:\*+|_+)(?:[^\n*_~]+?(?<![\s*_~（(、；，。！？：])(?:\*+|_+))?(?=(?![*_])[\s~（）()、；，。！？：]|$)|(?!(?:(\*{1,3}(?!\*)|_{1,3}(?!_)|(?<!~)~~(?!~))(?=\S)(?:(?!\4).)+?(?<=\S)\4))(?:\*{1,3}(?!\*)|_{1,3}(?!_)))?/g,
-            function (match, delim, inner, extraClose, _nextDelim, offset, fullStr) {
+            /(?<=(?:^|[^\\])(?:\\\\)*)(\*{1,3}(?!\*)|_{1,3}(?!_)|(?<!~)~~(?!~))(?=\S)((?:(?!\1)(?:[^\n]|\n(?![ \t]*(?:\n|$|[-*+>|#]|\d{1,9}[.)]))))+?)(?<=\S)(?!(?=\1(?:\*(?<=\*\*)|_(?<=__)))(?:(\*{2,3}(?!\*)|_{2,3}(?!_))(?=\S)(?:(?!\3).)+?(?<=\S)\3))\1((?<=）\1)(?:\*|_)?[^\s*_~（(、；，。！？：]+?(?<![\s*_~（(、；，。！？：])(?:\*+|_+)(?:[^\n*_~]+?(?<![\s*_~（(、；，。！？：])(?:\*+|_+))?(?=(?![*_])[\s~（）()、；，。！？：]|$)|(?!(?:(\*{1,3}(?!\*)|_{1,3}(?!_)|(?<!~)~~(?!~))(?=\S)(?:(?!\5).)+?(?<=\S)\5))(?:\*{1,3}(?!\*)|_{1,3}(?!_)))?/g,
+            function (match, delim, inner, _longerDelim, extraClose, _nextDelim, offset, fullStr) {
               const prevChar = offset > 0 ? fullStr[offset - 1] : '';
               const closeDelim = delim + (extraClose || '');
               const rest = fullStr.slice(offset + match.length);
@@ -1617,13 +1637,7 @@
           splitTableCells(currentLine).length === splitTableCells(normalizedLines[lineIndex + 1], true).length &&
           splitTableCells(restoreSpans(currentLine)).length === splitTableCells(normalizedLines[lineIndex + 1], true).length
         ) {
-          const prevTableLine = normalizedLines[lineIndex - 1] || '';
-          const prevTableT = getTableRowParts(prevTableLine);
-          const hasOpenParaBefore =
-            !blockSpanLineRe.test(prevTableLine) &&
-            prevTableT.depth <= tableQuoteDepth &&
-            prevTableT.rest.trim() !== '' &&
-            !isHeadingOrHrLine(prevTableT.rest, getTableRowParts(normalizedLines[lineIndex - 2] || '').rest);
+          const hasOpenParaBefore = hasOpenSetextPara(normalizedLines, lineIndex - 1, tableQuoteDepth);
           const headerT = getTableRowParts(currentLine);
           const minTableRowIndent = countIndentCols(headerT.prefix + headerT.rest.match(/^[ \t]*/)[0]) >= listContentIndent ? listContentIndent : 0;
           const tableLines = [currentLine, normalizedLines[lineIndex + 1]];
