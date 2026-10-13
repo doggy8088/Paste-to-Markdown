@@ -2981,6 +2981,22 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const yamlFrontMatterWithLeadingComments = '---\n# generated metadata\n\ntitle: foo（bar）\n---\n段落（散文）';
     const yamlFrontMatterWithLeadingCommentsMarkdown = await convertPaste(page, { text: yamlFrontMatterWithLeadingComments });
     expect(yamlFrontMatterWithLeadingCommentsMarkdown).toBe('---\n# generated metadata\n\ntitle: foo（bar）\n---\n段落 (散文)');
+
+    const fenceAfterSetextAndTable = 'plain\n```\n===\nA | B\n--- | ---\n```\ncode（x）\n```\n\nplain\n```\n===\npara\n```\ncode（y）';
+    const fenceAfterSetextAndTableMarkdown = await convertPaste(page, { text: fenceAfterSetextAndTable });
+    expect(fenceAfterSetextAndTableMarkdown).toBe('plain\n```\n===\n| A   | B   |\n| --- | --- |\n```\ncode(x)\n```\n\nplain\n```\n===\npara\n```\ncode(y)');
+
+    const longDollarRun = '$'.repeat(80000) + '（測試）';
+    const longDollarRunMarkdown = await convertPaste(page, { text: longDollarRun });
+    expect(longDollarRunMarkdown).toBe('$'.repeat(80000) + '(測試)');
+
+    const multiCellInlineMathFromDoubleDollar = 'A | B | C\n--- | --- | ---\nx | $$y（1）$ | $$z（2）$';
+    const multiCellInlineMathFromDoubleDollarMarkdown = await convertPaste(page, { text: multiCellInlineMathFromDoubleDollar });
+    expect(multiCellInlineMathFromDoubleDollarMarkdown).toBe('| A   | B       | C       |\n| --- | ------- | ------- |\n| x   | $$y（1）$ | $$z（2）$ |');
+
+    const greedySingleCharInlineMath = 'a$x$y（x）$z 與 a$x$（y）';
+    const greedySingleCharInlineMathMarkdown = await convertPaste(page, { text: greedySingleCharInlineMath });
+    expect(greedySingleCharInlineMathMarkdown).toBe('a$x$y（x）$z 與 a$x$ (y)');
   });
 });
 
