@@ -844,7 +844,7 @@
       const HTML_SPECIAL_OPEN_RE = /^ {0,3}(<!--|<\?|<![A-Za-z]|<!\[CDATA\[)/;
       const THEMATIC_BREAK_RE = /^[ \t]{0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$/;
       const TABLE_DELIMITER_REST_RE = /^[ \t]*\|?(?:[ \t]*:?-+:?[ \t]*\|)+[ \t]*:?-+:?[ \t]*\|?[ \t]*$/;
-      const LINK_TAIL_RE = /^(?:[ \t]|\n(?![ \t]*\n))*(?:(?:"(?:\\.|[^"\n\uE004]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n\uE004]|\n(?![ \t]*\n))*'|[（(](?:\\.|[^()（）\n\uE004]|\n(?![ \t]*\n))*[)）])(?:[ \t]|\n(?![ \t]*\n))*)?(?:(?<=(?:^|[^\\])(?:\\\\)*)\)|\\*）+)/;
+      const LINK_TAIL_RE = /^(?:[ \t]|\n(?![ \t]*\n))*(?:(?:"(?:\\.|[^"\n\uE004]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n\uE004]|\n(?![ \t]*\n))*'|(?:\((?:\\.|[^()\n\uE004]|\n(?![ \t]*\n))*\)|[（(](?:\\.|[^()（）\n\uE004]|\n(?![ \t]*\n))*[)）]))(?:[ \t]|\n(?![ \t]*\n))*)?(?:(?<=(?:^|[^\\])(?:\\\\)*)\)|\\*）+)/;
       const URL_BACKPEDAL_RE = /(?:[^?!.,:;*_'"~()&]+|\([^)]*\)|&(?![a-zA-Z0-9]+;$)|[?!.,:;*_'"~)]+(?!$))+/;
       const HTML_SPECIAL_CLOSE_MAP = {
         '<!--': /-->/,
@@ -906,10 +906,10 @@
           closesOuterSetext ||
           targetQuoteDepth > listQuoteDepth ||
           (targetQuoteDepth > 0 && rawLeadCols < outerMinLazy) ||
-          (targetQuoteDepth < listQuoteDepth && (!quoteCanLazyContinue || q.rest.trim() === '' || hasBlockInterrupt(q.rest) || rawLeadCols < Math.max(outerMinLazy, minLazyIndent)))
+          (targetQuoteDepth < listQuoteDepth && (!quoteCanLazyContinue || q.rest.trim() === '' || hasBlockInterrupt(q.rest, targetQuoteDepth === 0 ? outerListIndent : 0) || rawLeadCols < Math.max(outerMinLazy, minLazyIndent)))
         ) {
           if (
-            (targetQuoteDepth < listQuoteDepth && !closesOuterSetext && (q.rest.trim() === '' || hasBlockInterrupt(q.rest))) ||
+            (targetQuoteDepth < listQuoteDepth && !closesOuterSetext && (q.rest.trim() === '' || hasBlockInterrupt(q.rest, targetQuoteDepth === 0 ? outerListIndent : 0))) ||
             rawLeadCols < outerMinLazy
           ) {
             outerListIndent = 0;
@@ -995,9 +995,10 @@
         quoteCanLazyContinue = listQuoteDepth > 0 && q.rest !== '';
       };
 
-      const hasBlockInterrupt = function (rest) {
+      const hasBlockInterrupt = function (rest, activeOuterListIndent = 0) {
         return (
           /^ {0,3}(?:#{1,6}(?:[ \t]|$)|>|(?:[-*+]|1[.)])[ \t]|(?:\*[ \t]*){3,}$|(?:-[ \t]*){3,}$|(?:_[ \t]*){3,}$|`{3,}(?=[^`]*$)|~{3,}|<!--|<(?:script|pre|style|textarea)(?=[\s/>]|$))/i.test(rest) ||
+          (activeOuterListIndent > 0 && countIndentCols(rest.match(/^[ \t]*/)[0]) < activeOuterListIndent && /^[ \t]{0,3}\d{1,9}[.)][ \t]/.test(rest)) ||
           HTML_TYPE6_TAG_RE.test(rest)
         );
       };
@@ -1302,7 +1303,7 @@
       };
 
       const fmOpen = lines[0].match(/^\uFEFF?(---|\+\+\+)[ \t]*$/);
-      const fmCloseRe = fmOpen ? (fmOpen[1] === '---' ? /^(?:---|\.\.\.)[ \t]*$/ : /^\+\+\+[ \t]*$/) : null;
+      const fmCloseRe = fmOpen && (fmOpen[1] === '+++' || /^[A-Za-z0-9_-]+:/.test(lines[1] || '')) ? (fmOpen[1] === '---' ? /^(?:---|\.\.\.)[ \t]*$/ : /^\+\+\+[ \t]*$/) : null;
       const fmEndIdx = fmCloseRe ? lines.slice(1).findIndex(function (l) {
         return fmCloseRe.test(l);
       }) + 1 : 0;
@@ -1380,12 +1381,13 @@
           paraDepthCache.set(arr, pCache);
         }
         const visitedKeys = [];
+        let crossedHeading = false;
         let res = -1;
         for (let k = endIdx; k >= 0; k--) {
           const isBlockSpan = blockSpanLineRe.test(arr[k]);
           const rawK = isBlockSpan ? restoreSpans(arr[k]) : arr[k];
-          if (isBlockSpan && ((fmEndIdx > 0 && k <= fmEndIdx) || /^(?:[*+-]|\d{1,9}[.)])[ \t]/.test(getQuotePrefix(rawK).rest))) break;
-          const key = k + ':' + maxDepth + ':' + (canLazyQuote ? 1 : 0);
+          if ((isBlockSpan && fmEndIdx > 0 && k <= fmEndIdx) || ((isBlockSpan || crossedHeading) && /^[ \t]{0,3}(?:[*+-]|\d{1,9}[.)])[ \t]/.test(getQuotePrefix(rawK).rest))) break;
+          const key = k + ':' + maxDepth + ':' + (canLazyQuote ? 1 : 0) + ':' + (crossedHeading ? 1 : 0);
           if (pCache.has(key)) {
             res = pCache.get(key);
             break;
@@ -1412,6 +1414,7 @@
             res = maxDepth;
             break;
           }
+          crossedHeading = true;
         }
         for (let i = 0; i < visitedKeys.length; i++) {
           pCache.set(visitedKeys[i], res);

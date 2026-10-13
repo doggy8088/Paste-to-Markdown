@@ -2945,6 +2945,22 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const singleHyphenTableAfterFenceBeforeHr = 'plain\n~~~\nx\n~~~\nA | B\n- | -\n---\n\nplain\n~~~\n- item\n~~~\nA | B\n- | -\n---\n\n~~~\nx\n~~~\nA | B\n- | -\n---';
     const singleHyphenTableAfterFenceBeforeHrMarkdown = await convertPaste(page, { text: singleHyphenTableAfterFenceBeforeHr });
     expect(singleHyphenTableAfterFenceBeforeHrMarkdown).toBe('plain\n~~~\nx\n~~~\nA | B\n- | -\n---\n\nplain\n~~~\n- item\n~~~\n| A   | B   |\n| --- | --- |\n---\n\n~~~\nx\n~~~\n| A   | B   |\n| --- | --- |\n---');
+
+    const fenceAfterCompletedListAndCode = '---\n    indented\n- sibling\n```\n---\nx | y\n--- | ---\n```\n\nplain\n- item\n* * *\n```\n===\nx | y\n--- | ---';
+    const fenceAfterCompletedListAndCodeMarkdown = await convertPaste(page, { text: fenceAfterCompletedListAndCode });
+    expect(fenceAfterCompletedListAndCodeMarkdown).toBe('---\n    indented\n- sibling\n```\n---\nx | y\n--- | ---\n```\n\nplain\n- item\n* * *\n```\n===\nx | y\n--- | ---');
+
+    const topLevelTableAfterCompletedListFence = '- item\n```\n```\n===\n10. item\nA | B\n--- | ---';
+    const topLevelTableAfterCompletedListFenceMarkdown = await convertPaste(page, { text: topLevelTableAfterCompletedListFence });
+    expect(topLevelTableAfterCompletedListFenceMarkdown).toBe('- item\n```\n```\n===\n10. item\n| A   | B   |\n| --- | --- |');
+
+    const tableBeforeSiblingItemBlockquote = '10. first\n> note\n10. second\nx | y\n--- | ---\n> quote';
+    const tableBeforeSiblingItemBlockquoteMarkdown = await convertPaste(page, { text: tableBeforeSiblingItemBlockquote });
+    expect(tableBeforeSiblingItemBlockquoteMarkdown).toBe('10. first\n> note\n10. second\n    | x   | y   |\n    | --- | --- |\n> quote');
+
+    const parenthesizedLinkTitleWithFullWidthParens = '[x](url (title（x）)) 與 [x（y）](url (title（x）))';
+    const parenthesizedLinkTitleWithFullWidthParensMarkdown = await convertPaste(page, { text: parenthesizedLinkTitleWithFullWidthParens });
+    expect(parenthesizedLinkTitleWithFullWidthParensMarkdown).toBe('[x](url (title（x）)) 與 [x (y)](url (title（x）))');
   });
 });
 
