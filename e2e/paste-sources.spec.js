@@ -2732,9 +2732,9 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const markdown = await convertPaste(page, { text: input });
     expect(markdown).toBe(expected);
 
-    const repeatedSetextInput = Array(30).fill('===').join('\n') + '\n文字（一）';
+    const repeatedSetextInput = Array(10000).fill('===').join('\n') + '\n文字（一）';
     const repeatedSetextMarkdown = await convertPaste(page, { text: repeatedSetextInput });
-    expect(repeatedSetextMarkdown).toBe(Array(30).fill('===').join('\n') + '\n文字 (一)');
+    expect(repeatedSetextMarkdown).toBe(Array(10000).fill('===').join('\n') + '\n文字 (一)');
 
     const repeatedTablesInput = Array(200).fill('A | B\n- | -\n# h').join('\n');
     const repeatedTablesMarkdown = await convertPaste(page, { text: repeatedTablesInput });
@@ -2897,5 +2897,13 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const bareUrlWithEmbeddedLinkLike = 'https://e.com/[x]()（bar） 說明（測試）';
     const bareUrlWithEmbeddedLinkLikeMarkdown = await convertPaste(page, { text: bareUrlWithEmbeddedLinkLike });
     expect(bareUrlWithEmbeddedLinkLikeMarkdown).toBe('https://e.com/[x]()（bar） 說明 (測試)');
+
+    const laterTableInsideLookaheadList = 'text\n2. sibling\n--- | ---\nplain\nx | y\n:-- | --:\ncode';
+    const laterTableInsideLookaheadListMarkdown = await convertPaste(page, { text: laterTableInsideLookaheadList });
+    expect(laterTableInsideLookaheadListMarkdown).toBe('text\n2. sibling\n--- | ---\nplain\n   | x    | y   |\n   | :--- | --: |\n   | code |     |');
+
+    const emptyHrefFwTitleOpener = '[x]( （ x)) 與 [x](（ x)) 說明（測試）';
+    const emptyHrefFwTitleOpenerMarkdown = await convertPaste(page, { text: emptyHrefFwTitleOpener });
+    expect(emptyHrefFwTitleOpenerMarkdown).toBe('[x]( （ x)) 與 [x](（ x)) 說明 (測試)');
   });
 });

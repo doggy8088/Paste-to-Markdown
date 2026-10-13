@@ -1236,7 +1236,7 @@
               tailStart = runEndBeforeTitle.get(lookupKey);
             }
             if (tailStart !== -1) {
-              const tailMatch = str.slice(tailStart).match(LINK_TAIL_RE);
+              const tailMatch = str.slice(tailStart).match(LINK_TAIL_RE) || (str[cursor] === '（' && str.slice(tailStart = cursor).match(LINK_TAIL_RE));
               if (tailMatch) {
                 endIdx = tailStart + tailMatch[0].length - 1;
               } else if (fallbackClose.has(lookupKey)) {
@@ -1297,6 +1297,7 @@
         tableStartIdx = -1;
       };
       const headingCache = new WeakMap();
+      const paraDepthCache = new WeakMap();
       const isHeadingLineAt = function (arr, idx) {
         let cache = headingCache.get(arr);
         if (!cache) {
@@ -1304,6 +1305,9 @@
           headingCache.set(arr, cache);
         } else if (idx in cache) {
           return cache[idx];
+        }
+        for (let m = cache.length; m < idx; m++) {
+          isHeadingLineAt(arr, m);
         }
         const tk = getTableRowParts(arr[idx]);
         const res = (
@@ -1315,13 +1319,27 @@
         return res;
       };
       const getOpenSetextParaDepth = function (arr, endIdx, maxDepth) {
+        let pCache = paraDepthCache.get(arr);
+        if (!pCache) {
+          pCache = new Map();
+          paraDepthCache.set(arr, pCache);
+        }
         let canLazyQuote = true;
+        const visitedKeys = [];
+        let res = -1;
         for (let k = endIdx; k >= 0; k--) {
           if (blockSpanLineRe.test(arr[k])) break;
+          const key = k + ':' + maxDepth + ':' + (canLazyQuote ? 1 : 0);
+          if (pCache.has(key)) {
+            res = pCache.get(key);
+            break;
+          }
+          visitedKeys.push(key);
           const tk = getTableRowParts(arr[k]);
           if (tk.depth > maxDepth) {
             if (canLazyQuote && tk.rest.trim() !== '' && !isHeadingLineAt(arr, k)) {
-              return maxDepth;
+              res = maxDepth;
+              break;
             }
             canLazyQuote = false;
             continue;
@@ -1334,10 +1352,14 @@
           }
           maxDepth = tk.depth;
           if (!isHeadingLineAt(arr, k)) {
-            return maxDepth;
+            res = maxDepth;
+            break;
           }
         }
-        return -1;
+        for (let i = 0; i < visitedKeys.length; i++) {
+          pCache.set(visitedKeys[i], res);
+        }
+        return res;
       };
       let setextLookaheadIdx = -1;
       let setextLookaheadKey = '';
@@ -1790,6 +1812,9 @@
         const headerT = getTableRowParts(currentLine);
         const headerListIndent = listContentIndent || (headerT.hasList ? countIndentCols(headerT.prefix) : 0);
         const tableListIndent = listOpenedViaTableLookahead ? 0 : ((tableQuoteDepth ? 0 : headerListIndent) || outerListIndent);
+        if (!headerT.hasList) {
+          listOpenedViaTableLookahead = false;
+        }
         if (
           lineIndex + 1 < normalizedLines.length &&
           isTableRowCandidate(currentLine) &&
