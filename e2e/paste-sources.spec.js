@@ -3182,5 +3182,25 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     }).join('\n');
     const deepBlockquoteMarkdown = await convertPaste(page, { text: deepBlockquoteLines });
     expect(deepBlockquoteMarkdown).toBe(deepBlockquoteExpected);
+
+    const quotedTableBeforeOrderedSibling = '> - item\n>> q\nA | B\n> --- | ---\n2. item';
+    const quotedTableBeforeOrderedSiblingMarkdown = await convertPaste(page, { text: quotedTableBeforeOrderedSibling });
+    expect(quotedTableBeforeOrderedSiblingMarkdown).toBe('> - item\n>> q\n| A   | B   |\n> | --- | --- |\n2. item');
+
+    const orderedListTableAfterHeading = '2. item\n    # h\n    code\nA | B\n--- | ---\ntext';
+    const orderedListTableAfterHeadingMarkdown = await convertPaste(page, { text: orderedListTableAfterHeading });
+    expect(orderedListTableAfterHeadingMarkdown).toBe('2. item\n    # h\n    code\n   | A    | B   |\n   | ---- | --- |\n   | text |     |');
+
+    const manyLinesInput = Array(130000).fill('a').join('\n') + '\n尾（完）';
+    const manyLinesMarkdown = await convertPaste(page, { text: manyLinesInput });
+    expect(manyLinesMarkdown).toBe(Array(130000).fill('a').join('\n') + '\n尾 (完)');
+
+    const displayMathAfterQuotedInlineMath = '> $a$\n$$b\n\\$c（d）$\n$$\n\n> $a$\n$$b\n\\$c（d）$\n---';
+    const displayMathAfterQuotedInlineMathMarkdown = await convertPaste(page, { text: displayMathAfterQuotedInlineMath });
+    expect(displayMathAfterQuotedInlineMathMarkdown).toBe('> $a$\n$$b\n\\$c（d）$\n$$\n\n> $a$\n$$b\n\\$c (d)$\n---');
+
+    const deeplyNestedBrackets = '['.repeat(128000) + ']'.repeat(128000) + '（x）';
+    const deeplyNestedBracketsMarkdown = await convertPaste(page, { text: deeplyNestedBrackets });
+    expect(deeplyNestedBracketsMarkdown).toBe('['.repeat(128000) + ']'.repeat(128000) + ' (x)');
   });
 });
