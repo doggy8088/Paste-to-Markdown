@@ -3065,5 +3065,18 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const nestedListLazyTableFollowedByQuote = '- outer\n    - inner\nA | B\n--- | ---\n> q';
     const nestedListLazyTableFollowedByQuoteMarkdown = await convertPaste(page, { text: nestedListLazyTableFollowedByQuote });
     expect(nestedListLazyTableFollowedByQuoteMarkdown).toBe('- outer\n    - inner\n     | A   | B   |\n     | --- | --- |\n> q');
+
+    const attachedFullwidthLinkTitleOpener = '[x](url（ title）) 與 [x](url（a b）)';
+    const attachedFullwidthLinkTitleOpenerMarkdown = await convertPaste(page, { text: attachedFullwidthLinkTitleOpener });
+    expect(attachedFullwidthLinkTitleOpenerMarkdown).toBe('[x](url（ title）) 與 [x](url（a b）)');
+
+    const manyReferenceDefsInput = Array.from({ length: 4000 }, function (_, idx) {
+      return '[r' + idx + ']: /u' + idx;
+    }).concat(['段落（測試）']).join('\n');
+    const manyReferenceDefsExpected = Array.from({ length: 4000 }, function (_, idx) {
+      return '[r' + idx + ']: /u' + idx;
+    }).concat(['段落 (測試)']).join('\n');
+    const manyReferenceDefsMarkdown = await convertPaste(page, { text: manyReferenceDefsInput });
+    expect(manyReferenceDefsMarkdown).toBe(manyReferenceDefsExpected);
   });
 });

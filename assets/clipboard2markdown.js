@@ -1269,7 +1269,8 @@
               tailStart = runEndBeforeTitle.get(lookupKey);
             }
             if (tailStart !== -1) {
-              const tailMatch = str.slice(tailStart).match(LINK_TAIL_RE) || (str[cursor] === '（' && str.slice(tailStart = cursor).match(LINK_TAIL_RE));
+              const attachedOpen = str.slice(cursor, tailStart).search(/^（|(?<=[\]\p{L}\p{N}\uE001])（/u);
+              const tailMatch = str.slice(tailStart).match(LINK_TAIL_RE) || (attachedOpen !== -1 && str.slice(tailStart = cursor + attachedOpen).match(LINK_TAIL_RE));
               if (tailMatch) {
                 endIdx = tailStart + tailMatch[0].length - 1;
               } else if (fallbackClose.has(lookupKey)) {
@@ -1376,10 +1377,6 @@
             ) {
               isDef = true;
               defCont = defStart < idx;
-              for (let m = defStart; m < idx; m++) {
-                cache[m].heading = true;
-              }
-              paraDepthCache.delete(arr);
               break;
             }
           }
@@ -1398,7 +1395,7 @@
           (!listContentIndent && !outerListIndent && /^(?:[*+-]|\d{1,9}[.)])[ \t]/.test(qk.rest)) ||
           Boolean(prev && prev.noSetext && tk.depth <= prev.depth)
         );
-        cache[idx] = { heading: heading, depth: depth, noSetext: noSetext, defCont: defCont };
+        cache[idx] = { heading: heading, isDef: isDef, depth: depth, noSetext: noSetext, defCont: defCont };
         return heading;
       };
       const getOpenSetextParaDepth = function (arr, endIdx, maxDepth, canLazyQuote = true) {
@@ -1445,7 +1442,7 @@
             res = entry.noSetext ? -1 : maxDepth;
             break;
           }
-          if (/^[ \t]{0,3}(?:=+|-+)[ \t]*$/.test(tk.rest)) {
+          if (entry.isDef || /^[ \t]{0,3}(?:=+|-+)[ \t]*$/.test(tk.rest)) {
             break;
           }
           if (!/^[ \t]*\$\$[\s\S]+\$\$[ \t]*$/.test(restoreSpans(tk.rest))) {
