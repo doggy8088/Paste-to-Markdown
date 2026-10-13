@@ -1378,6 +1378,7 @@
           (isSetextUnderline && getOpenSetextParaDepth(arr, idx - 1, tk.depth) >= 0)
         );
         let isDef = false;
+        let standaloneDef = false;
         let defCont = false;
         if (!baseHeading && tk.rest.trim() !== '') {
           for (let defStart = Math.max(0, idx - 2); defStart <= idx; defStart++) {
@@ -1392,6 +1393,7 @@
               }).join('\n'))
             ) {
               isDef = true;
+              standaloneDef = getOpenSetextParaDepth(arr, defStart - 1, tk.depth) < 0;
               defCont = defStart < idx;
               break;
             }
@@ -1411,7 +1413,7 @@
           (idx > 0 && !prev.heading && getTableRowParts(arr[idx - 1]).rest.trim() !== '' && !/^[ \t]{0,3}(?:[*+-]|\d{1,9}[.)])[ \t]/.test(getQuotePrefix(arr[idx - 1]).rest) && /^(?!1[.)])\d{1,9}[.)][ \t]/.test(qk.rest)) ||
           Boolean(prev && prev.noSetext && tk.depth <= prev.depth)
         );
-        cache[idx] = { heading: heading, isDef: isDef, depth: depth, noSetext: noSetext, defCont: defCont };
+        cache[idx] = { heading: heading, isDef: standaloneDef, depth: depth, noSetext: noSetext, defCont: defCont };
         return heading;
       };
       const getOpenSetextParaDepth = function (arr, endIdx, maxDepth, canLazyQuote = true) {
@@ -1808,7 +1810,7 @@
               return '[' + maskSpan(lbl, false) + ']';
             }) + maskSpan(destAndTitle, false);
           })
-          .replace(/^([ \t]*(?:>[ \t]*|(?:[-*+]|\d{1,9}[.)])[ \t]+)*(?:\d{1,9}|\[(?:\\.|[^\\\n\]])+\]:[ \t]*(?:\n[ \t]*(?:>[ \t]*)*)?(?:<[^>\r\n]+>|\S+)(?:[ \t]+|[ \t]*\n[ \t]*(?:>[ \t]*)*)))((?<=\d)）|(?<!\d)（(?:\\.|[^()（）\n]|\n(?![ \t]*\n))*）(?=[ \t]*(?:\n|$)))(?=[ \t]|$)/gm, function (_match, prefix, token) {
+          .replace(/^([ \t]*(?:>[ \t]*|(?:[-*+]|\d{1,9}[.)])[ \t]+)*(?:\d{1,9}|\[(?:\\.|[^\\\n\]])+\]:[ \t]*(?:\n[ \t]*(?:>[ \t]*)*)?(?:<[^>\r\n]+>|\S+?)(?:[ \t]+|[ \t]*\n[ \t]*(?:>[ \t]*)*|(?<=[\]\p{L}\p{N}\uE001]|\uE003\))(?=（(?:\\.|[^()（）\n]|\n(?![ \t]*\n))*?\s))))((?<=\d)）|(?<!\d)[（(](?:\\.|[^()（）\n]|\n(?![ \t]*\n))*[)）](?=[ \t]*(?:\n|$)))(?=[ \t]|$)/gmu, function (_match, prefix, token) {
             return prefix + maskSpan(token, false);
           });
       });
@@ -1898,7 +1900,7 @@
         // left-flanking only, so converting `）` to `)` and inserting a space after the closing
         // delimiter is required for the emphasis to render as intended by the golden fixtures.
         const normalizedBlock = maskedBlock
-          .replace(/(?<=(?:^|[^\\])(?:\\\\)*\\)(?=[（）])/g, '\\')
+          .replace(/(?<!\\)(?:\\\\)*\\(?=[（）])/g, '$&\\')
           .replace(
             /(?<=(?:^|[^\\])(?:\\\\)*)(\*{1,3}(?!\*)|_{1,3}(?!_)|(?<!~)~~(?!~))(?=\S)((?:(?!\1)(?:[^\n]|\n(?![ \t]*(?:\n|$|[-*+>|#]|\d{1,9}[.)]))))+?)(?<=\S)(?!(?=\1(?:\*(?<=\*\*)|_(?<=__)))(?:(\*{2,3}(?!\*)|_{2,3}(?!_))(?=\S)(?:(?!\3).)+?(?<=\S)\3))\1((?<=）\1)(?:\*|_)?[^\s*_~（(、；，。！？：]+?(?<![\s*_~（(、；，。！？：])(?:\*+|_+)(?:[^\n*_~]+?(?<![\s*_~（(、；，。！？：])(?:\*+|_+))?(?=(?![*_])[\s~（）()、；，。！？：]|$)|(?!(?:(\*{1,3}(?!\*)|_{1,3}(?!_)|(?<!~)~~(?!~))(?=\S)(?:(?!\5).)+?(?<=\S)\5))(?:\*{1,3}(?!\*)|_{1,3}(?!_)))?/g,
             function (match, delim, inner, _longerDelim, extraClose, _nextDelim, offset, fullStr) {
@@ -2053,7 +2055,7 @@
           rows.forEach(function (row, rIdx) {
             const t = getTableRowParts(tableLines[rIdx], rIdx === 1, rIdx < 2);
             const rawPrefix = t.prefix + t.rest.match(/^[ \t]*/)[0];
-            const tableListIndent = (keepLookaheadUnindented && (rIdx === 0 || lineIndex >= normalizedLines.length || normalizedLines[lineIndex].trim() === '')) ? 0 : baseTableListIndent;
+            const tableListIndent = (keepLookaheadUnindented && (rIdx === 0 || (rows.length === 2 && (lineIndex >= normalizedLines.length || normalizedLines[lineIndex].trim() === '')))) ? 0 : baseTableListIndent;
             const rowPrefix = t.depth > 0 && outerListIndent >= 3 && !t.hasList
               ? ' '.repeat(Math.max(0, outerListIndent - countIndentCols(rawPrefix.match(/^[ \t]*/)[0]))) + rawPrefix
               : rawPrefix + ' '.repeat(Math.max(0, tableListIndent - countIndentCols(rawPrefix)));

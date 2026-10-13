@@ -2841,7 +2841,10 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const lazyTableEnablingNonOneOrderedList = 'text\n10. item\n--- | ---\n:-- | --:';
     const lazyTableEnablingNonOneOrderedListMarkdown = await convertPaste(page, { text: lazyTableEnablingNonOneOrderedList });
     expect(lazyTableEnablingNonOneOrderedListMarkdown).toBe('text\n10. item\n| --- | --- |\n| :-- | --: |');
+  });
 
+  test('handles container boundary, Setext heading, reference definition, and performance edge cases', async function ({ page }) {
+    await gotoApp(page);
     const nonOneOrderedRowInActiveTable = 'H | J\n- | -\n2. item\nA | B\n- | -';
     const nonOneOrderedRowInActiveTableMarkdown = await convertPaste(page, { text: nonOneOrderedRowInActiveTable });
     expect(nonOneOrderedRowInActiveTableMarkdown).toBe('| H       | J   |\n| ------- | --- |\n| 2. item |     |\n| A       | B   |\n- | -');
@@ -3142,6 +3145,22 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const refDefAfterExitedQuotedInvalidFenceInList = '- item\n> ```a`\n[a（y）]: /u\n[a（y）]\n中（文）';
     const refDefAfterExitedQuotedInvalidFenceInListMarkdown = await convertPaste(page, { text: refDefAfterExitedQuotedInvalidFenceInList });
     expect(refDefAfterExitedQuotedInvalidFenceInListMarkdown).toBe('- item\n> ```a`\n[a（y）]: /u\n[a（y）]\n中 (文)');
+
+    const lazyTableRowsInOrderedListAtEof = 'text\n2. item\n--- | ---\n--- | ---\nA | B\n[a]: /u';
+    const lazyTableRowsInOrderedListAtEofMarkdown = await convertPaste(page, { text: lazyTableRowsInOrderedListAtEof });
+    expect(lazyTableRowsInOrderedListAtEofMarkdown).toBe('text\n2. item\n| ---     | --- |\n   | ------- | --- |\n   | A       | B   |\n   | [a]: /u |     |');
+
+    const contextualDefInsidePendingSetextHeading = 'plain\n# h\n[a]: /u\n> A | B\n> --- | ---\n===\n中（文）';
+    const contextualDefInsidePendingSetextHeadingMarkdown = await convertPaste(page, { text: contextualDefInsidePendingSetextHeading });
+    expect(contextualDefInsidePendingSetextHeadingMarkdown).toBe('plain\n# h\n[a]: /u\n> A | B\n> --- | ---\n===\n中 (文)');
+
+    const attachedTitleInInvalidRefDef = '[a]: foo（ title）\n[a]\n中（文）';
+    const attachedTitleInInvalidRefDefMarkdown = await convertPaste(page, { text: attachedTitleInInvalidRefDef });
+    expect(attachedTitleInInvalidRefDefMarkdown).toBe('[a]: foo（ title）\n[a]\n中 (文)');
+
+    const longBackslashRunBeforeFullWidthParen = '\\'.repeat(64001) + '（測試）';
+    const longBackslashRunBeforeFullWidthParenMarkdown = await convertPaste(page, { text: longBackslashRunBeforeFullWidthParen });
+    expect(longBackslashRunBeforeFullWidthParenMarkdown).toBe('\\'.repeat(64002) + '(測試)');
 
     const deepBlockquoteLines = Array.from({ length: 400 }, function (_, i) {
       return '> '.repeat(i + 1) + '段落（測試）';
