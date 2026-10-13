@@ -2997,6 +2997,18 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const greedySingleCharInlineMath = 'a$x$y（x）$z 與 a$x$（y）';
     const greedySingleCharInlineMathMarkdown = await convertPaste(page, { text: greedySingleCharInlineMath });
     expect(greedySingleCharInlineMathMarkdown).toBe('a$x$y（x）$z 與 a$x$ (y)');
+
+    const escapedDollarPairInlineMath = '\\$$）$ 與 a \\$$）$ 與 \\\\$$）$\n\n$$$x（1）$';
+    const escapedDollarPairInlineMathMarkdown = await convertPaste(page, { text: escapedDollarPairInlineMath });
+    expect(escapedDollarPairInlineMathMarkdown).toBe('\\$$）$ 與 a \\$$）$ 與 \\\\$$）$\n\n$$$x (1)$');
+
+    const fenceAfterNonOneOrderedContinuation = 'a\n10. item\n```\nx\n---\nA | B\n:-- | --:\n```\n\na\n10. item\nx\n```\n---\nA | B\n:-- | --:';
+    const fenceAfterNonOneOrderedContinuationMarkdown = await convertPaste(page, { text: fenceAfterNonOneOrderedContinuation });
+    expect(fenceAfterNonOneOrderedContinuationMarkdown).toBe('a\n10. item\n```\nx\n---\nA | B\n:-- | --:\n```\n\na\n10. item\nx\n```\n---\nA | B\n:-- | --:');
+
+    const rawHtmlAfterQuotedList = '> - item\n<div>\n> x\n- | -\nA | B\n--- | ---';
+    const rawHtmlAfterQuotedListMarkdown = await convertPaste(page, { text: rawHtmlAfterQuotedList });
+    expect(rawHtmlAfterQuotedListMarkdown).toBe('> - item\n<div>\n> x\n- | -\nA | B\n--- | ---');
   });
 });
 

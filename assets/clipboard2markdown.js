@@ -1370,7 +1370,11 @@
           tk.rest.trim() !== '' &&
           !hasBlockInterrupt(qk.rest)
         ) ? prev.depth : tk.depth;
-        cache[idx] = { heading: heading, depth: depth };
+        const noSetext = !heading && tk.rest.trim() !== '' && (
+          (!listContentIndent && !outerListIndent && /^(?:[*+-]|\d{1,9}[.)])[ \t]/.test(qk.rest)) ||
+          Boolean(prev && prev.noSetext && tk.depth <= prev.depth)
+        );
+        cache[idx] = { heading: heading, depth: depth, noSetext: noSetext };
         return heading;
       };
       const getOpenSetextParaDepth = function (arr, endIdx, maxDepth, canLazyQuote = true) {
@@ -1414,7 +1418,7 @@
           }
           maxDepth = entry.depth;
           if (!entry.heading) {
-            res = maxDepth;
+            res = entry.noSetext ? -1 : maxDepth;
             break;
           }
           if (!/^[ \t]*\$\$[\s\S]+\$\$[ \t]*$/.test(restoreSpans(tk.rest))) {
@@ -1527,7 +1531,7 @@
           segments.push({ fenced: true, line: line.replace(/（/g, '(').replace(/）/g, ')') });
           return;
         }
-        const htmlCloseRe = !inSetextHeading && getHtmlBlockCloseRe(t.rest.slice(Math.min(t.rest.match(/^ */)[0].length, listContentIndent)), atBlockStart || prevListIndent > 0);
+        const htmlCloseRe = !inSetextHeading && getHtmlBlockCloseRe(t.rest.slice(Math.min(t.rest.match(/^ */)[0].length, listContentIndent)), atBlockStart || listContentIndent > 0);
         if (htmlCloseRe) {
           flushProse();
           segments.push({ fenced: true, line: line });
@@ -1535,7 +1539,7 @@
             activeHtml = {
               htmlRe: htmlCloseRe,
               quoteDepth: t.depth,
-              containerIndent: t.depth > 0 ? 0 : (listContentIndent || prevListIndent)
+              containerIndent: t.depth > 0 ? 0 : listContentIndent
             };
           }
           return;
@@ -1564,7 +1568,7 @@
       flushProse();
 
       const maskMath = function (str) {
-        const openRe = /\$\$|(?<=(?:^|[^\\$])(?:\\\\)*)\$(?!\$)[^\s$\uE004]/g;
+        const openRe = /\$\$|(?<=(?:^|[^\\])(?:\\\\)*)\$(?!\$)[^\s$\uE004]/g;
         const blockCloseRe = /\$\$(?=[ \t]*(?:\n|$))/g;
         const closeRe = /(?<=[^\s$])\$(?!\d)/g;
         const paraBreakRe = /(?<=^[ \t]*(?:>[ \t]*)*#{1,6}[ \t][^\n]*)\n|(?<!^[ \t]*>[^\n]*)\n(?=[ \t]*>)|\n(?=[ \t]*(?:>[ \t]*)*(?:\n|$|#{1,6}(?:[ \t]|$)|(?:[-*+]|\d{1,9}[.)])[ \t]|(?:=+|-+)[ \t]*(?:\n|$)|(?:\*[ \t]*){3,}(?:\n|$)|(?:_[ \t]*){3,}(?:\n|$)))/gm;
@@ -1633,11 +1637,13 @@
               const nextPipe = curLine.indexOf('\uE004', curPipeScanIdx - curLineStart + 1);
               curPipeScanIdx = nextPipe === -1 ? Infinity : curLineStart + nextPipe;
             }
-            if (m.index !== curInlineStart || !/[^\s$\uE004]/.test(str[m.index + 2] || '')) {
+            if ((m.index !== curInlineStart && str[m.index - 1] !== '\\') || !/[^\s$\uE004]/.test(str[m.index + 2] || '')) {
               continue;
             }
             m.index++;
             openRe.lastIndex = m.index + 2;
+          } else if (m.index > lastIdx && str[m.index - 1] === '$') {
+            continue;
           }
           {
             let limitIdx;
