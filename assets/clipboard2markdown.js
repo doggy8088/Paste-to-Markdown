@@ -915,10 +915,11 @@
         }
         const listMatch = !isProtectedBlock && !THEMATIC_BREAK_RE.test(q.rest) && (allowAnyOrdered || !/^[ \t]*(?!1[.)])\d{1,9}[.)]/.test(q.rest)) && q.rest.match(/^([ \t]*)(?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )| (?= {4})|\t))+/);
         if (listMatch && countIndentCols(listMatch[1]) <= listContentIndent + 3) {
+          const markerIndent = countIndentCols(listMatch[1]);
           const nextIndent = countIndentCols(listMatch[0]);
           listOpenedInPara = (listOpenedInPara || !allowAnyOrdered) && listMatch[1] !== '';
           listIndents = listIndents.filter(function (n) {
-            return n < nextIndent;
+            return n <= markerIndent;
           });
           minLazyIndent = listIndents.filter(function (n) {
             return n <= minLazyIndent;
@@ -1304,27 +1305,40 @@
           cache = [];
           headingCache.set(arr, cache);
         } else if (idx in cache) {
-          return cache[idx];
+          return cache[idx].heading;
         }
         for (let m = cache.length; m < idx; m++) {
           isHeadingLineAt(arr, m);
         }
         const tk = getTableRowParts(arr[idx]);
-        const res = (
+        const prev = idx > 0 ? cache[idx - 1] : null;
+        const heading = (
           /^[ \t]{0,3}#{1,6}(?:[ \t]|$)/.test(tk.rest) ||
           THEMATIC_BREAK_RE.test(tk.rest) ||
           (/^[ \t]{0,3}(?:=+|-+)[ \t]*$/.test(tk.rest) && getOpenSetextParaDepth(arr, idx - 1, tk.depth) >= 0)
         );
-        cache[idx] = res;
-        return res;
+        const depth = (
+          prev &&
+          prev.depth > tk.depth &&
+          !prev.heading &&
+          !blockSpanLineRe.test(arr[idx - 1]) &&
+          getTableRowParts(arr[idx - 1]).rest.trim() !== '' &&
+          tk.rest.trim() !== '' &&
+          !hasBlockInterrupt(tk.rest)
+        ) ? prev.depth : tk.depth;
+        cache[idx] = { heading: heading, depth: depth };
+        return heading;
       };
-      const getOpenSetextParaDepth = function (arr, endIdx, maxDepth) {
+      const getOpenSetextParaDepth = function (arr, endIdx, maxDepth, canLazyQuote = true) {
+        if (endIdx >= 0) {
+          isHeadingLineAt(arr, endIdx);
+        }
+        const cache = headingCache.get(arr);
         let pCache = paraDepthCache.get(arr);
         if (!pCache) {
           pCache = new Map();
           paraDepthCache.set(arr, pCache);
         }
-        let canLazyQuote = true;
         const visitedKeys = [];
         let res = -1;
         for (let k = endIdx; k >= 0; k--) {
@@ -1336,8 +1350,9 @@
           }
           visitedKeys.push(key);
           const tk = getTableRowParts(arr[k]);
-          if (tk.depth > maxDepth) {
-            if (canLazyQuote && tk.rest.trim() !== '' && !isHeadingLineAt(arr, k)) {
+          const entry = cache[k];
+          if (entry.depth > maxDepth) {
+            if (canLazyQuote && tk.rest.trim() !== '' && !entry.heading) {
               res = maxDepth;
               break;
             }
@@ -1350,8 +1365,8 @@
             canLazyQuote = false;
             continue;
           }
-          maxDepth = tk.depth;
-          if (!isHeadingLineAt(arr, k)) {
+          maxDepth = entry.depth;
+          if (!entry.heading) {
             res = maxDepth;
             break;
           }
@@ -1429,13 +1444,13 @@
           updateListIndent(line, false, allowRowList);
         }
         const t = getTableRowParts(line, isTableStartDelim, allowRowList);
-        const inSetextHeading = !isBlockBoundary && listContentIndent === prevListIndent && !inProseTable && !t.hasList && hasFollowingSetextUnderline(lineIdx, qBefore.depth, listContentIndent);
+        const inSetextHeading = !isBlockBoundary && listContentIndent === prevListIndent && !inProseTable && !t.hasList && getOpenSetextParaDepth(currentProseLines, currentProseLines.length - 1, qBefore.depth, false) >= 0 && hasFollowingSetextUnderline(lineIdx, qBefore.depth, listContentIndent);
         const nextFence = updateFenceState(line, activeFence, allowAnyOrdered);
         if (
           nextFence !== activeFence &&
           !(nextFence && inSetextHeading) &&
-          !(nextFence && !isBlockBoundary && nextFence.char === '`' && new RegExp('(?<=(?:^|[^\\\\`])(?:\\\\\\\\)*)' + '`'.repeat(nextFence.length) + '(?!`)').test(
-            currentProseLines.join('\n').split(/\n[ \t]*\n/).pop().replace(/(?<=(?:^|[^\\`])(?:\\\\)*(?:\\`)?)(`+)(?!`)(?:(?:[^\n]|\n(?![ \t]*\n))*?[^`])?\1(?!`)/g, '')
+          !(nextFence && !isBlockBoundary && nextFence.char === '`' && new RegExp('(?<=(?:^|[^\\\\`])(?:\\\\\\\\|\\\\`)*)' + '`'.repeat(nextFence.length) + '(?!`)').test(
+            currentProseLines.join('\n').split(/\n[ \t]*\n/).pop().replace(/(?<=(?:^|[^\\`])(?:\\\\|\\`)*)(`+)(?!`)(?:(?:[^\n]|\n(?![ \t]*\n))*?[^`])?\1(?!`)/g, '')
           ))
         ) {
           flushProse();
@@ -1592,7 +1607,7 @@
         // lines or block-interrupting lines, because blocks are split before inline lexing.
         seg.preMasked = maskMath(
           seg.text
-            .replace(/(?<=(?:^|[^\\`])(?:\\\\)*(?:\\`)?)(`+)(?!`)(?:(?:[^\uE004\n]|(?<!^[ \t]*(?:>[ \t]*)*#{1,6}[ \t][^\n]*)(?:(?<=^[ \t]*>[^\n]*)|(?=[^\n]*\n(?![ \t]*>)))\n(?![ \t]*(?:>[ \t]*)*(?:\n|$|#{1,6}(?:[ \t]|$)|(?:[-*+]|\d{1,9}[.)])[ \t]|(?:=+|-+)[ \t]*(?:\n|$)|(?:\*[ \t]*){3,}(?:\n|$)|(?:_[ \t]*){3,}(?:\n|$))))*?[^\uE004`])?\1(?!`)/gm, function (match) {
+            .replace(/(?<=(?:^|[^\\`])(?:\\\\|\\`)*)(`+)(?!`)(?:(?:[^\uE004\n]|(?<!^[ \t]*(?:>[ \t]*)*#{1,6}[ \t][^\n]*)(?:(?<=^[ \t]*>[^\n]*)|(?=[^\n]*\n(?![ \t]*>)))\n(?![ \t]*(?:>[ \t]*)*(?:\n|$|#{1,6}(?:[ \t]|$)|(?:[-*+]|\d{1,9}[.)])[ \t]|(?:=+|-+)[ \t]*(?:\n|$)|(?:\*[ \t]*){3,}(?:\n|$)|(?:_[ \t]*){3,}(?:\n|$))))*?[^\uE004`])?\1(?!`)/gm, function (match) {
               return maskSpan(match, true);
             })
             .replace(/(?<=(?:^|[^\\])(?:\\\\)*)(?:<(script|style|pre|textarea|xmp|noscript|noembed|noframes|plaintext|iframe|code|kbd|samp|tt)\b(?:[^>"'\uE004]|"(?:\\.|[^"\uE004\\\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\uE004\\\n]|\n(?![ \t]*\n))*')*>(?:\\.|[^\uE004\\\n]|\n(?![ \t]*\n))*?(?:<\/\1>|(?=\n[ \t]*\n)|$)|<!--(?:\\.|[^\uE004\\\n]|\n(?![ \t]*\n))*?(?:-->|(?=\n[ \t]*\n)|$)|<\?(?:\\.|[^\uE004\\\n]|\n(?![ \t]*\n))*?(?:\?>|(?=\n[ \t]*\n)|$)|<![A-Za-z](?:\\.|[^\uE004\\\n]|\n(?![ \t]*\n))*?(?:>|(?=\n[ \t]*\n)|$)|<!\[CDATA\[(?:\\.|[^\uE004\\\n]|\n(?![ \t]*\n))*?(?:\]\]>|(?=\n[ \t]*\n)|$))/gi, function (match) {

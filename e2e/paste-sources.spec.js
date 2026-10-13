@@ -2905,5 +2905,17 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const emptyHrefFwTitleOpener = '[x]( （ x)) 與 [x](（ x)) 說明（測試）';
     const emptyHrefFwTitleOpenerMarkdown = await convertPaste(page, { text: emptyHrefFwTitleOpener });
     expect(emptyHrefFwTitleOpenerMarkdown).toBe('[x]( （ x)) 與 [x](（ x)) 說明 (測試)');
+
+    const siblingMarkerWidthGrowth = '9. first\n\n10. item\nA | B\n- | -';
+    const siblingMarkerWidthGrowthMarkdown = await convertPaste(page, { text: siblingMarkerWidthGrowth });
+    expect(siblingMarkerWidthGrowthMarkdown).toBe('9. first\n\n10. item\nA | B\n- | -');
+
+    const fenceAfterBlockquoteExit = '> note\n~~~\n---\nA | B\n- | -\n~~~\n\n> note\nplain\n~~~\n===\nA | B\n- | -\n~~~\n\nlead\n> note\nplain\n~~~\n---\nA | B\n- | -';
+    const fenceAfterBlockquoteExitMarkdown = await convertPaste(page, { text: fenceAfterBlockquoteExit });
+    expect(fenceAfterBlockquoteExitMarkdown).toBe('> note\n~~~\n---\nA | B\n- | -\n~~~\n\n> note\nplain\n~~~\n===\nA | B\n- | -\n~~~\n\nlead\n> note\nplain\n~~~\n---\n| A   | B   |\n| --- | --- |');
+
+    const codeSpanAfterMultipleEscapedBackticks = '\\`\\``）`中（說明） 與 \\`\\`\\``（`中（說明）';
+    const codeSpanAfterMultipleEscapedBackticksMarkdown = await convertPaste(page, { text: codeSpanAfterMultipleEscapedBackticks });
+    expect(codeSpanAfterMultipleEscapedBackticksMarkdown).toBe('\\`\\``）`中 (說明) 與 \\`\\`\\``（`中 (說明)');
   });
 });
