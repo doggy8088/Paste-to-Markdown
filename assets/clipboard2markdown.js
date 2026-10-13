@@ -844,7 +844,7 @@
       const HTML_SPECIAL_OPEN_RE = /^ {0,3}(<!--|<\?|<![A-Za-z]|<!\[CDATA\[)/;
       const THEMATIC_BREAK_RE = /^[ \t]{0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$/;
       const TABLE_DELIMITER_REST_RE = /^[ \t]*\|?(?:[ \t]*:?-+:?[ \t]*\|)+[ \t]*:?-+:?[ \t]*\|?[ \t]*$/;
-      const LINK_TAIL_RE = /^(?:[ \t]|\n(?![ \t]*\n))*(?:(?:"(?:\\.|[^"\n\uE004]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n\uE004]|\n(?![ \t]*\n))*'|(?:\((?:\\.|[^()\n\uE004]|\n(?![ \t]*\n))*\)|[（(](?:\\.|[^()（）\n\uE004]|\n(?![ \t]*\n))*[)）]))(?:[ \t]|\n(?![ \t]*\n))*)?(?:(?<=(?:^|[^\\])(?:\\\\)*)\)|\\*）+)/;
+      const LINK_TAIL_RE = /^(?:[ \t]|\n(?![ \t]*\n))*(?:(?:"(?:\\.|[^"\n\uE004]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n\uE004]|\n(?![ \t]*\n))*'|(?:\((?:\\.|[^)\n\uE004]|\n(?![ \t]*\n))*\)|[（(](?:\\.|[^()（）\n\uE004]|\n(?![ \t]*\n))*[)）]))(?:[ \t]|\n(?![ \t]*\n))*)?(?:(?<=(?:^|[^\\])(?:\\\\)*)\)|\\*）+)/;
       const URL_BACKPEDAL_RE = /(?:[^?!.,:;*_'"~()&]+|\([^)]*\)|&(?![a-zA-Z0-9]+;$)|[?!.,:;*_'"~)]+(?!$))+/;
       const HTML_SPECIAL_CLOSE_MAP = {
         '<!--': /-->/,
@@ -1303,10 +1303,13 @@
       };
 
       const fmOpen = lines[0].match(/^\uFEFF?(---|\+\+\+)[ \t]*$/);
-      const fmCloseRe = fmOpen && (fmOpen[1] === '+++' || /^[A-Za-z0-9_-]+:/.test(lines[1] || '')) ? (fmOpen[1] === '---' ? /^(?:---|\.\.\.)[ \t]*$/ : /^\+\+\+[ \t]*$/) : null;
-      const fmEndIdx = fmCloseRe ? lines.slice(1).findIndex(function (l) {
+      const fmCloseRe = fmOpen ? (fmOpen[1] === '---' ? /^(?:---|\.\.\.)[ \t]*$/ : /^\+\+\+[ \t]*$/) : null;
+      const fmCloseIdx = fmCloseRe ? lines.slice(1).findIndex(function (l) {
         return fmCloseRe.test(l);
       }) + 1 : 0;
+      const fmEndIdx = fmCloseIdx > 0 && (fmOpen[1] === '+++' || /^[A-Za-z0-9_-]+:/.test(lines.slice(1, fmCloseIdx).find(function (l) {
+        return !/^[ \t]*(?:#|$)/.test(l);
+      }) || '')) ? fmCloseIdx : 0;
       if (fmEndIdx > 0) {
         lines.slice(1, fmEndIdx).join('\n').replace(/^[ \t]{0,3}\[((?:\\.|[^\\\n\]])+)\]:[ \t]*(?:\n[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*)(?:"(?:\\.|[^"\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n]|\n(?![ \t]*\n))*'|\((?:\\.|[^()\n]|\n(?![ \t]*\n))*\)))?[ \t]*(?=\n|$)/gm, function (_m, lbl) {
           definedRefLabels.add(normalizeRefLabel(lbl));
@@ -1354,7 +1357,7 @@
           isBlockSpan ||
           /^[ \t]{0,3}#{1,6}(?:[ \t]|$)/.test(tk.rest) ||
           THEMATIC_BREAK_RE.test(tk.rest) ||
-          (/^[ \t]*\uE002/.test(tk.rest) && /^[ \t]*\$\$[\s\S]+\$\$[ \t]*$/.test(restoreSpans(tk.rest))) ||
+          (/^(?:\$\$|[ \t]*\uE002)/.test(tk.rest) && /^[ \t]*\$\$[\s\S]+\$\$[ \t]*$/.test(restoreSpans(tk.rest))) ||
           nonLazySetext ||
           (isSetextUnderline && getOpenSetextParaDepth(arr, idx - 1, tk.depth) >= 0)
         );
@@ -1414,7 +1417,9 @@
             res = maxDepth;
             break;
           }
-          crossedHeading = true;
+          if (!/^[ \t]*\$\$[\s\S]+\$\$[ \t]*$/.test(restoreSpans(tk.rest))) {
+            crossedHeading = true;
+          }
         }
         for (let i = 0; i < visitedKeys.length; i++) {
           pCache.set(visitedKeys[i], res);
@@ -1611,9 +1616,16 @@
                   out += str.slice(lastIdx, m.index) + maskSpan(rawMath.replace(/\uE004/g, '|'), false);
                   lastIdx = openRe.lastIndex;
                 }
+                continue;
               }
             }
-          } else {
+            if (!/^(?:|#{1,6}[ \t]+|[\s\S]*\uE004[ \t]*)$/.test(str.slice(curContentStart, m.index)) || !/[^\s$\uE004]/.test(str[m.index + 2] || '')) {
+              continue;
+            }
+            m.index++;
+            openRe.lastIndex = m.index + 2;
+          }
+          {
             let limitIdx;
             if (curFirstPipeIdx !== Infinity) {
               if (rowBreakIdx !== -1 && rowBreakIdx < openRe.lastIndex) {

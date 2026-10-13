@@ -2961,6 +2961,26 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const parenthesizedLinkTitleWithFullWidthParens = '[x](url (title（x）)) 與 [x（y）](url (title（x）))';
     const parenthesizedLinkTitleWithFullWidthParensMarkdown = await convertPaste(page, { text: parenthesizedLinkTitleWithFullWidthParens });
     expect(parenthesizedLinkTitleWithFullWidthParensMarkdown).toBe('[x](url (title（x）)) 與 [x (y)](url (title（x）))');
+
+    const displayMathBeforeIndentedCodeAndDef = '[use][a（x）]\n$$x$$\n    code\n[a（x）]: /u';
+    const displayMathBeforeIndentedCodeAndDefMarkdown = await convertPaste(page, { text: displayMathBeforeIndentedCodeAndDef });
+    expect(displayMathBeforeIndentedCodeAndDefMarkdown).toBe('[use][a（x）]\n$$x$$\n    code\n[a（x）]: /u');
+
+    const listSetextAcrossProtectedMath = '1. item\n$$x$$\nA | B\n--- | ---\n===';
+    const listSetextAcrossProtectedMathMarkdown = await convertPaste(page, { text: listSetextAcrossProtectedMath });
+    expect(listSetextAcrossProtectedMathMarkdown).toBe('1. item\n$$x$$\nA | B\n--- | ---\n===');
+
+    const nestedParenthesizedLinkTitle = '[x](url (a（x）())) 與 [x（y）](url (a（x）()))';
+    const nestedParenthesizedLinkTitleMarkdown = await convertPaste(page, { text: nestedParenthesizedLinkTitle });
+    expect(nestedParenthesizedLinkTitleMarkdown).toBe('[x](url (a（x）())) 與 [x (y)](url (a（x）()))');
+
+    const unmatchedBlockMathRescannedAsInline = '$$x（1）$ 與 # $$y（2）$';
+    const unmatchedBlockMathRescannedAsInlineMarkdown = await convertPaste(page, { text: unmatchedBlockMathRescannedAsInline });
+    expect(unmatchedBlockMathRescannedAsInlineMarkdown).toBe('$$x（1）$ 與 # $$y (2)$');
+
+    const yamlFrontMatterWithLeadingComments = '---\n# generated metadata\n\ntitle: foo（bar）\n---\n段落（散文）';
+    const yamlFrontMatterWithLeadingCommentsMarkdown = await convertPaste(page, { text: yamlFrontMatterWithLeadingComments });
+    expect(yamlFrontMatterWithLeadingCommentsMarkdown).toBe('---\n# generated metadata\n\ntitle: foo（bar）\n---\n段落 (散文)');
   });
 });
 
