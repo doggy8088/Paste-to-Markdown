@@ -3210,5 +3210,41 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const lazyQuotedSetextHeadingAfterOrderedItem = '> --- | ---\n2. item\nx\n> --- | ---\n> --- | ---\n> q\n===';
     const lazyQuotedSetextHeadingAfterOrderedItemMarkdown = await convertPaste(page, { text: lazyQuotedSetextHeadingAfterOrderedItem });
     expect(lazyQuotedSetextHeadingAfterOrderedItemMarkdown).toBe('> --- | ---\n2. item\nx\n> --- | ---\n> --- | ---\n> q\n===');
+
+    const nonInterruptingOrderedLookaheadAndLazyListExit = [
+      'plain',
+      '2. A | B',
+      '    --- | ---',
+      '',
+      '  2. item',
+      'x | y',
+      '--- | ---',
+      'text',
+      '',
+      '   10. > A | B',
+      '> --- | ---',
+      'text',
+      '',
+      '**http://x**[x](',
+      '（）'
+    ].join('\n');
+    const nonInterruptingOrderedLookaheadAndLazyListExitMarkdown = await convertPaste(page, { text: nonInterruptingOrderedLookaheadAndLazyListExit });
+    expect(nonInterruptingOrderedLookaheadAndLazyListExitMarkdown).toBe([
+      'plain',
+      '2. A | B',
+      '    --- | ---',
+      '',
+      '  2. item',
+      'x | y',
+      '--- | ---',
+      'text',
+      '',
+      '   10. > A | B',
+      '> --- | ---',
+      'text',
+      '',
+      '**http://x**[x](',
+      '（）'
+    ].join('\n'));
   });
 });
