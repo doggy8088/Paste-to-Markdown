@@ -3326,5 +3326,47 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const repeatedEmphasizedUrls = '*http://x/a* '.repeat(4000) + '（x）';
     const repeatedEmphasizedUrlsMarkdown = await convertPaste(page, { text: repeatedEmphasizedUrls });
     expect(repeatedEmphasizedUrlsMarkdown).toBe('*http://x/a* '.repeat(4000) + '(x)');
+
+    const compactCheckboxLabels = [
+      '- [x]（note）後文（測試）',
+      '- [ ]（note）'
+    ].join('\n');
+    const compactCheckboxLabelsMarkdown = await convertPaste(page, { text: compactCheckboxLabels });
+    expect(compactCheckboxLabelsMarkdown).toBe([
+      '- [x]（note）後文 (測試)',
+      '- [ ]（note）'
+    ].join('\n'));
+
+    const nestedBlockquotedListTable1 = [
+      '  2. item',
+      '> - A | B',
+      '| --- | --- |',
+      'x | y',
+      'text'
+    ].join('\n');
+    const nestedBlockquotedListTable1Markdown = await convertPaste(page, { text: nestedBlockquotedListTable1 });
+    expect(nestedBlockquotedListTable1Markdown).toBe([
+      '  2. item',
+      '     > - | A    | B   |',
+      '     | ---- | --- |',
+      '     | x    | y   |',
+      '     | text |     |'
+    ].join('\n'));
+
+    const nestedBlockquotedListTable2 = [
+      '1. item',
+      '> 1. A | B',
+      '| --- | --- |',
+      'x | y',
+      'text'
+    ].join('\n');
+    const nestedBlockquotedListTable2Markdown = await convertPaste(page, { text: nestedBlockquotedListTable2 });
+    expect(nestedBlockquotedListTable2Markdown).toBe([
+      '1. item',
+      '   > 1. | A    | B   |',
+      '      | ---- | --- |',
+      '      | x    | y   |',
+      '      | text |     |'
+    ].join('\n'));
   });
 });

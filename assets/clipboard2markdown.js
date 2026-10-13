@@ -2089,6 +2089,11 @@
         let emphPos = 0;
         let emphPrefix = '';
         const normalizedBlock = maskedBlock
+          .replace(/((?:^|\n)[ \t]*(?:>[ \t]*)*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)+\[[ xX]\])（([^\n（）]*）)?/g, function (m, prefix) {
+            return prefix + m.slice(prefix.length).replace(/[（）]/g, function (p) {
+              return maskSpan(p, false, false, p === '）');
+            });
+          })
           .replace(/(?<!\\)(?:\\\\)*\\(?=[（）])/g, '$&\\')
           .replace(
             /(?<=(?:^|[^\\])(?:\\\\)*)(\*{1,3}(?!\*)|_{1,3}(?!_)|(?<!~)~~(?!~))(?=\S)((?:(?!\1)(?:[^\n]|\n(?![ \t]*(?:\n|$|[-*+>|#]|\d{1,9}[.)]))))+?)(?<=\S)(?!(?=\1(?:\*(?<=\*\*)|_(?<=__)))(?:(\*{2,3}(?!\*)|_{2,3}(?!_))(?=\S)(?:(?!\3).)+?(?<=\S)\3))\1((?<=）\1)(?:\*|_)?[^\s*_~（(、；，。！？：]+?(?<![\s*_~（(、；，。！？：])(?:\*+|_+)(?:[^\n*_~]+?(?<![\s*_~（(、；，。！？：])(?:\*+|_+))?(?=(?![*_])[\s~（）()、；，。！？：]|$)|(?!(?:(\*{1,3}(?!\*)|_{1,3}(?!_)|(?<!~)~~(?!~))(?=\S)(?:(?!\5).)+?(?<=\S)\5))(?:\*{1,3}(?!\*)|_{1,3}(?!_)))?/g,
@@ -2196,7 +2201,11 @@
         const tableQuoteDepth = listQuoteDepth;
         const headerT = getTableRowParts(currentLine);
         const headerListIndent = listContentIndent || (headerT.hasList ? countIndentCols(headerT.prefix) : 0);
-        const baseTableListIndent = Math.min((tableQuoteDepth ? (listContentIndent >= 3 ? listContentIndent : 0) : headerListIndent) || (outerListIndent >= 3 ? outerListIndent : 0), (listIndents[0] || Infinity) + 3);
+        const effOuterTableIndent = (outerListIndent >= 3 || (outerListIndent > 0 && listContentIndent >= 3)) ? outerListIndent : 0;
+        const effInnerTableIndent = Math.min(listContentIndent >= 3 ? listContentIndent : 0, (listIndents[0] || Infinity) + 3);
+        const baseTableListIndent = tableQuoteDepth
+          ? effOuterTableIndent + (effOuterTableIndent ? Math.min(effInnerTableIndent, 3) : effInnerTableIndent)
+          : Math.min(headerListIndent, (listIndents[0] || Infinity) + 3);
         const keepLookaheadUnindented = listOpenedViaTableLookahead;
         if (!headerT.hasList) {
           listOpenedViaTableLookahead = false;
@@ -2270,11 +2279,12 @@
           }
           rows.forEach(function (row, rIdx) {
             const t = getTableRowParts(tableLines[rIdx], rIdx === 1, rIdx < 2);
+            const qPrefix = getQuotePrefix(tableLines[rIdx]).prefix;
             const rawPrefix = t.prefix + t.rest.match(/^[ \t]*/)[0];
             const tableListIndent = (keepLookaheadUnindented && (rIdx === 0 || (rows.length === 2 && (lineIndex >= normalizedLines.length || normalizedLines[lineIndex].trim() === '')))) ? 0 : baseTableListIndent;
-            const rowPrefix = t.depth > 0 && outerListIndent >= 3 && !t.hasList
-              ? ' '.repeat(Math.max(0, outerListIndent - countIndentCols(rawPrefix.match(/^[ \t]*/)[0]))) + rawPrefix
-              : rawPrefix + ' '.repeat(Math.max(0, tableListIndent - countIndentCols(t.depth > 0 && listContentIndent >= 3 ? rawPrefix.slice(getQuotePrefix(tableLines[rIdx]).prefix.length) : rawPrefix)));
+            const rowPrefix = t.depth > 0
+              ? (!/^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]/.test(qPrefix) ? ' '.repeat(Math.max(0, effOuterTableIndent - countIndentCols(qPrefix.match(/^[ \t]*/)[0]))) : '') + rawPrefix + ' '.repeat(Math.max(0, effInnerTableIndent - countIndentCols(rawPrefix.slice(qPrefix.length))))
+              : rawPrefix + ' '.repeat(Math.max(0, tableListIndent - countIndentCols(rawPrefix)));
             if (rIdx === 1) {
               formattedLines.push(rowPrefix + '| ' + colWidths.map(function (width, cIdx) {
                 const rawSep = row[cIdx] || '';
