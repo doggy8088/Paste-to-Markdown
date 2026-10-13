@@ -816,7 +816,7 @@
     markdownSyntax: function (text) {
       if (
         !/[（）]/.test(text) &&
-        !/^[ \t>]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)*(?:\[[ xX]\][ \t]+)?\|?(?:[ \t]*:?-+:?[ \t]*\|)+[ \t]*:?-+:?[ \t]*\|?[ \t]*$/m.test(text)
+        !/^[ \t>]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)*(?:\[[ xX]\][ \t]+)?(?:\|[ \t]*)?:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)+(?:\|[ \t]*)?$/m.test(text)
       ) {
         return null;
       }
@@ -833,8 +833,7 @@
       const lines = normalizedInput.replace(/\uE004/g, literalE004).split('\n');
       const UNESCAPED_PIPE_RE = /(?<=(?:^|[^\\])(?:\\\\)*)\|/;
 
-      const countIndentCols = function (ws) {
-        let cols = 0;
+      const countIndentCols = function (ws, cols = 0) {
         for (let i = 0; i < ws.length; i++) {
           cols += ws[i] === '\t' ? 4 - (cols % 4) : 1;
         }
@@ -883,7 +882,7 @@
           return { depth: 0, prefix: '', rest: line };
         }
         const firstQuoteWs = match[2].match(/^[ \t]*/)[0];
-        const maxQuoteIndent = match[1] ? 3 : listContentIndent + 3;
+        const maxQuoteIndent = match[1] ? 3 : (listContentIndent || outerListIndent) + 3;
         if (countIndentCols(firstQuoteWs) > maxQuoteIndent) {
           return { depth: 0, prefix: '', rest: line };
         }
@@ -972,7 +971,6 @@
         const isListLine = Boolean(listMatch && countIndentCols(listMatch[1]) <= listContentIndent + 3);
         if (isListLine) {
           const markerIndent = countIndentCols(listMatch[1]);
-          const nextIndent = countIndentCols(listMatch[0]);
           listOpenedInPara = (listOpenedInPara || !allowAnyOrdered) && listMatch[1] !== '';
           listIndents = listIndents.filter(function (n) {
             return n <= markerIndent;
@@ -980,12 +978,12 @@
           minLazyIndent = listIndents.filter(function (n) {
             return n <= minLazyIndent;
           }).pop() || 0;
-          let markerPrefix = '';
+          let runningCols = 0;
           listMatch[0].match(/[ \t]*(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )| (?= {4})|\t)/g).forEach(function (m) {
-            markerPrefix += m;
-            listIndents.push(countIndentCols(markerPrefix));
+            runningCols = countIndentCols(m, runningCols);
+            listIndents.push(runningCols);
           });
-          listContentIndent = nextIndent;
+          listContentIndent = runningCols;
           listSawBlank = minLazyIndent > 0;
           if (listQuoteDepth === 0) {
             outerListIndent = listContentIndent;
@@ -2089,10 +2087,10 @@
         let emphPos = 0;
         let emphPrefix = '';
         const normalizedBlock = maskedBlock
-          .replace(/((?:^|\n)[ \t]*(?:>[ \t]*)*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)+\[[ xX]\])（([^\n（）]*）)?/g, function (m, prefix) {
-            return prefix + m.slice(prefix.length).replace(/[（）]/g, function (p) {
+          .replace(/((?:^|\n)[ \t]*(?:>[ \t]*)*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)+\[(?:[ xX]|\uE002[^\uE003]+\uE003)\])（([^\n（）]*）)?/g, function (m, prefix) {
+            return /\[[ xX]\]$/.test(restoreSpans(prefix)) ? prefix + m.slice(prefix.length).replace(/[（）]/g, function (p) {
               return maskSpan(p, false, false, p === '）');
-            });
+            }) : m;
           })
           .replace(/(?<!\\)(?:\\\\)*\\(?=[（）])/g, '$&\\')
           .replace(
@@ -2281,7 +2279,7 @@
             const t = getTableRowParts(tableLines[rIdx], rIdx === 1, rIdx < 2);
             const qPrefix = getQuotePrefix(tableLines[rIdx]).prefix;
             const rawPrefix = t.prefix + t.rest.match(/^[ \t]*/)[0];
-            const tableListIndent = (keepLookaheadUnindented && (rIdx === 0 || (rows.length === 2 && (lineIndex >= normalizedLines.length || normalizedLines[lineIndex].trim() === '')))) ? 0 : baseTableListIndent;
+            const tableListIndent = (keepLookaheadUnindented && (rIdx === 0 || (rIdx === 1 && (headerT.hasList || (rows.length === 2 && (lineIndex >= normalizedLines.length || normalizedLines[lineIndex].trim() === '')))))) ? 0 : baseTableListIndent;
             const rowPrefix = t.depth > 0
               ? (!/^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]/.test(qPrefix) ? ' '.repeat(Math.max(0, effOuterTableIndent - countIndentCols(qPrefix.match(/^[ \t]*/)[0]))) : '') + rawPrefix + ' '.repeat(Math.max(0, effInnerTableIndent - countIndentCols(rawPrefix.slice(qPrefix.length))))
               : rawPrefix + ' '.repeat(Math.max(0, tableListIndent - countIndentCols(rawPrefix)));

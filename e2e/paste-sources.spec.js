@@ -3329,12 +3329,20 @@ Port-channel1(設定推測為交換器間中繼鏈路)
 
     const compactCheckboxLabels = [
       '- [x]（note）後文（測試）',
-      '- [ ]（note）'
+      '- [ ]（note）',
+      '- [foo]（note）',
+      '',
+      '[x]: u',
+      '[foo]: v'
     ].join('\n');
     const compactCheckboxLabelsMarkdown = await convertPaste(page, { text: compactCheckboxLabels });
     expect(compactCheckboxLabelsMarkdown).toBe([
       '- [x]（note）後文 (測試)',
-      '- [ ]（note）'
+      '- [ ]（note）',
+      '- [foo] (note)',
+      '',
+      '[x]: u',
+      '[foo]: v'
     ].join('\n'));
 
     const nestedBlockquotedListTable1 = [
@@ -3368,5 +3376,33 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '      | x    | y   |',
       '      | text |     |'
     ].join('\n'));
+
+    const outdentedQuoteInListAndNonOneListTableInterrupt = [
+      '- item',
+      '    > [x](u（v）) 與 x（y）',
+      '',
+      'foo',
+      '  2. --- | ---',
+      ':--- | ---:',
+      '  A | B'
+    ].join('\n');
+    const outdentedQuoteInListAndNonOneListTableInterruptMarkdown = await convertPaste(page, { text: outdentedQuoteInListAndNonOneListTableInterrupt });
+    expect(outdentedQuoteInListAndNonOneListTableInterruptMarkdown).toBe([
+      '- item',
+      '    > [x](u（v）) 與 x (y)',
+      '',
+      'foo',
+      '  2. | --- | --- |',
+      '| :-- | --: |',
+      '     | A   | B   |'
+    ].join('\n'));
+
+    const whitespaceHeavyIneligible = 'x\n' + ' '.repeat(20000) + 'y';
+    const whitespaceHeavyIneligibleMarkdown = await convertPaste(page, { text: whitespaceHeavyIneligible });
+    expect(whitespaceHeavyIneligibleMarkdown).toBe(whitespaceHeavyIneligible);
+
+    const deepInlineListMarkers = '- '.repeat(5000) + 'x（y）';
+    const deepInlineListMarkersMarkdown = await convertPaste(page, { text: deepInlineListMarkers });
+    expect(deepInlineListMarkersMarkdown).toBe('- '.repeat(5000) + 'x (y)');
   });
 });
