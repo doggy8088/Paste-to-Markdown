@@ -3057,5 +3057,13 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const allBmpCodeUnitsExpected = allBmpCodeUnitsInput.replace(/\r\n?/g, '\n').replace(/（/g, '(').replace(/）/g, ')');
     const allBmpCodeUnitsMarkdown = await convertPaste(page, { text: allBmpCodeUnitsInput });
     expect(allBmpCodeUnitsMarkdown).toBe(allBmpCodeUnitsExpected);
+
+    const invalidLinkWithDoubleFullwidthOpenTitle = '[t](u （（x）) 與 [t](u ((x）)';
+    const invalidLinkWithDoubleFullwidthOpenTitleMarkdown = await convertPaste(page, { text: invalidLinkWithDoubleFullwidthOpenTitle });
+    expect(invalidLinkWithDoubleFullwidthOpenTitleMarkdown).toBe('[t](u （（x）) 與 [t](u ((x）)');
+
+    const nestedListLazyTableFollowedByQuote = '- outer\n    - inner\nA | B\n--- | ---\n> q';
+    const nestedListLazyTableFollowedByQuoteMarkdown = await convertPaste(page, { text: nestedListLazyTableFollowedByQuote });
+    expect(nestedListLazyTableFollowedByQuoteMarkdown).toBe('- outer\n    - inner\n     | A   | B   |\n     | --- | --- |\n> q');
   });
 });

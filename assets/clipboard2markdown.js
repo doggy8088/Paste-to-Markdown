@@ -842,7 +842,7 @@
       const THEMATIC_BREAK_RE = /^[ \t]{0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$/;
       const REF_DEF_RE = /^[ \t]{0,3}\[(?:\\.|[^\\\n\]])+\]:[ \t]*(?:\n[ \t]*(?:>[ \t]*)*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*(?:>[ \t]*)*)(?:"(?:\\.|[^"\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n]|\n(?![ \t]*\n))*'|\((?:\\.|[^()\n]|\n(?![ \t]*\n))*\)))?[ \t]*$/;
       const TABLE_DELIMITER_REST_RE = /^[ \t]*\|?(?:[ \t]*:?-+:?[ \t]*\|)+[ \t]*:?-+:?[ \t]*\|?[ \t]*$/;
-      const LINK_TAIL_RE = /^(?:[ \t]|\n(?![ \t]*\n))*(?:(?:"(?:\\.|[^"\n\uE004]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n\uE004]|\n(?![ \t]*\n))*'|(?:\((?:\\.|[^)\n\uE004]|\n(?![ \t]*\n))*\)|[（(](?:\\.|[^()（）\n\uE004]|\n(?![ \t]*\n))*[)）]))(?:[ \t]|\n(?![ \t]*\n))*)?(?:(?<=(?:^|[^\\])(?:\\\\)*)\)|\\*）+)/;
+      const LINK_TAIL_RE = /^(?:[ \t]|\n(?![ \t]*\n))*(?:(?:"(?:\\.|[^"\n\uE004]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n\uE004]|\n(?![ \t]*\n))*'|(?:\((?:\\.|[^)\n\uE004]|\n(?![ \t]*\n))*\)|[（(](?:\\.|[^)）\n\uE004]|\n(?![ \t]*\n))*[)）]))(?:[ \t]|\n(?![ \t]*\n))*)?(?:(?<=(?:^|[^\\])(?:\\\\)*)\)|\\*）+)/;
       const URL_BACKPEDAL_RE = /(?:[^?!.,:;*_'"~()&]+|\([^)]*\)|&(?![a-zA-Z0-9]+;$)|[?!.,:;*_'"~)]+(?!$))+/;
       const HTML_SPECIAL_CLOSE_MAP = {
         '<!--': /-->/,
@@ -1943,7 +1943,7 @@
         const tableQuoteDepth = listQuoteDepth;
         const headerT = getTableRowParts(currentLine);
         const headerListIndent = listContentIndent || (headerT.hasList ? countIndentCols(headerT.prefix) : 0);
-        const baseTableListIndent = (tableQuoteDepth ? 0 : headerListIndent) || (outerListIndent >= 3 ? outerListIndent : 0);
+        const baseTableListIndent = Math.min((tableQuoteDepth ? 0 : headerListIndent) || (outerListIndent >= 3 ? outerListIndent : 0), (listIndents[0] || Infinity) + 3);
         const keepLookaheadUnindented = listOpenedViaTableLookahead;
         if (!headerT.hasList) {
           listOpenedViaTableLookahead = false;
