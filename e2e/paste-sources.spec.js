@@ -2861,6 +2861,25 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const setextAcrossEmptyQuoteMarker = 'cont\n>\n> A | B\n--- | ---\n===\n說明（測試）';
     const setextAcrossEmptyQuoteMarkerMarkdown = await convertPaste(page, { text: setextAcrossEmptyQuoteMarker });
     expect(setextAcrossEmptyQuoteMarkerMarkdown).toBe('cont\n>\n> A | B\n--- | ---\n===\n說明 (測試)');
+
+    const refDefWithFwTitleSuffix = '[a（b）]: /u（x） （title）\n[a（b）]';
+    const refDefWithFwTitleSuffixMarkdown = await convertPaste(page, { text: refDefWithFwTitleSuffix });
+    expect(refDefWithFwTitleSuffixMarkdown).toBe('[a (b)]: /u (x) （title）\n[a (b)]');
+
+    const lazyQuoteTableSiblingOrderedItem = '1. item\n> note\nA | B\n--- | ---\n2. sibling';
+    const lazyQuoteTableSiblingOrderedItemMarkdown = await convertPaste(page, { text: lazyQuoteTableSiblingOrderedItem });
+    expect(lazyQuoteTableSiblingOrderedItemMarkdown).toBe('1. item\n> note\n   | A   | B   |\n   | --- | --- |\n2. sibling');
+
+    const wsLinkNestedParenWithTitle = '[x]( u(（v） "t") 說明（測試）';
+    const wsLinkNestedParenWithTitleMarkdown = await convertPaste(page, { text: wsLinkNestedParenWithTitle });
+    expect(wsLinkNestedParenWithTitleMarkdown).toBe('[x]( u(（v） "t") 說明 (測試)');
+
+    const bareUrlWithSquareBrackets = 'https://example.com/wiki/Foo[1]（bar） 說明（測試）';
+    const bareUrlWithSquareBracketsMarkdown = await convertPaste(page, { text: bareUrlWithSquareBrackets });
+    expect(bareUrlWithSquareBracketsMarkdown).toBe('https://example.com/wiki/Foo[1]（bar） 說明 (測試)');
+
+    const interleavedEmphasisSpan = '*_x（y）*z_* 與 *~~x（y）*z~~* 與 _*x（y）_z*_';
+    const interleavedEmphasisSpanMarkdown = await convertPaste(page, { text: interleavedEmphasisSpan });
+    expect(interleavedEmphasisSpanMarkdown).toBe('*_x (y)*z_* 與 *~~x (y)*z~~* 與 _*x (y)_z*_');
   });
 });
-
