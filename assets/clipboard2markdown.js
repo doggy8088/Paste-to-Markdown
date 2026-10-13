@@ -891,13 +891,17 @@
       const updateListIndent = function (line, isProtectedBlock, allowAnyOrdered = true) {
         const q = getQuotePrefix(line);
         if (q.depth > listQuoteDepth || (q.depth < listQuoteDepth && (!quoteCanLazyContinue || q.rest.trim() === '' || hasBlockInterrupt(q.rest)))) {
-          if (q.depth < listQuoteDepth || (listSawBlank && countIndentCols(q.prefix.match(/^[ \t]*/)[0]) < outerListIndent)) {
+          if (
+            (q.depth < listQuoteDepth && (q.rest.trim() === '' || hasBlockInterrupt(q.rest))) ||
+            (listSawBlank && countIndentCols(q.prefix.match(/^[ \t]*/)[0]) < outerListIndent)
+          ) {
             outerListIndent = 0;
           }
-          listIndents = [];
-          listContentIndent = 0;
+          const restoredIndent = q.depth === 0 ? outerListIndent : 0;
+          listIndents = restoredIndent ? [restoredIndent] : [];
+          listContentIndent = restoredIndent;
           minLazyIndent = 0;
-          listSawBlank = q.rest.trim() === '';
+          listSawBlank = q.depth === 0 && q.rest.trim() === '';
           listQuoteDepth = q.depth;
         }
         const listMatch = !isProtectedBlock && !THEMATIC_BREAK_RE.test(q.rest) && (allowAnyOrdered || !/^[ \t]*(?!1[.)])\d{1,9}[.)]/.test(q.rest)) && q.rest.match(/^([ \t]*)(?:(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )|[ \t]))+/);
@@ -913,7 +917,7 @@
           listContentIndent = nextIndent;
           listSawBlank = minLazyIndent > 0;
         } else if (q.rest.trim() === '') {
-          if (listContentIndent > 0 || outerListIndent > 0) {
+          if (listContentIndent > 0) {
             listSawBlank = true;
             minLazyIndent = listContentIndent;
           }
@@ -1263,10 +1267,17 @@
         );
       };
       const hasOpenSetextPara = function (arr, endIdx, maxDepth) {
+        let canLazyQuote = true;
         for (let k = endIdx; k >= 0; k--) {
           if (blockSpanLineRe.test(arr[k])) break;
           const tk = getTableRowParts(arr[k]);
-          if (tk.depth > maxDepth) continue;
+          if (tk.depth > maxDepth) {
+            if (canLazyQuote && tk.rest.trim() !== '' && !isHeadingLineAt(arr, k)) {
+              return true;
+            }
+            canLazyQuote = false;
+            continue;
+          }
           if (tk.rest.trim() === '') break;
           maxDepth = tk.depth;
           if (!isHeadingLineAt(arr, k)) {
@@ -1331,7 +1342,7 @@
         const nextFence = updateFenceState(line, activeFence, allowAnyOrdered);
         if (
           nextFence !== activeFence &&
-          !(nextFence && !isBlockBoundary && !inProseTable && !t.hasList && hasFollowingSetextUnderline(lineIdx, qBefore.depth, listContentIndent)) &&
+          !(nextFence && !isBlockBoundary && listContentIndent === prevListIndent && !inProseTable && !t.hasList && hasFollowingSetextUnderline(lineIdx, qBefore.depth, listContentIndent)) &&
           !(nextFence && !isBlockBoundary && nextFence.char === '`' && new RegExp('(?<=(?:^|[^\\\\`])(?:\\\\\\\\)*)' + '`'.repeat(nextFence.length) + '(?!`)').test(
             currentProseLines.join('\n').split(/\n[ \t]*\n/).pop().replace(/(?<=(?:^|[^\\`])(?:\\\\)*(?:\\`)?)(`+)(?!`)(?:(?:[^\n]|\n(?![ \t]*\n))*?[^`])?\1(?!`)/g, '')
           ))
@@ -1579,7 +1590,10 @@
               prevUrl = url;
               url = URL_BACKPEDAL_RE.exec(url)[0];
             } while (prevUrl !== url);
-            return maskSpan(url, false) + match.slice(url.length);
+            const tail = match.slice(url.length).replace(/^([^（]*\([^（]*?)）/, function (_m, p1) {
+              return p1 + maskSpan('）', false);
+            });
+            return maskSpan(url, false) + tail;
           }
         );
         // Intentionally repair CJK emphasis spans whose closing delimiter is preceded by `）` and
@@ -1629,8 +1643,11 @@
       while (lineIndex < normalizedLines.length) {
         const currentLine = normalizedLines[lineIndex];
         const isBlockLine = blockSpanLineRe.test(currentLine);
-        const prevListIndent = (lineIndex > 0 && restoreSpans(normalizedLines[lineIndex - 1]).trim() !== '') ? listContentIndent : 0;
-        updateListIndent(isBlockLine ? restoreSpans(currentLine) : currentLine, isBlockLine);
+        const rawCurrentLine = isBlockLine ? restoreSpans(currentLine) : currentLine;
+        const prevLine = lineIndex > 0 ? normalizedLines[lineIndex - 1] : '';
+        const prevListIndent = (prevLine && restoreSpans(prevLine).trim() !== '') ? listContentIndent : 0;
+        const allowAnyOrdered = !prevLine || blockSpanLineRe.test(prevLine) || prevListIndent > 0 || getQuotePrefix(rawCurrentLine).depth > listQuoteDepth || getTableRowParts(prevLine).rest.trim() === '' || isHeadingLineAt(normalizedLines, lineIndex - 1);
+        updateListIndent(rawCurrentLine, isBlockLine, allowAnyOrdered);
         if (isBlockLine) {
           formattedLines.push(currentLine);
           lineIndex++;
