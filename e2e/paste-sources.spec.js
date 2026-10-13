@@ -3042,7 +3042,20 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     })).join('\n');
     const oversizedTableMarkdown = await convertPaste(page, { text: oversizedTableInput });
     expect(oversizedTableMarkdown).toBe(oversizedTableExpected);
+
+    const fenceAfterDefAndQuote = '[a]: /u\n> quote\n```\n===\nA | B\n--- | ---';
+    const fenceAfterDefAndQuoteMarkdown = await convertPaste(page, { text: fenceAfterDefAndQuote });
+    expect(fenceAfterDefAndQuoteMarkdown).toBe('[a]: /u\n> quote\n```\n===\nA | B\n--- | ---');
+
+    const siblingListAfterLeadingBlankDef = '\n[a]: /u\n9. item\nA | B\n- | -\n\n[b]:\n[c]:\n/u';
+    const siblingListAfterLeadingBlankDefMarkdown = await convertPaste(page, { text: siblingListAfterLeadingBlankDef });
+    expect(siblingListAfterLeadingBlankDefMarkdown).toBe('\n[a]: /u\n9. item\nA | B\n- | -\n\n[b]:\n[c]:\n/u');
+
+    const allBmpCodeUnitsInput = '```\n' + Array.from({ length: 65536 }, function (_, i) {
+      return String.fromCharCode(i);
+    }).join('');
+    const allBmpCodeUnitsExpected = allBmpCodeUnitsInput.replace(/\r\n?/g, '\n').replace(/（/g, '(').replace(/）/g, ')');
+    const allBmpCodeUnitsMarkdown = await convertPaste(page, { text: allBmpCodeUnitsInput });
+    expect(allBmpCodeUnitsMarkdown).toBe(allBmpCodeUnitsExpected);
   });
 });
-
-

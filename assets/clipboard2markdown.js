@@ -823,10 +823,7 @@
       const spanTokenRe = new RegExp('[\\uE000\\uE002]' + spanTag + '(\\d+)[BMS][\\uE001\\uE003]', 'g');
       const blockSpanLineRe = new RegExp('^\\uE002' + spanTag + '\\d+B\\uE003$');
       const multilineSpanRe = new RegExp('[\\uE000\\uE002]' + spanTag + '\\d+M[\\uE001\\uE003]');
-      let literalE004 = '\uE004';
-      while (normalizedInput.includes(literalE004)) {
-        literalE004 = String.fromCharCode(literalE004.charCodeAt(0) + 1);
-      }
+      const literalE004 = '\uE005' + spanTag + '\uE005';
       const lines = normalizedInput.replace(/\uE004/g, literalE004).split('\n');
       const UNESCAPED_PIPE_RE = /(?<=(?:^|[^\\])(?:\\\\)*)\|/;
 
@@ -843,6 +840,7 @@
       const HTML_TYPE7_TAG_RE = /^ {0,3}(?:<(?!script|pre|style|textarea)[A-Za-z][\w-]*(?: +[A-Za-z:_][\w.:-]*(?: *= *"[^"\n]*"| *= *'[^'\n]*'| *= *[^\s"'=<>`]+)?)*? *\/?>|<\/(?!script|pre|style|textarea)[A-Za-z][\w-]*\s*>)[ \t]*$/i;
       const HTML_SPECIAL_OPEN_RE = /^ {0,3}(<!--|<\?|<![A-Za-z]|<!\[CDATA\[)/;
       const THEMATIC_BREAK_RE = /^[ \t]{0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$/;
+      const REF_DEF_RE = /^[ \t]{0,3}\[(?:\\.|[^\\\n\]])+\]:[ \t]*(?:\n[ \t]*(?:>[ \t]*)*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*(?:>[ \t]*)*)(?:"(?:\\.|[^"\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n]|\n(?![ \t]*\n))*'|\((?:\\.|[^()\n]|\n(?![ \t]*\n))*\)))?[ \t]*$/;
       const TABLE_DELIMITER_REST_RE = /^[ \t]*\|?(?:[ \t]*:?-+:?[ \t]*\|)+[ \t]*:?-+:?[ \t]*\|?[ \t]*$/;
       const LINK_TAIL_RE = /^(?:[ \t]|\n(?![ \t]*\n))*(?:(?:"(?:\\.|[^"\n\uE004]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n\uE004]|\n(?![ \t]*\n))*'|(?:\((?:\\.|[^)\n\uE004]|\n(?![ \t]*\n))*\)|[（(](?:\\.|[^()（）\n\uE004]|\n(?![ \t]*\n))*[)）]))(?:[ \t]|\n(?![ \t]*\n))*)?(?:(?<=(?:^|[^\\])(?:\\\\)*)\)|\\*）+)/;
       const URL_BACKPEDAL_RE = /(?:[^?!.,:;*_'"~()&]+|\([^)]*\)|&(?![a-zA-Z0-9]+;$)|[?!.,:;*_'"~)]+(?!$))+/;
@@ -1354,7 +1352,7 @@
         const prev = idx > 0 ? cache[idx - 1] : null;
         const isSetextUnderline = !isBlockSpan && /^[ \t]{0,3}(?:=+|-+)[ \t]*$/.test(tk.rest);
         const nonLazySetext = isSetextUnderline && getOpenSetextParaDepth(arr, idx - 1, tk.depth, false) >= 0;
-        const heading = (
+        const baseHeading = (
           isBlockSpan ||
           /^[ \t]{0,3}#{1,6}(?:[ \t]|$)/.test(tk.rest) ||
           THEMATIC_BREAK_RE.test(tk.rest) ||
@@ -1362,6 +1360,31 @@
           nonLazySetext ||
           (isSetextUnderline && getOpenSetextParaDepth(arr, idx - 1, tk.depth) >= 0)
         );
+        let isDef = false;
+        let defCont = false;
+        if (!baseHeading && tk.rest.trim() !== '') {
+          for (let defStart = Math.max(0, idx - 2); defStart <= idx; defStart++) {
+            const startT = getTableRowParts(arr[defStart]);
+            if (
+              startT.depth === tk.depth &&
+              !(defStart < idx && cache[defStart].defCont) &&
+              /^[ \t]{0,3}\[/.test(startT.rest) &&
+              (defStart === 0 || startT.hasList || tk.depth > cache[defStart - 1].depth || getTableRowParts(arr[defStart - 1]).rest.trim() === '' || cache[defStart - 1].heading) &&
+              REF_DEF_RE.test(arr.slice(defStart, idx + 1).map(function (l) {
+                return restoreSpans(getTableRowParts(l).rest);
+              }).join('\n'))
+            ) {
+              isDef = true;
+              defCont = defStart < idx;
+              for (let m = defStart; m < idx; m++) {
+                cache[m].heading = true;
+              }
+              paraDepthCache.delete(arr);
+              break;
+            }
+          }
+        }
+        const heading = baseHeading || isDef;
         const depth = (
           prev &&
           prev.depth > tk.depth &&
@@ -1375,7 +1398,7 @@
           (!listContentIndent && !outerListIndent && /^(?:[*+-]|\d{1,9}[.)])[ \t]/.test(qk.rest)) ||
           Boolean(prev && prev.noSetext && tk.depth <= prev.depth)
         );
-        cache[idx] = { heading: heading, depth: depth, noSetext: noSetext };
+        cache[idx] = { heading: heading, depth: depth, noSetext: noSetext, defCont: defCont };
         return heading;
       };
       const getOpenSetextParaDepth = function (arr, endIdx, maxDepth, canLazyQuote = true) {
@@ -1478,19 +1501,14 @@
         if (hasContainerEnded(line, activeFence, prevLineBlank)) {
           activeFence = null;
         }
-        const proseTail = (currentProseLines.length > 4 ? '\n' : '') + currentProseLines.slice(-4).map(function (l) {
-          return getTableRowParts(l).rest;
-        }).join('\n');
         const prevT = currentProseLines.length > 0 ? getTableRowParts(currentProseLines[currentProseLines.length - 1]) : null;
         const prevProse = prevT ? prevT.rest : '';
         const prevQuoteDepth = listQuoteDepth;
-        const hasDefTail = /(?:^|\n[ \t]*\n)[ \t]{0,3}\[(?:\\.|[^\\\n\]])+\]:[ \t]*(?:\n[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*)(?:"[^"\n]*"|'[^'\n]*'|\([^()\n]*\)))?[ \t]*$/.test(proseTail);
         const isBlockBoundary =
           !prevT ||
           qBefore.depth > prevQuoteDepth ||
           prevProse.trim() === '' ||
-          (!inProseTable && isHeadingLineAt(currentProseLines, currentProseLines.length - 1)) ||
-          hasDefTail;
+          (!inProseTable && isHeadingLineAt(currentProseLines, currentProseLines.length - 1));
         if (isBlockBoundary) {
           proseParaStartIdx = currentProseLines.length;
         }
@@ -1512,7 +1530,7 @@
         const t = getTableRowParts(line, isTableStartDelim, allowRowList);
         const prevDepthListIndent = qBefore.depth === prevQuoteDepth ? prevListIndent : prevOuterListIndent;
         const currDepthListIndent = qBefore.depth > prevQuoteDepth ? outerListIndent : listContentIndent;
-        const openSetextDepth = (prevT && prevProse.trim() !== '' && !hasDefTail && currDepthListIndent === prevDepthListIndent && !inProseTable && !t.hasList)
+        const openSetextDepth = (prevT && prevProse.trim() !== '' && currDepthListIndent === prevDepthListIndent && !inProseTable && !t.hasList)
           ? getOpenSetextParaDepth(currentProseLines, currentProseLines.length - 1, qBefore.depth, false)
           : -1;
         const inSetextHeading = openSetextDepth >= 0 && hasFollowingSetextUnderline(lineIdx, openParaQuoteDepth >= 0 && openParaQuoteDepth < openSetextDepth ? openParaQuoteDepth : openSetextDepth, openSetextDepth, prevDepthListIndent);
@@ -1908,10 +1926,7 @@
         const rawCurrentLine = isBlockLine ? restoreSpans(currentLine) : currentLine;
         const prevLine = lineIndex > 0 ? normalizedLines[lineIndex - 1] : '';
         const prevListIndent = (prevLine && restoreSpans(prevLine).trim() !== '') ? listContentIndent : 0;
-        const proseTail = (lineIndex > 4 ? '\n' : '') + normalizedLines.slice(Math.max(0, lineIndex - 4), lineIndex).map(function (l) {
-          return restoreSpans(getTableRowParts(l).rest);
-        }).join('\n');
-        const baseAllowAnyOrdered = !prevLine || blockSpanLineRe.test(prevLine) || prevListIndent > 0 || (getQuotePrefix(rawCurrentLine).depth === 0 && outerListIndent > 0) || getQuotePrefix(rawCurrentLine).depth > listQuoteDepth || getTableRowParts(prevLine).rest.trim() === '' || isHeadingLineAt(normalizedLines, lineIndex - 1) || /(?:^|\n[ \t]*\n)[ \t]{0,3}\[(?:\\.|[^\\\n\]])+\]:[ \t]*(?:\n[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*)(?:"[^"\n]*"|'[^'\n]*'|\([^()\n]*\)))?[ \t]*$/.test(proseTail);
+        const baseAllowAnyOrdered = !prevLine || blockSpanLineRe.test(prevLine) || prevListIndent > 0 || (getQuotePrefix(rawCurrentLine).depth === 0 && outerListIndent > 0) || getQuotePrefix(rawCurrentLine).depth > listQuoteDepth || getTableRowParts(prevLine).rest.trim() === '' || isHeadingLineAt(normalizedLines, lineIndex - 1);
         const allowAnyOrdered = baseAllowAnyOrdered || (lineIndex + 1 < normalizedLines.length && TABLE_DELIMITER_REST_RE.test(getQuotePrefix(normalizedLines[lineIndex + 1]).rest));
         const prevIndentBeforeUpdate = listContentIndent;
         updateListIndent(rawCurrentLine, isBlockLine, allowAnyOrdered);
