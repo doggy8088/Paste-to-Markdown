@@ -814,6 +814,12 @@
 
     // Auto-correct pasted Markdown syntax (full-width parentheses spacing & GFM table alignment)
     markdownSyntax: function (text) {
+      if (
+        !/[（）]/.test(text) &&
+        !/^[ \t>]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)*(?:\[[ xX]\][ \t]+)?\|?(?:[ \t]*:?-+:?[ \t]*\|)+[ \t]*:?-+:?[ \t]*\|?[ \t]*$/m.test(text)
+      ) {
+        return null;
+      }
       const normalizedInput = text.replace(/\r\n?/g, '\n');
       const usedSpanTags = new Set(normalizedInput.match(/P2MSPAN(?:\d+X)?/g));
       let spanTag = 'P2MSPAN';
@@ -1017,7 +1023,7 @@
         ) {
           openParaQuoteDepth = listQuoteDepth;
         }
-        quoteCanLazyContinue = !isProtectedBlock && listQuoteDepth > 0 && q.rest !== '';
+        quoteCanLazyContinue = listQuoteDepth > 0 && q.rest !== '';
       };
 
       const hasBlockInterrupt = function (rest, activeOuterListIndent = 0) {
@@ -1395,8 +1401,8 @@
       const fmCloseIdx = fmCloseRe ? lines.slice(1).findIndex(function (l) {
         return fmCloseRe.test(l);
       }) + 1 : 0;
-      const fmEndIdx = fmCloseIdx > 0 && (fmOpen[1] === '+++' || /^[ \t]*(?:[\p{L}\p{N}_.-]+|"(?:\\.|[^"\\])*"|'(?:''|[^'])*')[ \t]*:(?:[ \t]|$)/u.test(lines.slice(1, fmCloseIdx).find(function (l) {
-        return !/^[ \t]*(?:#|$)/.test(l);
+      const fmEndIdx = fmCloseIdx > 0 && (fmOpen[1] === '+++' || /^[ \t]*(?:\{[ \t]*)*(?:[\p{L}\p{N}_.-]+|"(?:\\.|[^"\\])*"|'(?:''|[^'])*')[ \t]*:(?:[ \t\}]|$)/u.test(lines.slice(1, fmCloseIdx).find(function (l) {
+        return !/^[ \t]*(?:#|\{[ \t]*$|$)/.test(l);
       }) || '')) ? fmCloseIdx : 0;
       if (fmEndIdx > 0) {
         lines.slice(1, fmEndIdx).join('\n').replace(/^[ \t]{0,3}\[((?:\\.|[^\\\n\]])+)\]:[ \t]*(?:\n[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*)(?:"(?:\\.|[^"\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n]|\n(?![ \t]*\n))*'|\((?:\\.|[^()\n]|\n(?![ \t]*\n))*\)))?[ \t]*(?=\n|$)/gm, function (_m, lbl) {
@@ -1580,11 +1586,16 @@
         return foundUnderline;
       };
       let proseParaStartIdx = 0;
+      let mathCloseLineIdx = -1;
       let curForEachLine = '';
       lines.forEach(function (line, lineIdx) {
         curForEachLine = line;
         if (fmEndIdx > 0 && lineIdx <= fmEndIdx) {
           segments.push({ fenced: true, skipListUpdate: true, line: line });
+          return;
+        }
+        if (lineIdx <= mathCloseLineIdx) {
+          currentProseLines.push(line);
           return;
         }
         const qBefore = getQuotePrefix(line);
@@ -1688,6 +1699,20 @@
             };
           }
           return;
+        }
+        if (
+          !isTableStartDelim &&
+          !inProseTable &&
+          !/^[ \t]{0,3}#{1,6}[ \t]/.test(t.rest) &&
+          /^[ \t]*\$\$(?![^\n]*\$\$[ \t]*$)/.test(t.rest) &&
+          !(prevListIndent > 0 && !t.hasList && countIndentCols(t.rest.match(/^[ \t]*/)[0]) > listContentIndent)
+        ) {
+          for (let k = lineIdx + 1; k < lines.length; k++) {
+            if (/\$\$(?=[ \t]*$)/.test(lines[k])) {
+              mathCloseLineIdx = k;
+              break;
+            }
+          }
         }
         if (isTableStartDelim) {
           inProseTable = true;

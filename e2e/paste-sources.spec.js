@@ -3274,5 +3274,17 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       'x | y',
       '> --- | ---'
     ].join('\n'));
+
+    const flowYamlFrontMatter = '---\n{title: "版本（舊）"}\n---\n正文（新）';
+    const flowYamlFrontMatterMarkdown = await convertPaste(page, { text: flowYamlFrontMatter });
+    expect(flowYamlFrontMatterMarkdown).toBe('---\n{title: "版本（舊）"}\n---\n正文 (新)');
+
+    const quotedTableThenIndentedCodeThenListExit = '> A | B\n--- | ---\n    code\nA | B\n- | -';
+    const quotedTableThenIndentedCodeThenListExitMarkdown = await convertPaste(page, { text: quotedTableThenIndentedCodeThenListExit });
+    expect(quotedTableThenIndentedCodeThenListExitMarkdown).toBe('> | A   | B   |\n| --- | --- |\n    code\nA | B\n- | -');
+
+    const displayMathAcrossFencedLookingLines = '$$\n~~~\n~~~\nA | B\n--- | ---\n$$\n\n$$\n~~~\nunclosed（x）';
+    const displayMathAcrossFencedLookingLinesMarkdown = await convertPaste(page, { text: displayMathAcrossFencedLookingLines });
+    expect(displayMathAcrossFencedLookingLinesMarkdown).toBe('$$\n~~~\n~~~\nA | B\n--- | ---\n$$\n\n$$\n~~~\nunclosed(x)');
   });
 });
