@@ -3118,5 +3118,26 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const type7HtmlBeforeTableLookahead = 'plain\n<span title="x（y）">\n--- | ---\n--- | ---';
     const type7HtmlBeforeTableLookaheadMarkdown = await convertPaste(page, { text: type7HtmlBeforeTableLookahead });
     expect(type7HtmlBeforeTableLookaheadMarkdown).toBe('plain\n<span title="x（y）">\n--- | ---\n--- | ---');
+
+    const indentedFenceAfterListBlockquote = '- item\n> q\n    ```\nA | B\n--- | ---';
+    const indentedFenceAfterListBlockquoteMarkdown = await convertPaste(page, { text: indentedFenceAfterListBlockquote });
+    expect(indentedFenceAfterListBlockquoteMarkdown).toBe('- item\n> q\n    ```\nA | B\n--- | ---');
+
+    const invalidFenceAfterQuotedListTable = '1. item\n> A | B\n> --- | ---\n``` a`';
+    const invalidFenceAfterQuotedListTableMarkdown = await convertPaste(page, { text: invalidFenceAfterQuotedListTable });
+    expect(invalidFenceAfterQuotedListTableMarkdown).toBe('1. item\n   > | A   | B   |\n   > | --- | --- |\n``` a`');
+
+    const quotedYamlFrontMatterKey = '---\n"schema:name": "版本（舊）"\n---\n正文（新）';
+    const quotedYamlFrontMatterKeyMarkdown = await convertPaste(page, { text: quotedYamlFrontMatterKey });
+    expect(quotedYamlFrontMatterKeyMarkdown).toBe('---\n"schema:name": "版本（舊）"\n---\n正文 (新)');
+
+    const deepBlockquoteLines = Array.from({ length: 400 }, function (_, i) {
+      return '> '.repeat(i + 1) + '段落（測試）';
+    }).join('\n');
+    const deepBlockquoteExpected = Array.from({ length: 400 }, function (_, i) {
+      return '> '.repeat(i + 1) + '段落 (測試)';
+    }).join('\n');
+    const deepBlockquoteMarkdown = await convertPaste(page, { text: deepBlockquoteLines });
+    expect(deepBlockquoteMarkdown).toBe(deepBlockquoteExpected);
   });
 });

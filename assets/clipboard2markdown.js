@@ -906,7 +906,7 @@
           (targetQuoteDepth < listQuoteDepth && (!quoteCanLazyContinue || q.rest.trim() === '' || hasBlockInterrupt(q.rest, targetQuoteDepth === 0 ? outerListIndent : 0) || rawLeadCols < Math.max(outerMinLazy, minLazyIndent)))
         ) {
           if (
-            (targetQuoteDepth < listQuoteDepth && !closesOuterSetext && (q.rest.trim() === '' || hasBlockInterrupt(q.rest, targetQuoteDepth === 0 ? outerListIndent : 0))) ||
+            (targetQuoteDepth < listQuoteDepth && !closesOuterSetext && (q.rest.trim() === '' || (rawLeadCols < outerListIndent && hasBlockInterrupt(q.rest, targetQuoteDepth === 0 ? outerListIndent : 0)))) ||
             rawLeadCols < outerMinLazy
           ) {
             outerListIndent = 0;
@@ -998,10 +998,11 @@
       };
 
       const hasBlockInterrupt = function (rest, activeOuterListIndent = 0) {
+        const strippedRest = activeOuterListIndent > 0 ? rest.slice(Math.min(rest.match(/^ */)[0].length, activeOuterListIndent)) : rest;
         return (
-          /^ {0,3}(?:#{1,6}(?:[ \t]|$)|>|(?:[-*+]|1[.)])[ \t]|(?:\*[ \t]*){3,}$|(?:-[ \t]*){3,}$|(?:_[ \t]*){3,}$|`{3,}(?=[^`]*$)|~{3,}|<!--|<(?:script|pre|style|textarea)(?=[\s/>]|$))/i.test(rest) ||
-          (activeOuterListIndent > 0 && countIndentCols(rest.match(/^[ \t]*/)[0]) < activeOuterListIndent && /^[ \t]{0,3}\d{1,9}[.)][ \t]/.test(rest)) ||
-          HTML_TYPE6_TAG_RE.test(rest)
+          /^ {0,3}(?:#{1,6}(?:[ \t]|$)|>|(?:[-*+]|1[.)])[ \t]|(?:\*[ \t]*){3,}$|(?:-[ \t]*){3,}$|(?:_[ \t]*){3,}$|`{3,}(?=[^`]*$)|~{3,}|<!--|<(?:script|pre|style|textarea)(?=[\s/>]|$))/i.test(strippedRest) ||
+          (activeOuterListIndent > 0 && countIndentCols(rest.match(/^[ \t]*/)[0]) < activeOuterListIndent && /^[ \t]{0,3}(?:\d{1,9}[.)][ \t]|`{3,}|~{3,}|#)/.test(rest)) ||
+          HTML_TYPE6_TAG_RE.test(strippedRest)
         );
       };
 
@@ -1313,7 +1314,7 @@
       const fmCloseIdx = fmCloseRe ? lines.slice(1).findIndex(function (l) {
         return fmCloseRe.test(l);
       }) + 1 : 0;
-      const fmEndIdx = fmCloseIdx > 0 && (fmOpen[1] === '+++' || /^[A-Za-z0-9_-]+:/.test(lines.slice(1, fmCloseIdx).find(function (l) {
+      const fmEndIdx = fmCloseIdx > 0 && (fmOpen[1] === '+++' || /^[ \t]*(?:[\p{L}\p{N}_.-]+|"(?:\\.|[^"\\])*"|'(?:''|[^'])*')[ \t]*:(?:[ \t]|$)/u.test(lines.slice(1, fmCloseIdx).find(function (l) {
         return !/^[ \t]*(?:#|$)/.test(l);
       }) || '')) ? fmCloseIdx : 0;
       if (fmEndIdx > 0) {
@@ -1463,19 +1464,30 @@
       let setextLookaheadIdx = -1;
       let setextLookaheadKey = '';
       let setextLookaheadRes = false;
+      let setextMinKey = '';
+      let setextNextEventIdx = -1;
       const hasFollowingSetextUnderline = function (startIdx, minQuoteDepth, maxQuoteDepth, indentCols) {
         const key = minQuoteDepth + ':' + maxQuoteDepth + ':' + indentCols;
         if (setextLookaheadKey === key && startIdx < setextLookaheadIdx) {
           return setextLookaheadRes;
         }
-        let k = startIdx + 1;
+        const minKey = minQuoteDepth + ':' + indentCols;
+        if (setextMinKey !== minKey || startIdx >= setextNextEventIdx) {
+          setextMinKey = minKey;
+          setextNextEventIdx = startIdx + 1;
+        }
+        let k = setextNextEventIdx;
         let foundUnderline = false;
         for (; k < lines.length; k++) {
           const mq = getQuotePrefix(lines[k]);
           const mRest = mq.rest.slice(Math.min(mq.rest.match(/^ */)[0].length, indentCols));
-          if (mq.depth < minQuoteDepth || (mq.depth <= maxQuoteDepth && (mRest.trim() === '' || /^(?:[*+-]|\d{1,9}[.)])[ \t]/.test(mRest) || /^ {0,3}(?:=+|-+)[ \t]*$/.test(mRest)))) {
+          const isStoppingRest = mRest.trim() === '' || /^(?:[*+-]|\d{1,9}[.)])[ \t]/.test(mRest) || /^ {0,3}(?:=+|-+)[ \t]*$/.test(mRest);
+          if (mq.depth < minQuoteDepth || (mq.depth <= maxQuoteDepth && isStoppingRest)) {
             foundUnderline = mq.depth >= minQuoteDepth && mq.depth <= maxQuoteDepth && /^ {0,3}(?:=+|-+)[ \t]*$/.test(mRest);
             break;
+          }
+          if (k === setextNextEventIdx && !isStoppingRest) {
+            setextNextEventIdx = k + 1;
           }
         }
         setextLookaheadKey = key;
@@ -1583,7 +1595,7 @@
           tableOpenParaDepth = getOpenSetextParaDepth(currentProseLines, tableStartIdx - 1, prevT.depth);
           currentProseLines[tableStartIdx] = currentProseLines[tableStartIdx].replace(new RegExp(UNESCAPED_PIPE_RE, 'g'), '\uE004');
           currentProseLines.push(line);
-        } else if (!isBlockBoundary && inProseTable && !t.hasList && !(prevListIndent > 0 && listContentIndent < prevListIndent) && countIndentCols(line.match(/^[ \t]*/)[0]) >= outerMinLazy && countIndentCols(t.prefix.slice(qBefore.prefix.length) + t.rest.match(/^[ \t]*/)[0]) >= ((countIndentCols(getTableRowParts(currentProseLines[tableStartIdx]).prefix.slice(getQuotePrefix(currentProseLines[tableStartIdx]).prefix.length) + getTableRowParts(currentProseLines[tableStartIdx]).rest.match(/^[ \t]*/)[0]) >= listContentIndent && countIndentCols(getQuotePrefix(currentProseLines[tableStartIdx + 1]).rest.match(/^[ \t]*/)[0]) >= listContentIndent) ? listContentIndent : minLazyIndent) && isTableRowCandidate(line, false)) {
+        } else if (!isBlockBoundary && inProseTable && !t.hasList && !((prevListIndent > 0 && listContentIndent < prevListIndent) || (prevOuterListIndent > 0 && outerListIndent < prevOuterListIndent)) && countIndentCols(line.match(/^[ \t]*/)[0]) >= outerMinLazy && countIndentCols(t.prefix.slice(qBefore.prefix.length) + t.rest.match(/^[ \t]*/)[0]) >= ((countIndentCols(getTableRowParts(currentProseLines[tableStartIdx]).prefix.slice(getQuotePrefix(currentProseLines[tableStartIdx]).prefix.length) + getTableRowParts(currentProseLines[tableStartIdx]).rest.match(/^[ \t]*/)[0]) >= listContentIndent && countIndentCols(getQuotePrefix(currentProseLines[tableStartIdx + 1]).rest.match(/^[ \t]*/)[0]) >= listContentIndent) ? listContentIndent : minLazyIndent) && isTableRowCandidate(line, false)) {
           if (t.depth <= tableOpenParaDepth && /^[ \t]*(?:=+|-+)[ \t]*$/.test(t.rest)) {
             for (let i = tableStartIdx; i < currentProseLines.length; i++) {
               currentProseLines[i] = currentProseLines[i].replace(/\uE004/g, '|');
@@ -1996,7 +2008,7 @@
           while (
             lineIndex < normalizedLines.length &&
             !getTableRowParts(normalizedLines[lineIndex], false, countIndentCols(getQuotePrefix(normalizedLines[lineIndex]).rest.match(/^[ \t]*/)[0]) < (headerListIndent || (getQuotePrefix(normalizedLines[lineIndex]).depth === 0 ? outerListIndent : 0))).hasList &&
-            !(headerListIndent > 0 && countIndentCols(getQuotePrefix(normalizedLines[lineIndex]).rest.match(/^[ \t]*/)[0]) < headerListIndent && /^[ \t]{0,3}(?:`{3,}|~{3,}|#)/.test(getQuotePrefix(normalizedLines[lineIndex]).rest)) &&
+            !((headerListIndent || (getQuotePrefix(normalizedLines[lineIndex]).depth === 0 ? outerListIndent : 0)) > 0 && countIndentCols(getQuotePrefix(normalizedLines[lineIndex]).rest.match(/^[ \t]*/)[0]) < (headerListIndent || (getQuotePrefix(normalizedLines[lineIndex]).depth === 0 ? outerListIndent : 0)) && /^[ \t]{0,3}(?:`{3,}|~{3,}|#)/.test(getQuotePrefix(normalizedLines[lineIndex]).rest)) &&
             getQuotePrefix(normalizedLines[lineIndex]).depth <= tableQuoteDepth &&
             countIndentCols(normalizedLines[lineIndex].match(/^[ \t]*/)[0]) >= outerMinLazy &&
             countIndentCols(getTableRowParts(normalizedLines[lineIndex], false, false).prefix.slice(getQuotePrefix(normalizedLines[lineIndex]).prefix.length) + getTableRowParts(normalizedLines[lineIndex], false, false).rest.match(/^[ \t]*/)[0]) >= minTableRowIndent &&
