@@ -3025,6 +3025,23 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const lazyQuoteFenceInSetextHeading = 'plain\n> ~~~\n[x](url (t（a）)) 與 說明（測試）\n===\n\nplain\n> text\n> ~~~\n[x](url (t（b）))\n===';
     const lazyQuoteFenceInSetextHeadingMarkdown = await convertPaste(page, { text: lazyQuoteFenceInSetextHeading });
     expect(lazyQuoteFenceInSetextHeadingMarkdown).toBe('plain\n> ~~~\n[x](url (t（a）)) 與 說明 (測試)\n===\n\nplain\n> text\n> ~~~\n[x](url (t（b）))\n===');
+
+    const fenceAfterListItemBlockquote = '1. item\n> quote\n```\n---\nA | B\n--- | ---';
+    const fenceAfterListItemBlockquoteMarkdown = await convertPaste(page, { text: fenceAfterListItemBlockquote });
+    expect(fenceAfterListItemBlockquoteMarkdown).toBe('1. item\n> quote\n```\n---\nA | B\n--- | ---');
+
+    const indentedCodeAndDefAfterSetextHeading = '[use][a（x）]\n---\n    code\n[a（x）]: /u\n---';
+    const indentedCodeAndDefAfterSetextHeadingMarkdown = await convertPaste(page, { text: indentedCodeAndDefAfterSetextHeading });
+    expect(indentedCodeAndDefAfterSetextHeadingMarkdown).toBe('[use][a（x）]\n---\n    code\n[a（x）]: /u\n---');
+
+    const oversizedTableInput = ['A（測試） | B', '--- | ---', 'x'.repeat(5000) + ' | y'].concat(Array.from({ length: 210 }, function () {
+      return 'z | q';
+    })).join('\n');
+    const oversizedTableExpected = ['A (測試) | B', '--- | ---', 'x'.repeat(5000) + ' | y'].concat(Array.from({ length: 210 }, function () {
+      return 'z | q';
+    })).join('\n');
+    const oversizedTableMarkdown = await convertPaste(page, { text: oversizedTableInput });
+    expect(oversizedTableMarkdown).toBe(oversizedTableExpected);
   });
 });
 

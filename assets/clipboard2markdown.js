@@ -1422,6 +1422,9 @@
             res = entry.noSetext ? -1 : maxDepth;
             break;
           }
+          if (/^[ \t]{0,3}(?:=+|-+)[ \t]*$/.test(tk.rest)) {
+            break;
+          }
           if (!/^[ \t]*\$\$[\s\S]+\$\$[ \t]*$/.test(restoreSpans(tk.rest))) {
             crossedHeading = true;
           }
@@ -1492,6 +1495,7 @@
           proseParaStartIdx = currentProseLines.length;
         }
         const prevListIndent = prevProse.trim() === '' ? 0 : listContentIndent;
+        const prevOuterListIndent = prevProse.trim() === '' ? 0 : outerListIndent;
         const allowAnyOrdered = isBlockBoundary || prevListIndent > 0 || (qBefore.depth === 0 && outerListIndent > 0) || (!inProseTable && lineIdx + 1 < lines.length && TABLE_DELIMITER_REST_RE.test(getQuotePrefix(lines[lineIdx + 1]).rest));
         const isTableStartDelim =
           !isBlockBoundary &&
@@ -1506,10 +1510,12 @@
           updateListIndent(line, false, allowRowList);
         }
         const t = getTableRowParts(line, isTableStartDelim, allowRowList);
-        const openSetextDepth = (prevT && prevProse.trim() !== '' && !hasDefTail && (qBefore.depth > prevQuoteDepth ? outerListIndent : listContentIndent) === prevListIndent && !inProseTable && !t.hasList)
+        const prevDepthListIndent = qBefore.depth === prevQuoteDepth ? prevListIndent : prevOuterListIndent;
+        const currDepthListIndent = qBefore.depth > prevQuoteDepth ? outerListIndent : listContentIndent;
+        const openSetextDepth = (prevT && prevProse.trim() !== '' && !hasDefTail && currDepthListIndent === prevDepthListIndent && !inProseTable && !t.hasList)
           ? getOpenSetextParaDepth(currentProseLines, currentProseLines.length - 1, qBefore.depth, false)
           : -1;
-        const inSetextHeading = openSetextDepth >= 0 && hasFollowingSetextUnderline(lineIdx, openParaQuoteDepth >= 0 && openParaQuoteDepth < openSetextDepth ? openParaQuoteDepth : openSetextDepth, openSetextDepth, prevListIndent);
+        const inSetextHeading = openSetextDepth >= 0 && hasFollowingSetextUnderline(lineIdx, openParaQuoteDepth >= 0 && openParaQuoteDepth < openSetextDepth ? openParaQuoteDepth : openSetextDepth, openSetextDepth, prevDepthListIndent);
         const nextFence = updateFenceState(line, activeFence, allowAnyOrdered);
         if (
           nextFence !== activeFence &&
@@ -1953,10 +1959,6 @@
             tableLines.push(normalizedLines[lineIndex]);
             lineIndex++;
           }
-          if (openParaDepth >= 0 && hasPostTableSetextUnderline(tableLines, lineIndex, openParaDepth)) {
-            formattedLines.push.apply(formattedLines, tableLines);
-            continue;
-          }
           const rows = tableLines.map(function (l, idx) {
             return splitTableCells(l, idx === 1, idx < 2);
           });
@@ -1973,6 +1975,13 @@
               }
             }
           });
+          if (
+            (openParaDepth >= 0 && hasPostTableSetextUnderline(tableLines, lineIndex, openParaDepth)) ||
+            rows.length * colWidths.reduce(function (sum, w) { return sum + w; }, 0) > 1000000
+          ) {
+            formattedLines.push.apply(formattedLines, tableLines);
+            continue;
+          }
           rows.forEach(function (row, rIdx) {
             const t = getTableRowParts(tableLines[rIdx], rIdx === 1, rIdx < 2);
             const rawPrefix = t.prefix + t.rest.match(/^[ \t]*/)[0];
