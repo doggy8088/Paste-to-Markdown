@@ -1153,15 +1153,34 @@
         });
       };
 
+      const graphemeSegmenter = new Intl.Segmenter();
+      const countCellChars = function (str) {
+        return Array.from(graphemeSegmenter.segment(str)).length;
+      };
+
+      const getOutdentedCols = function (rest, hasList) {
+        let cols = countIndentCols(rest.match(/^[ \t]*/)[0]);
+        if (!hasList) {
+          let prevIndent = 0;
+          for (let i = 0; i < listIndents.length; i++) {
+            const h = listIndents[i] - prevIndent;
+            prevIndent = listIndents[i];
+            if (cols >= h) {
+              cols -= h;
+            }
+          }
+        }
+        return cols;
+      };
+
       const isTableRowCandidate = function (line, requirePipe = true, isDelimCandidate = false) {
         const t = getTableRowParts(line, isDelimCandidate, requirePipe);
-        const maxIndent = t.hasList ? 3 : listContentIndent + 3;
         return (
           !blockSpanLineRe.test(line) &&
           !multilineSpanRe.test(line) &&
           t.rest.trim() !== '' &&
           !THEMATIC_BREAK_RE.test(t.rest) &&
-          countIndentCols(t.rest.match(/^[ \t]*/)[0]) <= maxIndent &&
+          getOutdentedCols(t.rest, t.hasList) <= 3 &&
           !/^[ \t]*#{1,6}(?:[ \t]|$)/.test(t.rest) &&
           (!requirePipe || (t.rest.trim() !== '|' && UNESCAPED_PIPE_RE.test(t.rest)))
         );
@@ -1414,7 +1433,7 @@
       const fmCloseIdx = fmCloseRe ? lines.slice(1).findIndex(function (l) {
         return fmCloseRe.test(l);
       }) + 1 : 0;
-      const fmEndIdx = fmCloseIdx > 0 && (fmOpen[1] === '+++' || /^[ \t]*(?:\{[ \t]*)*(?:[\p{L}\p{N}_.-]+|"(?:\\.|[^"\\])*"|'(?:''|[^'])*')[ \t]*:(?:[ \t\}]|$)/u.test(lines.slice(1, fmCloseIdx).find(function (l) {
+      const fmEndIdx = fmCloseIdx > 0 && (fmOpen[1] === '+++' || /^[ \t]*(?:\?(?:[ \t]+|$)|(?:\{[ \t]*)*(?:[\p{L}\p{N}_.-]+|"(?:\\.|[^"\\])*"|'(?:''|[^'])*')[ \t]*:(?:[ \t\}]|$))/u.test(lines.slice(1, fmCloseIdx).find(function (l) {
         return !/^[ \t]*(?:#|\{[ \t]*$|$)/.test(l);
       }) || '')) ? fmCloseIdx : 0;
       if (fmEndIdx > 0) {
@@ -1695,9 +1714,8 @@
           segments.push({ fenced: true, skipListUpdate: !isBlankFenceLine, line: line.replace(/（/g, '(').replace(/）/g, ')') });
           return;
         }
-        const maxProseIndent = t.hasList ? 3 : listContentIndent + 3;
         const atBlockStart = isBlockBoundary || t.hasList;
-        if (!inSetextHeading && (atBlockStart || inProseTable) && t.rest.trim() !== '' && countIndentCols(t.rest.match(/^[ \t]*/)[0]) > maxProseIndent) {
+        if (!inSetextHeading && (atBlockStart || inProseTable) && t.rest.trim() !== '' && getOutdentedCols(t.rest, t.hasList) > 3) {
           flushProse();
           segments.push({ fenced: true, line: line.replace(/（/g, '(').replace(/）/g, ')') });
           return;
@@ -1966,6 +1984,7 @@
         }
         const codeAndHtmlMaskedBlock = maskLinkDestinations(seg.preMasked);
         let urlScanPos = 0;
+        let urlParaStart = 0;
         let outerFwDepth = 0;
         const maskedBlock = codeAndHtmlMaskedBlock.replace(
           /(?:(?:ftp|https?):\/\/|www\.)(?:[a-zA-Z0-9-]+\.?)+(?:\\.|(?!\][(\[]\uE002)[^\s<\\\uE000-\uE004])*/gi,
@@ -1974,18 +1993,20 @@
             for (; urlScanPos < offset; urlScanPos++) {
               if (fullStr[urlScanPos] === '\n') {
                 outerFwDepth = 0;
+                if (urlScanPos > 0 && fullStr[urlScanPos - 1] === '\n') {
+                  urlParaStart = urlScanPos + 1;
+                }
               } else if (fullStr[urlScanPos] === '（') {
                 outerFwDepth++;
               } else if (fullStr[urlScanPos] === '）' && outerFwDepth > 0) {
                 outerFwDepth--;
               }
             }
-            const preUrlWithNext = fullStr.slice(fullStr.lastIndexOf('\n\n', offset - 1) + 1, offset + 1);
             let fwDepth = 0;
             let hwDepth = 0;
             let end = 0;
             while (end < match.length) {
-              if (/^(?:[*~]|_(?![\p{L}\p{N}_]))/u.test(match.slice(end)) && closesPreUrlEmphasis(preUrlWithNext, match[end])) {
+              if (/^(?:[*~]|_(?![\p{L}\p{N}_]))/u.test(match.slice(end)) && closesPreUrlEmphasis(fullStr.slice(urlParaStart, offset + 1), match[end])) {
                 break;
               }
               if (match[end] === '（') {
@@ -2054,7 +2075,10 @@
               const prevChar = offset > 0 ? fullStr[offset - 1] : '';
               const closeDelim = delim + (extraClose || '');
               const rest = fullStr.slice(offset + match.length);
-              if (delim[0] === '_' && (/[\p{L}\p{N}]/u.test(prevChar) || /^[\p{L}\p{N}]/u.test(rest))) {
+              if (
+                (delim[0] === '_' && (/[\p{L}\p{N}]/u.test(prevChar) || /^[\p{L}\p{N}]/u.test(rest))) ||
+                (((extraClose && /^[*_]+$/.test(extraClose)) || prevChar === delim[0]) && !closesPreUrlEmphasis(fullStr.slice(fullStr.lastIndexOf('\n\n', offset - 1) + 1, offset) + 'a', delim[0]))
+              ) {
                 return match;
               }
               const innerTrailingMatch = inner.match(/）((?:\*+|_+|~~)*)$/);
@@ -2072,7 +2096,7 @@
           )
           .replace(/([\]\p{L}\p{N}]|\uE001|\uE003\))（/gu, '$1 (')
           .replace(/（/g, '(')
-          .replace(/）(?=[\p{L}\p{N}`\[\uE000]|(\*{1,3}(?!\*)|(?<!~)~~(?!~))(?=\S)(?:(?!\1)(?:[^\n*_~]|\n(?![ \t]*(?:\n|$|[-*+>|#]|\d{1,9}[.)]))))+?(?<=\S)\1|(_{1,3}(?!_))(?=\S)(?:(?!\2)(?:[^\n*_~]|\n(?![ \t]*(?:\n|$|[-*+>|#]|\d{1,9}[.)]))))+?(?<=\S)\2(?![\p{L}\p{N}(（]))/gu, ') ')
+          .replace(/）(?=[\p{L}\p{N}`\[\uE000]|(\*{1,3}(?!\*)|(?<!~)~~(?!~))(?=\S)(?:(?!\1)(?:[^\n*_~]|\n(?![ \t]*(?:\n|$|[-*+>|#]|\d{1,9}[.)]))))+?(?<=\S)\1|(_{1,3}(?!_))(?=\S)(?:(?!\2)(?:[^\n*_~]|\n(?![ \t]*(?:\n|$|[-*+>|#]|\d{1,9}[.)]))))+?(?<=\S)\2(?![\p{L}\p{N}_(（]))/gu, ') ')
           .replace(/）/g, ')')
           .replace(/\uE004/g, '|');
         const blockLines = normalizedBlock.split('\n');
@@ -2196,13 +2220,13 @@
             return splitTableCells(l, idx === 1, idx < 2);
           });
           const colCount = rows[0].length;
-          // Intentionally align columns by Unicode character count (Array.from(cell).length, matching
+          // Intentionally align columns by Unicode grapheme cluster count (countCellChars(cell), matching
           // the project's golden table fixtures, where 1 CJK, emoji, or ASCII character = 1 unit of width).
           const colWidths = new Array(colCount).fill(3);
           rows.forEach(function (row, rIdx) {
             if (rIdx === 1) return;
             for (let cIdx = 0; cIdx < colCount; cIdx++) {
-              const cellLen = Array.from(row[cIdx] || '').length;
+              const cellLen = countCellChars(row[cIdx] || '');
               if (cellLen > colWidths[cIdx]) {
                 colWidths[cIdx] = cellLen;
               }
@@ -2244,7 +2268,7 @@
             } else {
               formattedLines.push(rowPrefix + '| ' + colWidths.map(function (width, cIdx) {
                 const cell = row[cIdx] || '';
-                return cell + ' '.repeat(width - Array.from(cell).length);
+                return cell + ' '.repeat(width - countCellChars(cell));
               }).concat(row.slice(colCount)).join(' | ') + ' |');
             }
           });

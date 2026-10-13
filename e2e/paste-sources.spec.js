@@ -3290,5 +3290,33 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const lazyListTableBeforeQuoteAndNextBullet = '- item\nA | B | > q\n--- | --- | ---\n | # h | z | extra\n> quote\n- next';
     const lazyListTableBeforeQuoteAndNextBulletMarkdown = await convertPaste(page, { text: lazyListTableBeforeQuoteAndNextBullet });
     expect(lazyListTableBeforeQuoteAndNextBulletMarkdown).toBe('- item\nA | B | > q\n--- | --- | ---\n | # h | z | extra\n> quote\n- next');
+
+    const indentedListTableThenIndentedCode = '  1. item\nA | B\n| --- | --- |\n    code（x）';
+    const indentedListTableThenIndentedCodeMarkdown = await convertPaste(page, { text: indentedListTableThenIndentedCode });
+    expect(indentedListTableThenIndentedCodeMarkdown).toBe('  1. item\n     | A   | B   |\n     | --- | --- |\n    code(x)');
+
+    const explicitKeyYamlFrontMatter = '---\n? foo\n: 版本（舊）\n---\n正文（新）';
+    const explicitKeyYamlFrontMatterMarkdown = await convertPaste(page, { text: explicitKeyYamlFrontMatter });
+    expect(explicitKeyYamlFrontMatterMarkdown).toBe('---\n? foo\n: 版本（舊）\n---\n正文 (新)');
+
+    const mismatchedUnderscoresAndEmojiTable = [
+      'start _x-__（note）',
+      '',
+      '_start _x-__（note）',
+      '',
+      '👨‍👩‍👧‍👦 | B',
+      '--- | ---',
+      'a | b'
+    ].join('\n');
+    const mismatchedUnderscoresAndEmojiTableMarkdown = await convertPaste(page, { text: mismatchedUnderscoresAndEmojiTable });
+    expect(mismatchedUnderscoresAndEmojiTableMarkdown).toBe([
+      'start _x-__(note)',
+      '',
+      '_start _x-__ (note)',
+      '',
+      '| 👨‍👩‍👧‍👦   | B   |',
+      '| --- | --- |',
+      '| a   | b   |'
+    ].join('\n'));
   });
 });
