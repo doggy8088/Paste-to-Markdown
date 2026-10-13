@@ -2788,6 +2788,31 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const crlfInput = '```\r\nCRLF（程式碼）\r\n```\r\n段落（散文）';
     const crlfMarkdown = await convertPaste(page, { text: crlfInput });
     expect(crlfMarkdown).toBe('```\nCRLF(程式碼)\n```\n段落 (散文)');
+
+    const escapedFinalLinkClose = '[share](foo（bar）\\) 說明（測試）';
+    const escapedFinalLinkCloseMarkdown = await convertPaste(page, { text: escapedFinalLinkClose });
+    expect(escapedFinalLinkCloseMarkdown).toBe('[share](foo（bar）\\) 說明 (測試)');
+
+    const incompleteLinkPairedFw = '[x](（x） 說明（測試）';
+    const incompleteLinkPairedFwMarkdown = await convertPaste(page, { text: incompleteLinkPairedFw });
+    expect(incompleteLinkPairedFwMarkdown).toBe('[x](（x） 說明 (測試)');
+
+    const setextAfterIndentedList = 'text\n  - item\n===\n> A | B\n--- | ---';
+    const setextAfterIndentedListMarkdown = await convertPaste(page, { text: setextAfterIndentedList });
+    expect(setextAfterIndentedListMarkdown).toBe('text\n  - item\n===\n> | A   | B   |\n| --- | --- |');
+
+    const manyUrlsOnLine = Array.from({ length: 5000 }, function (_, idx) {
+      return 'https://example.com/a(b)c' + idx;
+    }).concat(['說明（測試）']).join(' ');
+    const expectedManyUrls = Array.from({ length: 5000 }, function (_, idx) {
+      return 'https://example.com/a(b)c' + idx;
+    }).concat(['說明 (測試)']).join(' ');
+    const manyUrlsMarkdown = await convertPaste(page, { text: manyUrlsOnLine });
+    expect(manyUrlsMarkdown).toBe(expectedManyUrls);
+
+    const repeatedListMarkers = '- '.repeat(50);
+    const repeatedListMarkersMarkdown = await convertPaste(page, { text: repeatedListMarkers + 'x（y）' });
+    expect(repeatedListMarkersMarkdown).toBe(repeatedListMarkers + 'x (y)');
   });
 });
 
