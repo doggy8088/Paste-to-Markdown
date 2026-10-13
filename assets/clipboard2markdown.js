@@ -1311,6 +1311,7 @@
           isHeadingLineAt(arr, m);
         }
         const tk = getTableRowParts(arr[idx]);
+        const qk = getQuotePrefix(arr[idx]);
         const prev = idx > 0 ? cache[idx - 1] : null;
         const heading = (
           /^[ \t]{0,3}#{1,6}(?:[ \t]|$)/.test(tk.rest) ||
@@ -1324,7 +1325,7 @@
           !blockSpanLineRe.test(arr[idx - 1]) &&
           getTableRowParts(arr[idx - 1]).rest.trim() !== '' &&
           tk.rest.trim() !== '' &&
-          !hasBlockInterrupt(tk.rest)
+          !hasBlockInterrupt(qk.rest)
         ) ? prev.depth : tk.depth;
         cache[idx] = { heading: heading, depth: depth };
         return heading;
@@ -1424,27 +1425,30 @@
         }).join('\n');
         const prevT = currentProseLines.length > 0 ? getTableRowParts(currentProseLines[currentProseLines.length - 1]) : null;
         const prevProse = prevT ? prevT.rest : '';
+        const prevQuoteDepth = listQuoteDepth;
+        const hasDefTail = /(?:^|\n[ \t]*\n)[ \t]{0,3}\[(?:\\.|[^\\\n\]])+\]:[ \t]*(?:\n[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*)(?:"[^"\n]*"|'[^'\n]*'|\([^()\n]*\)))?[ \t]*$/.test(proseTail);
         const isBlockBoundary =
           !prevT ||
-          qBefore.depth > listQuoteDepth ||
+          qBefore.depth > prevQuoteDepth ||
           prevProse.trim() === '' ||
           (!inProseTable && isHeadingLineAt(currentProseLines, currentProseLines.length - 1)) ||
-          /(?:^|\n[ \t]*\n)[ \t]{0,3}\[(?:\\.|[^\\\n\]])+\]:[ \t]*(?:\n[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*)(?:"[^"\n]*"|'[^'\n]*'|\([^()\n]*\)))?[ \t]*$/.test(proseTail);
+          hasDefTail;
         const prevListIndent = prevProse.trim() === '' ? 0 : listContentIndent;
         const allowAnyOrdered = isBlockBoundary || prevListIndent > 0 || (qBefore.depth === 0 && outerListIndent > 0) || (!inProseTable && lineIdx + 1 < lines.length && TABLE_DELIMITER_REST_RE.test(getQuotePrefix(lines[lineIdx + 1]).rest));
         const isTableStartDelim =
           !isBlockBoundary &&
           !inProseTable &&
-          qBefore.depth <= listQuoteDepth &&
+          qBefore.depth <= prevQuoteDepth &&
+          !(/^[ \t]*\$\$.+\$\$[ \t]*$/.test(prevProse) && countIndentCols(prevProse.match(/^[ \t]*/)[0]) <= (prevT.hasList ? 0 : prevListIndent)) &&
           isTableRowCandidate(currentProseLines[currentProseLines.length - 1]) &&
-          isTableDelimiterLine(line, qBefore.depth < listQuoteDepth ? Infinity : (listContentIndent || prevListIndent || (prevT.hasList ? countIndentCols(prevT.prefix) : 0))) &&
+          isTableDelimiterLine(line, qBefore.depth < prevQuoteDepth ? Infinity : (listContentIndent || prevListIndent || (prevT.hasList ? countIndentCols(prevT.prefix) : 0))) &&
           splitTableCells(currentProseLines[currentProseLines.length - 1]).length === splitTableCells(line, true).length;
         const allowRowList = !inProseTable ? allowAnyOrdered : countIndentCols(qBefore.rest.match(/^[ \t]*/)[0]) < (listContentIndent || (qBefore.depth === 0 ? outerListIndent : 0));
         if (!activeFence && !isTableStartDelim) {
           updateListIndent(line, false, allowRowList);
         }
         const t = getTableRowParts(line, isTableStartDelim, allowRowList);
-        const inSetextHeading = !isBlockBoundary && listContentIndent === prevListIndent && !inProseTable && !t.hasList && getOpenSetextParaDepth(currentProseLines, currentProseLines.length - 1, qBefore.depth, false) >= 0 && hasFollowingSetextUnderline(lineIdx, qBefore.depth, listContentIndent);
+        const inSetextHeading = Boolean(prevT) && qBefore.depth <= prevQuoteDepth && prevProse.trim() !== '' && !hasDefTail && listContentIndent === prevListIndent && !inProseTable && !t.hasList && getOpenSetextParaDepth(currentProseLines, currentProseLines.length - 1, qBefore.depth, false) >= 0 && hasFollowingSetextUnderline(lineIdx, qBefore.depth, listContentIndent);
         const nextFence = updateFenceState(line, activeFence, allowAnyOrdered);
         if (
           nextFence !== activeFence &&
@@ -1465,7 +1469,7 @@
         }
         const maxProseIndent = t.hasList ? 3 : listContentIndent + 3;
         const atBlockStart = isBlockBoundary || t.hasList;
-        if ((atBlockStart || inProseTable) && t.rest.trim() !== '' && countIndentCols(t.rest.match(/^[ \t]*/)[0]) > maxProseIndent) {
+        if (!inSetextHeading && (atBlockStart || inProseTable) && t.rest.trim() !== '' && countIndentCols(t.rest.match(/^[ \t]*/)[0]) > maxProseIndent) {
           flushProse();
           segments.push({ fenced: true, line: line.replace(/（/g, '(').replace(/）/g, ')') });
           return;
@@ -1826,7 +1830,8 @@
         const tableQuoteDepth = listQuoteDepth;
         const headerT = getTableRowParts(currentLine);
         const headerListIndent = listContentIndent || (headerT.hasList ? countIndentCols(headerT.prefix) : 0);
-        const tableListIndent = listOpenedViaTableLookahead ? 0 : ((tableQuoteDepth ? 0 : headerListIndent) || outerListIndent);
+        const baseTableListIndent = (tableQuoteDepth ? 0 : headerListIndent) || outerListIndent;
+        const keepLookaheadUnindented = listOpenedViaTableLookahead;
         if (!headerT.hasList) {
           listOpenedViaTableLookahead = false;
         }
@@ -1879,6 +1884,7 @@
           rows.forEach(function (row, rIdx) {
             const t = getTableRowParts(tableLines[rIdx], rIdx === 1, rIdx < 2);
             const rawPrefix = t.prefix + t.rest.match(/^[ \t]*/)[0];
+            const tableListIndent = (keepLookaheadUnindented && (rIdx === 0 || lineIndex >= normalizedLines.length || normalizedLines[lineIndex].trim() === '')) ? 0 : baseTableListIndent;
             const rowPrefix = t.depth > 0 && outerListIndent > 0 && !t.hasList
               ? ' '.repeat(Math.max(0, outerListIndent - countIndentCols(rawPrefix.match(/^[ \t]*/)[0]))) + rawPrefix
               : rawPrefix + ' '.repeat(Math.max(0, tableListIndent - countIndentCols(rawPrefix)));

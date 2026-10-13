@@ -2917,5 +2917,21 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const codeSpanAfterMultipleEscapedBackticks = '\\`\\``）`中（說明） 與 \\`\\`\\``（`中（說明）';
     const codeSpanAfterMultipleEscapedBackticksMarkdown = await convertPaste(page, { text: codeSpanAfterMultipleEscapedBackticks });
     expect(codeSpanAfterMultipleEscapedBackticksMarkdown).toBe('\\`\\``）`中 (說明) 與 \\`\\`\\``（`中 (說明)');
+
+    const indentedLineInPendingSetext = 'plain\n___\n    code\n:-- | --:\n--- | ---\n===';
+    const indentedLineInPendingSetextMarkdown = await convertPaste(page, { text: indentedLineInPendingSetext });
+    expect(indentedLineInPendingSetextMarkdown).toBe('plain\n___\n    code\n:-- | --:\n--- | ---\n===');
+
+    const defAfterAdjacentBlockquoteListSetext = '> note\n1. item\n>\n===\n[a（x）]: /u\n[use][a（x）]';
+    const defAfterAdjacentBlockquoteListSetextMarkdown = await convertPaste(page, { text: defAfterAdjacentBlockquoteListSetext });
+    expect(defAfterAdjacentBlockquoteListSetextMarkdown).toBe('> note\n1. item\n>\n===\n[a（x）]: /u\n[use][a（x）]');
+
+    const paddedTableRowFollowedByBlockquoteInList = 'text\n9. item\n--- | ---\n--- | ---\nlongvalue | x\nA | B\n> note\ncontinued';
+    const paddedTableRowFollowedByBlockquoteInListMarkdown = await convertPaste(page, { text: paddedTableRowFollowedByBlockquoteInList });
+    expect(paddedTableRowFollowedByBlockquoteInListMarkdown).toBe('text\n9. item\n| ---       | --- |\n   | --------- | --- |\n   | longvalue | x   |\n   | A         | B   |\n> note\ncontinued');
+
+    const singleLineBlockMathWithPipeBeforeDelim = '$$a | b$$\n--- | ---\n\n   $$a | b$$\n--- | ---';
+    const singleLineBlockMathWithPipeBeforeDelimMarkdown = await convertPaste(page, { text: singleLineBlockMathWithPipeBeforeDelim });
+    expect(singleLineBlockMathWithPipeBeforeDelimMarkdown).toBe('$$a | b$$\n--- | ---\n\n   | $$a | b$$ |\n| --- | --- |');
   });
 });
