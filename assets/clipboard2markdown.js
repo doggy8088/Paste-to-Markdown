@@ -971,7 +971,7 @@
         const isListLine = Boolean(listMatch && countIndentCols(listMatch[1]) <= listContentIndent + 3);
         if (isListLine) {
           const markerIndent = countIndentCols(listMatch[1]);
-          listOpenedInPara = (listOpenedInPara || !allowAnyOrdered) && listMatch[1] !== '';
+          listOpenedInPara = (listOpenedInPara || (!allowAnyOrdered && openParaQuoteDepth === listQuoteDepth)) && listMatch[1] !== '';
           listIndents = listIndents.filter(function (n) {
             return n <= markerIndent;
           });
@@ -1024,6 +1024,7 @@
             isProtectedBlock ||
             q.rest.trim() === '' ||
             isListLine ||
+            /^(?:[*+-]|\d{1,9}[.)]) /.test(q.rest) ||
             /^[ \t]{0,3}(?:=+|-+)[ \t]*$/.test(q.rest)
           ))
         ) {
@@ -1033,6 +1034,7 @@
           !isProtectedBlock &&
           q.rest.trim() !== '' &&
           !isListLine &&
+          !/^(?:[*+-]|\d{1,9}[.)]) /.test(q.rest) &&
           !THEMATIC_BREAK_RE.test(q.rest) &&
           !/^[ \t]{0,3}(?:#{1,6}(?:[ \t]|$)|`{3,}(?=[^`]*$)|~{3,}|(?:=+|-+)[ \t]*$|\$\$.+\$\$[ \t]*$)/.test(restoreSpans(q.rest))
         ) {

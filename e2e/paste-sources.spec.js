@@ -3384,7 +3384,14 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       'foo',
       '  2. --- | ---',
       ':--- | ---:',
-      '  A | B'
+      '  A | B',
+      '',
+      'plain',
+      '2. item',
+      ' 1. item',
+      '===',
+      'A | B',
+      '- | -'
     ].join('\n');
     const outdentedQuoteInListAndNonOneListTableInterruptMarkdown = await convertPaste(page, { text: outdentedQuoteInListAndNonOneListTableInterrupt });
     expect(outdentedQuoteInListAndNonOneListTableInterruptMarkdown).toBe([
@@ -3394,7 +3401,14 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       'foo',
       '  2. | --- | --- |',
       '| :-- | --: |',
-      '     | A   | B   |'
+      '     | A   | B   |',
+      '',
+      'plain',
+      '2. item',
+      ' 1. item',
+      '===',
+      'A | B',
+      '- | -'
     ].join('\n'));
 
     const whitespaceHeavyIneligible = 'x\n' + ' '.repeat(20000) + 'y';
