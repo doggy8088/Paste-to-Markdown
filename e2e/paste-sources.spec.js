@@ -2813,6 +2813,22 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const repeatedListMarkers = '- '.repeat(50);
     const repeatedListMarkersMarkdown = await convertPaste(page, { text: repeatedListMarkers + 'x（y）' });
     expect(repeatedListMarkersMarkdown).toBe(repeatedListMarkers + 'x (y)');
+
+    const orderedLazySiblingBullet = 'text\n2. item\n--- | ---\n  - | -';
+    const orderedLazySiblingBulletMarkdown = await convertPaste(page, { text: orderedLazySiblingBullet });
+    expect(orderedLazySiblingBulletMarkdown).toBe(orderedLazySiblingBullet);
+
+    const escapedCloseNestedParen = '[x](a（(\\) 說明（測試）';
+    const escapedCloseNestedParenMarkdown = await convertPaste(page, { text: escapedCloseNestedParen });
+    expect(escapedCloseNestedParenMarkdown).toBe('[x](a（(\\) 說明 (測試)');
+
+    const defAfterLooseListCont = '- item\n\n  cont\n[a（x）]: /u\n[use][a（x）]\n說明（測試）';
+    const defAfterLooseListContMarkdown = await convertPaste(page, { text: defAfterLooseListCont });
+    expect(defAfterLooseListContMarkdown).toBe('- item\n\n  cont\n[a（x）]: /u\n[use][a（x）]\n說明 (測試)');
+
+    const supplementaryCjkTable = '| 𠀀𠀀 | A |\n| --- | --- |\n| 測測 | B |';
+    const supplementaryCjkTableMarkdown = await convertPaste(page, { text: supplementaryCjkTable });
+    expect(supplementaryCjkTableMarkdown).toBe('| 𠀀𠀀  | A   |\n| --- | --- |\n| 測測  | B   |');
   });
 });
 

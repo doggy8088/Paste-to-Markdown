@@ -1176,10 +1176,8 @@
           if (parenStack.length > 0) {
             const outerParen = parenStack[0];
             runEndBeforeTitle.set(outerParen, k);
-            const fallbackParen = lastInsertedSpaceIdx !== -1 && closesSinceSpace < 2 ? parenStack[parenStack.length - 1] : outerParen;
-            if (fallbackCloseIdx > fallbackParen) {
-              runEndBeforeTitle.set(fallbackParen, k);
-              fallbackClose.set(fallbackParen, fallbackCloseIdx);
+            if (fallbackCloseIdx > outerParen) {
+              fallbackClose.set(outerParen, fallbackCloseIdx);
             }
           } else if (!hasUnmatchedClose) {
             runEndBeforeTitle.set(runKey, k);
@@ -1386,7 +1384,7 @@
           isHeadingLineAt(currentProseLines, currentProseLines.length - 1) ||
           /(?:^|\n[ \t]*\n)[ \t]{0,3}\[(?:\\.|[^\\\n\]])+\]:[ \t]*(?:\n[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*)(?:"[^"\n]*"|'[^'\n]*'|\([^()\n]*\)))?[ \t]*$/.test(proseTail);
         const prevListIndent = prevProse.trim() === '' ? 0 : listContentIndent;
-        const allowAnyOrdered = isBlockBoundary || prevListIndent > 0;
+        const allowAnyOrdered = isBlockBoundary || prevListIndent > 0 || (lineIdx + 1 < lines.length && TABLE_DELIMITER_REST_RE.test(getQuotePrefix(lines[lineIdx + 1]).rest));
         const isTableStartDelim =
           !isBlockBoundary &&
           !inProseTable &&
@@ -1573,16 +1571,31 @@
           })
           .replace(/^([ \t]*(?:>[ \t]*|(?:[-*+]|\d{1,9}[.)])[ \t]+)*\[(?:\\.|[^\\\n\]])+\]:[ \t]*)((?:\n[ \t]*(?:>[ \t]*)*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*(?:>[ \t]*)*)(?:"(?:\\.|[^"\n]|\n(?![ \t]*\n))*"|'(?:\\.|[^'\n]|\n(?![ \t]*\n))*'|\((?:\\.|[^()\n]|\n(?![ \t]*\n))*\))[ \t]*(?=\n|$))?)/gm, function (match, prefix, destAndTitle, offset, fullStr) {
             while (preDefCursor < offset) {
+              if (preDefCursor === 0) {
+                listContentIndent = 0;
+                outerListIndent = 0;
+                listQuoteDepth = 0;
+                quoteCanLazyContinue = false;
+                listIndents = [];
+                listSawBlank = false;
+                listOpenedInPara = false;
+                minLazyIndent = 0;
+                outerMinLazy = 0;
+              }
               const nlIdx = fullStr.indexOf('\n', preDefCursor);
-              preDefLines.push(fullStr.slice(preDefCursor, nlIdx));
+              const line = fullStr.slice(preDefCursor, nlIdx);
+              updateListIndent(line, false, preDefLines.length === 0 || getQuotePrefix(preDefLines[preDefLines.length - 1]).rest.trim() === '' || listContentIndent > 0);
+              preDefLines.push(line);
               preDefCursor = nlIdx + 1;
             }
             const prevQ = getQuotePrefix(preDefLines[preDefLines.length - 1] || '');
+            const curQ = getQuotePrefix(prefix);
             if (
               offset > 0 &&
               offset !== validDefEnd &&
               !/[-*+]|\d[.)]/.test(prefix.slice(0, prefix.indexOf('['))) &&
-              getQuotePrefix(prefix).depth <= prevQ.depth &&
+              curQ.depth <= prevQ.depth &&
+              countIndentCols(curQ.rest.match(/^[ \t]*/)[0]) >= minLazyIndent &&
               prevQ.rest.trim() !== '' &&
               !isHeadingLineAt(preDefLines, preDefLines.length - 1)
             ) {
@@ -1739,7 +1752,7 @@
         const rawCurrentLine = isBlockLine ? restoreSpans(currentLine) : currentLine;
         const prevLine = lineIndex > 0 ? normalizedLines[lineIndex - 1] : '';
         const prevListIndent = (prevLine && restoreSpans(prevLine).trim() !== '') ? listContentIndent : 0;
-        const allowAnyOrdered = !prevLine || blockSpanLineRe.test(prevLine) || prevListIndent > 0 || getQuotePrefix(rawCurrentLine).depth > listQuoteDepth || getTableRowParts(prevLine).rest.trim() === '' || isHeadingLineAt(normalizedLines, lineIndex - 1);
+        const allowAnyOrdered = !prevLine || blockSpanLineRe.test(prevLine) || prevListIndent > 0 || getQuotePrefix(rawCurrentLine).depth > listQuoteDepth || getTableRowParts(prevLine).rest.trim() === '' || isHeadingLineAt(normalizedLines, lineIndex - 1) || (lineIndex + 1 < normalizedLines.length && TABLE_DELIMITER_REST_RE.test(getQuotePrefix(normalizedLines[lineIndex + 1]).rest));
         updateListIndent(rawCurrentLine, isBlockLine, allowAnyOrdered);
         if (isBlockLine) {
           formattedLines.push(currentLine);
@@ -1784,14 +1797,13 @@
             return splitTableCells(l, idx === 1);
           });
           const colCount = rows[0].length;
-          // Intentionally align columns by character count (.length, matching Prettier's default
-          // Markdown table formatter and the project's golden table fixtures, where 1 CJK or ASCII
-          // character = 1 unit of column width).
+          // Intentionally align columns by Unicode character count (Array.from(cell).length, matching
+          // the project's golden table fixtures, where 1 CJK, emoji, or ASCII character = 1 unit of width).
           const colWidths = new Array(colCount).fill(3);
           rows.forEach(function (row, rIdx) {
             if (rIdx === 1) return;
             for (let cIdx = 0; cIdx < colCount; cIdx++) {
-              const cellLen = (row[cIdx] || '').length;
+              const cellLen = Array.from(row[cIdx] || '').length;
               if (cellLen > colWidths[cIdx]) {
                 colWidths[cIdx] = cellLen;
               }
@@ -1821,7 +1833,8 @@
               }).join(' | ') + ' |');
             } else {
               formattedLines.push(rowPrefix + '| ' + colWidths.map(function (width, cIdx) {
-                return (row[cIdx] || '').padEnd(width, ' ');
+                const cell = row[cIdx] || '';
+                return cell + ' '.repeat(width - Array.from(cell).length);
               }).concat(row.slice(colCount)).join(' | ') + ' |');
             }
           });
