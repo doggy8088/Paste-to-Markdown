@@ -3009,6 +3009,14 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const rawHtmlAfterQuotedList = '> - item\n<div>\n> x\n- | -\nA | B\n--- | ---';
     const rawHtmlAfterQuotedListMarkdown = await convertPaste(page, { text: rawHtmlAfterQuotedList });
     expect(rawHtmlAfterQuotedListMarkdown).toBe('> - item\n<div>\n> x\n- | -\nA | B\n--- | ---');
+
+    const dedentedFirstContentInListFence = '- item\n    ```\nA | B\n--- | ---';
+    const dedentedFirstContentInListFenceMarkdown = await convertPaste(page, { text: dedentedFirstContentInListFence });
+    expect(dedentedFirstContentInListFenceMarkdown).toBe('- item\n    ```\nA | B\n--- | ---');
+
+    const incompleteLinkInUnmatchedParenRun = '([x](foo） 與 ([x](foo(bar）';
+    const incompleteLinkInUnmatchedParenRunMarkdown = await convertPaste(page, { text: incompleteLinkInUnmatchedParenRun });
+    expect(incompleteLinkInUnmatchedParenRunMarkdown).toBe('([x](foo） 與 ([x](foo(bar）');
   });
 });
 

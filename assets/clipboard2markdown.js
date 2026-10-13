@@ -1018,14 +1018,15 @@
         for (let d = 0; d < activeBlock.quoteDepth; d++) {
           restAtDepth = restAtDepth.replace(/^[ \t]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)*>[ \t]?/, '');
         }
+        const lineIndent = countIndentCols(restAtDepth.match(/^[ \t]*/)[0]);
         if (
           activeBlock.containerIndent > 0 &&
           restAtDepth.trim() !== '' &&
-          countIndentCols(restAtDepth.match(/^[ \t]*/)[0]) < activeBlock.containerIndent
+          lineIndent < activeBlock.containerIndent
         ) {
           return (
             prevBlank ||
-            activeBlock.hasContent === false ||
+            (activeBlock.hasContent === false && lineIndent < activeBlock.minFirstContentIndent) ||
             /^ {0,3}(?:#{1,6}(?:[ \t]|$)|(?:[-*+]|1[.)])[ \t]|(?:\*[ \t]*){3,}$|(?:-[ \t]*){3,}$|(?:_[ \t]*){3,}$|`{3,}(?=[^`]*$)|~{3,})/.test(restAtDepth)
           );
         }
@@ -1044,11 +1045,13 @@
             if (openIndent > maxOpenIndent) {
               return null;
             }
+            const prevListLevelIndent = listIndents.length >= 2 ? listIndents[listIndents.length - 2] : 0;
             return {
               char: openMatch[3][0],
               length: openMatch[3].length,
               quoteDepth: q.depth,
               containerIndent: containerIndent,
+              minFirstContentIndent: (!listSawBlank && listOffset === 0 && openIndent - containerIndent >= containerIndent - prevListLevelIndent) ? prevListLevelIndent : containerIndent,
               maxCloseIndent: containerIndent + 3,
               hasContent: false
             };
@@ -1211,11 +1214,11 @@
             }
             k++;
           }
-          if (parenStack.length > 0) {
-            const outerParen = parenStack[0];
-            runEndBeforeTitle.set(outerParen, k);
-            if (fallbackCloseIdx > outerParen) {
-              fallbackClose.set(outerParen, fallbackCloseIdx);
+          for (let p = 0; p < parenStack.length; p++) {
+            const openParen = parenStack[p];
+            runEndBeforeTitle.set(openParen, k);
+            if (fallbackCloseIdx > openParen) {
+              fallbackClose.set(openParen, fallbackCloseIdx);
             }
           }
           if (!hasUnmatchedClose) {
