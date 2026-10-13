@@ -1449,9 +1449,10 @@
           tk.rest.trim() !== '' &&
           !hasBlockInterrupt(qk.rest)
         ) ? prev.depth : tk.depth;
+        const nextLine = idx + 1 < arr.length ? arr[idx + 1] : curForEachLine;
         const noSetext = !heading && tk.rest.trim() !== '' && !listContentIndent && !outerListIndent && (
           (idx > 0 && !prev.heading && getTableRowParts(arr[idx - 1]).rest.trim() !== '' && !/^[ \t]{0,3}(?:[*+-]|\d{1,9}[.)])[ \t]/.test(getQuotePrefix(arr[idx - 1]).rest) && /^(?!1[.)])\d{1,9}[.)][ \t]/.test(qk.rest)) ||
-          Boolean(prev && prev.noSetext && tk.depth <= prev.depth)
+          Boolean(prev && prev.noSetext && tk.depth <= prev.depth && !TABLE_DELIMITER_REST_RE.test(getQuotePrefix(nextLine).rest))
         );
         cache[idx] = { heading: heading, isDef: standaloneDef, depth: depth, noSetext: noSetext, defCont: defCont };
         return heading;
@@ -1547,7 +1548,9 @@
         return foundUnderline;
       };
       let proseParaStartIdx = 0;
+      let curForEachLine = '';
       lines.forEach(function (line, lineIdx) {
+        curForEachLine = line;
         if (fmEndIdx > 0 && lineIdx <= fmEndIdx) {
           segments.push({ fenced: true, line: line });
           return;
@@ -1561,6 +1564,9 @@
           segments.push({ fenced: true, line: line });
           if (qBefore.depth <= activeHtml.quoteDepth && activeHtml.htmlRe.test(qBefore.rest)) {
             activeHtml = null;
+            if (qBefore.rest.trim() === '') {
+              updateListIndent(line, true);
+            }
           }
           return;
         }

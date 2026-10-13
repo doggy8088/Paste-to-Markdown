@@ -3202,5 +3202,13 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const deeplyNestedBrackets = '['.repeat(128000) + ']'.repeat(128000) + '（x）';
     const deeplyNestedBracketsMarkdown = await convertPaste(page, { text: deeplyNestedBrackets });
     expect(deeplyNestedBracketsMarkdown).toBe('['.repeat(128000) + ']'.repeat(128000) + ' (x)');
+
+    const topLevelHtmlBlockAfterListHtmlCloseBlankLine = '- x\n</div>\n\n<div>\n1. item\n> A | B\n--- | ---\n\n- x\n<pre>\nraw\n</pre>\n中（文）';
+    const topLevelHtmlBlockAfterListHtmlCloseBlankLineMarkdown = await convertPaste(page, { text: topLevelHtmlBlockAfterListHtmlCloseBlankLine });
+    expect(topLevelHtmlBlockAfterListHtmlCloseBlankLineMarkdown).toBe('- x\n</div>\n\n<div>\n1. item\n> A | B\n--- | ---\n\n- x\n<pre>\nraw\n</pre>\n中 (文)');
+
+    const lazyQuotedSetextHeadingAfterOrderedItem = '> --- | ---\n2. item\nx\n> --- | ---\n> --- | ---\n> q\n===';
+    const lazyQuotedSetextHeadingAfterOrderedItemMarkdown = await convertPaste(page, { text: lazyQuotedSetextHeadingAfterOrderedItem });
+    expect(lazyQuotedSetextHeadingAfterOrderedItemMarkdown).toBe('> --- | ---\n2. item\nx\n> --- | ---\n> --- | ---\n> q\n===');
   });
 });
