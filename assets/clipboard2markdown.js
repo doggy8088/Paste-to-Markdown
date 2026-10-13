@@ -980,7 +980,11 @@
           minLazyIndent = listIndents.filter(function (n) {
             return n <= minLazyIndent;
           }).pop() || 0;
-          listIndents.push(nextIndent);
+          let markerPrefix = '';
+          listMatch[0].match(/[ \t]*(?:[-*+]|\d{1,9}[.)])(?: {1,4}(?! )| (?= {4})|\t)/g).forEach(function (m) {
+            markerPrefix += m;
+            listIndents.push(countIndentCols(markerPrefix));
+          });
           listContentIndent = nextIndent;
           listSawBlank = minLazyIndent > 0;
           if (listQuoteDepth === 0) {
@@ -1206,17 +1210,29 @@
         return restoreSpans(lbl).replace(/\s+/g, ' ').toLowerCase();
       };
 
-      const closesPreUrlEmphasis = function (preWithNext, delimChar) {
+      const compactEmphWithNext = function (str) {
+        return str
+          .split('\n\n')
+          .pop()
+          .replace(/(?<=[\p{L}\p{N}])_+(?=[\p{L}\p{N}])/gu, 'a')
+          .replace(/(?:^|\s+)(?:[^\s*_~]+\s+)+|\s+/g, ' ')
+          .replace(/((?:^|\s)([*_~]+)[^\s*_~]+\s+)(?:\2[^\s*_~]+\s+)+/g, '$1')
+          .replace(/((?<=^|[\s\p{P}$+<=>`^|~])\*+(?=[^\s*])|\*+(?=[^\s\p{P}$+<=>`^|~]))[\s\S]*?(?<![\s*])\1/gu, 'a')
+          .replace(/(?<=^|[\s\p{P}$+<=>`^|~])(?<!_)(_+)(?=[^\s_])[\s\S]*?(?<![\s_])\1(?=$|[\s\p{P}$+<=>`^|~])(?!_)/gu, 'a')
+          .replace(/(?<!~)(~~?)(?=[^\s~])[\s\S]*?(?<![\s~])\1(?!~)/g, 'a')
+          .replace(/[*_~]+(?=\s)/g, 'a')
+          .replace(/(?:^|\s+)(?:[^\s*_~]+\s+)+|\s+/g, ' ')
+          .replace(/((?:^|\s)([*_~]+)[^\s*_~]+\s+)(?:\2[^\s*_~]+\s+)+/g, '$1');
+      };
+
+      const closesPreUrlEmphasis = function (compactedWithNext, delimChar) {
         if (delimChar === '*') {
-          const stripped = preWithNext.replace(/((?<=^|[\s\p{P}$+<=>`^|~])\*+(?=[^\s*])|\*+(?=[^\s\p{P}$+<=>`^|~]))[\s\S]*?(?<![\s*])\1/gu, '');
-          return /(?<=^|[\s\p{P}$+<=>`^|~])\*+(?=[^\s*])|\*+(?=[^\s\p{P}$+<=>`^|~])/u.test(stripped);
+          return /(?<=^|[\s\p{P}$+<=>`^|~])\*+(?=[^\s*])|\*+(?=[^\s\p{P}$+<=>`^|~])/u.test(compactedWithNext);
         }
         if (delimChar === '_') {
-          const stripped = preWithNext.replace(/(?<=^|[\s\p{P}$+<=>`^|~])(?<!_)(_+)(?=[^\s_])[\s\S]*?(?<![\s_])\1(?=$|[\s\p{P}$+<=>`^|~])(?!_)/gu, '');
-          return /(?<=^|[\s\p{P}$+<=>`^|~])(?<!_)_+(?=[^\s_])/u.test(stripped);
+          return /(?<=^|[\s\p{P}$+<=>`^|~])(?<!_)_+(?=[^\s_])/u.test(compactedWithNext);
         }
-        const stripped = preWithNext.replace(/(?<!~)(~~?)(?=[^\s~])[\s\S]*?(?<![\s~])\1(?!~)/g, '');
-        return /(?<!~)~~?(?=[^\s~])/.test(stripped);
+        return /(?<!~)~~?(?=[^\s~])/.test(compactedWithNext);
       };
 
       const maskLinkDestinations = function (str) {
@@ -1984,7 +2000,8 @@
         }
         const codeAndHtmlMaskedBlock = maskLinkDestinations(seg.preMasked);
         let urlScanPos = 0;
-        let urlParaStart = 0;
+        let urlEmphPos = 0;
+        let urlEmphPrefix = '';
         let outerFwDepth = 0;
         const maskedBlock = codeAndHtmlMaskedBlock.replace(
           /(?:(?:ftp|https?):\/\/|www\.)(?:[a-zA-Z0-9-]+\.?)+(?:\\.|(?!\][(\[]\uE002)[^\s<\\\uE000-\uE004])*/gi,
@@ -1993,9 +2010,6 @@
             for (; urlScanPos < offset; urlScanPos++) {
               if (fullStr[urlScanPos] === '\n') {
                 outerFwDepth = 0;
-                if (urlScanPos > 0 && fullStr[urlScanPos - 1] === '\n') {
-                  urlParaStart = urlScanPos + 1;
-                }
               } else if (fullStr[urlScanPos] === '（') {
                 outerFwDepth++;
               } else if (fullStr[urlScanPos] === '）' && outerFwDepth > 0) {
@@ -2006,8 +2020,13 @@
             let hwDepth = 0;
             let end = 0;
             while (end < match.length) {
-              if (/^(?:[*~]|_(?![\p{L}\p{N}_]))/u.test(match.slice(end)) && closesPreUrlEmphasis(fullStr.slice(urlParaStart, offset + 1), match[end])) {
-                break;
+              if (/^(?:[*~]|_(?![\p{L}\p{N}_]))/u.test(match.slice(end))) {
+                const urlEmphWithNext = compactEmphWithNext(urlEmphPrefix + fullStr.slice(urlEmphPos, offset + 1));
+                urlEmphPrefix = urlEmphWithNext.slice(0, -1);
+                urlEmphPos = offset;
+                if (closesPreUrlEmphasis(urlEmphWithNext, match[end])) {
+                  break;
+                }
               }
               if (match[end] === '（') {
                 fwDepth++;
@@ -2067,6 +2086,8 @@
         // In CommonMark, `）` before `*`/`**` followed by non-punctuation makes the closing run
         // left-flanking only, so converting `）` to `)` and inserting a space after the closing
         // delimiter is required for the emphasis to render as intended by the golden fixtures.
+        let emphPos = 0;
+        let emphPrefix = '';
         const normalizedBlock = maskedBlock
           .replace(/(?<!\\)(?:\\\\)*\\(?=[（）])/g, '$&\\')
           .replace(
@@ -2075,10 +2096,7 @@
               const prevChar = offset > 0 ? fullStr[offset - 1] : '';
               const closeDelim = delim + (extraClose || '');
               const rest = fullStr.slice(offset + match.length);
-              if (
-                (delim[0] === '_' && (/[\p{L}\p{N}]/u.test(prevChar) || /^[\p{L}\p{N}]/u.test(rest))) ||
-                (((extraClose && /^[*_]+$/.test(extraClose)) || prevChar === delim[0]) && !closesPreUrlEmphasis(fullStr.slice(fullStr.lastIndexOf('\n\n', offset - 1) + 1, offset) + 'a', delim[0]))
-              ) {
+              if (delim[0] === '_' && (/[\p{L}\p{N}]/u.test(prevChar) || /^[\p{L}\p{N}]/u.test(rest))) {
                 return match;
               }
               const innerTrailingMatch = inner.match(/）((?:\*+|_+|~~)*)$/);
@@ -2086,6 +2104,14 @@
               const unmatchedInner = (innerPrefix.replace(/(\*{1,3}|_{1,3}|~~)(?=\S).+?(?<=\S)\1/g, '').match(/(?<=(?:^|[^\\])(?:\\\\)*)(?:\*+|(?<![\p{L}\p{N}])_+|_+(?![\p{L}\p{N}])|~~)/gu) || []).join('');
               if ((!innerTrailingMatch && !rest.startsWith('（')) || unmatchedInner !== (innerTrailingMatch ? innerTrailingMatch[1] : '')) {
                 return match;
+              }
+              if ((extraClose && /^[*_]+$/.test(extraClose)) || prevChar === delim[0]) {
+                const emphWithNext = compactEmphWithNext(emphPrefix + fullStr.slice(emphPos, offset) + 'a');
+                emphPrefix = emphWithNext.slice(0, -1);
+                emphPos = offset;
+                if (!closesPreUrlEmphasis(emphWithNext, delim[0])) {
+                  return match;
+                }
               }
               const updatedInner = innerTrailingMatch
                 ? inner.slice(0, innerTrailingMatch.index) + ')' + innerTrailingMatch[1]

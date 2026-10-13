@@ -3318,5 +3318,13 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '| --- | --- |',
       '| a   | b   |'
     ].join('\n'));
+
+    const inlineNestedListLazyTableExit = '  1. - A | B\n--- | ---\nx（1）';
+    const inlineNestedListLazyTableExitMarkdown = await convertPaste(page, { text: inlineNestedListLazyTableExit });
+    expect(inlineNestedListLazyTableExitMarkdown).toBe('  1. - A | B\n--- | ---\nx (1)');
+
+    const repeatedEmphasizedUrls = '*http://x/a* '.repeat(4000) + '（x）';
+    const repeatedEmphasizedUrlsMarkdown = await convertPaste(page, { text: repeatedEmphasizedUrls });
+    expect(repeatedEmphasizedUrlsMarkdown).toBe('*http://x/a* '.repeat(4000) + '(x)');
   });
 });
