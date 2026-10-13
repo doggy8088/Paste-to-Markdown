@@ -2243,7 +2243,36 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '---',
       '    code',
       '```',
-      '[x](foo(a）)'
+      '[x](foo(a）)',
+      '',
+      'text',
+      '2. A | B',
+      '- | -',
+      '',
+      '- item',
+      '',
+      '  > A | B',
+      '--- | ---',
+      '',
+      '- item',
+      '',
+      '  > A | B',
+      '  > --- | ---',
+      'x（y） | z',
+      '',
+      'text',
+      'A | B',
+      '- | -',
+      '# h',
+      'C | D',
+      '- | -',
+      '',
+      'text',
+      '```',
+      'q（1）',
+      'text2',
+      '```',
+      'q（2）'
     ].join('\n');
     const expected = [
       '---',
@@ -2669,10 +2698,51 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '---',
       '    code',
       '```',
-      '[x](foo(a）)'
+      '[x](foo(a）)',
+      '',
+      'text',
+      '2. A | B',
+      '- | -',
+      '',
+      '- item',
+      '',
+      '  > A | B',
+      '--- | ---',
+      '',
+      '- item',
+      '',
+      '  > | A   | B   |',
+      '  > | --- | --- |',
+      'x (y) | z',
+      '',
+      'text',
+      '| A   | B   |',
+      '| --- | --- |',
+      '# h',
+      '| C   | D   |',
+      '| --- | --- |',
+      '',
+      'text',
+      '```',
+      'q(1)',
+      'text2',
+      '```',
+      'q (2)'
     ].join('\n');
     const markdown = await convertPaste(page, { text: input });
     expect(markdown).toBe(expected);
+
+    const repeatedSetextInput = Array(30).fill('===').join('\n') + '\n文字（一）';
+    const repeatedSetextMarkdown = await convertPaste(page, { text: repeatedSetextInput });
+    expect(repeatedSetextMarkdown).toBe(Array(30).fill('===').join('\n') + '\n文字 (一)');
+
+    const repeatedTablesInput = Array(200).fill('A | B\n- | -\n# h').join('\n');
+    const repeatedTablesMarkdown = await convertPaste(page, { text: repeatedTablesInput });
+    expect(repeatedTablesMarkdown).toBe(Array(200).fill('| A   | B   |\n| --- | --- |\n# h').join('\n'));
+
+    const repeatedFencesInput = Array(200).fill('text\n```\nq（x）\n```').join('\n');
+    const repeatedFencesMarkdown = await convertPaste(page, { text: repeatedFencesInput });
+    expect(repeatedFencesMarkdown).toBe(Array(200).fill('text\n```\nq(x)\n```').join('\n'));
 
     const deepQuotes = '> '.repeat(25);
     const deepQuotesMarkdown = await convertPaste(page, { text: deepQuotes + 'x（y）' });
