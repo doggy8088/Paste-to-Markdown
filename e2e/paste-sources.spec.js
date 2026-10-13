@@ -3017,6 +3017,14 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const incompleteLinkInUnmatchedParenRun = '([x](foo） 與 ([x](foo(bar）';
     const incompleteLinkInUnmatchedParenRunMarkdown = await convertPaste(page, { text: incompleteLinkInUnmatchedParenRun });
     expect(incompleteLinkInUnmatchedParenRunMarkdown).toBe('([x](foo） 與 ([x](foo(bar）');
+
+    const siblingListAfterEmptyListQuote = '- >\nA | B\n- | -';
+    const siblingListAfterEmptyListQuoteMarkdown = await convertPaste(page, { text: siblingListAfterEmptyListQuote });
+    expect(siblingListAfterEmptyListQuoteMarkdown).toBe('- >\nA | B\n- | -');
+
+    const lazyQuoteFenceInSetextHeading = 'plain\n> ~~~\n[x](url (t（a）)) 與 說明（測試）\n===\n\nplain\n> text\n> ~~~\n[x](url (t（b）))\n===';
+    const lazyQuoteFenceInSetextHeadingMarkdown = await convertPaste(page, { text: lazyQuoteFenceInSetextHeading });
+    expect(lazyQuoteFenceInSetextHeadingMarkdown).toBe('plain\n> ~~~\n[x](url (t（a）)) 與 說明 (測試)\n===\n\nplain\n> text\n> ~~~\n[x](url (t（b）))\n===');
   });
 });
 

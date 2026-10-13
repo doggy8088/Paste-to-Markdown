@@ -964,11 +964,9 @@
           outerListIndent = listContentIndent;
           outerMinLazy = minLazyIndent;
         } else {
-          const outerOrderedMatch = q.prefix.match(/^[ \t]*\d{1,9}[.)][ \t]+/);
-          if (outerOrderedMatch) {
-            outerListIndent = countIndentCols(outerOrderedMatch[0]);
-          } else if (/^[ \t]*[-*+][ \t]/.test(q.prefix)) {
-            outerListIndent = 0;
+          const outerListMatch = q.prefix.match(/^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+/);
+          if (outerListMatch) {
+            outerListIndent = countIndentCols(outerListMatch[0]);
           }
         }
         if (
@@ -1436,8 +1434,8 @@
       let setextLookaheadIdx = -1;
       let setextLookaheadKey = '';
       let setextLookaheadRes = false;
-      const hasFollowingSetextUnderline = function (startIdx, quoteDepth, indentCols) {
-        const key = quoteDepth + ':' + indentCols;
+      const hasFollowingSetextUnderline = function (startIdx, minQuoteDepth, maxQuoteDepth, indentCols) {
+        const key = minQuoteDepth + ':' + maxQuoteDepth + ':' + indentCols;
         if (setextLookaheadKey === key && startIdx < setextLookaheadIdx) {
           return setextLookaheadRes;
         }
@@ -1446,8 +1444,8 @@
         for (; k < lines.length; k++) {
           const mq = getQuotePrefix(lines[k]);
           const mRest = mq.rest.slice(Math.min(mq.rest.match(/^ */)[0].length, indentCols));
-          if (mq.depth < quoteDepth || (mq.depth === quoteDepth && (mRest.trim() === '' || /^(?:[*+-]|\d{1,9}[.)])[ \t]/.test(mRest) || /^ {0,3}(?:=+|-+)[ \t]*$/.test(mRest)))) {
-            foundUnderline = mq.depth === quoteDepth && /^ {0,3}(?:=+|-+)[ \t]*$/.test(mRest);
+          if (mq.depth < minQuoteDepth || (mq.depth <= maxQuoteDepth && (mRest.trim() === '' || /^(?:[*+-]|\d{1,9}[.)])[ \t]/.test(mRest) || /^ {0,3}(?:=+|-+)[ \t]*$/.test(mRest)))) {
+            foundUnderline = mq.depth >= minQuoteDepth && mq.depth <= maxQuoteDepth && /^ {0,3}(?:=+|-+)[ \t]*$/.test(mRest);
             break;
           }
         }
@@ -1508,7 +1506,10 @@
           updateListIndent(line, false, allowRowList);
         }
         const t = getTableRowParts(line, isTableStartDelim, allowRowList);
-        const inSetextHeading = Boolean(prevT) && qBefore.depth <= prevQuoteDepth && prevProse.trim() !== '' && !hasDefTail && listContentIndent === prevListIndent && !inProseTable && !t.hasList && getOpenSetextParaDepth(currentProseLines, currentProseLines.length - 1, qBefore.depth, false) >= 0 && hasFollowingSetextUnderline(lineIdx, qBefore.depth, listContentIndent);
+        const openSetextDepth = (prevT && prevProse.trim() !== '' && !hasDefTail && (qBefore.depth > prevQuoteDepth ? outerListIndent : listContentIndent) === prevListIndent && !inProseTable && !t.hasList)
+          ? getOpenSetextParaDepth(currentProseLines, currentProseLines.length - 1, qBefore.depth, false)
+          : -1;
+        const inSetextHeading = openSetextDepth >= 0 && hasFollowingSetextUnderline(lineIdx, openParaQuoteDepth >= 0 && openParaQuoteDepth < openSetextDepth ? openParaQuoteDepth : openSetextDepth, openSetextDepth, prevListIndent);
         const nextFence = updateFenceState(line, activeFence, allowAnyOrdered);
         if (
           nextFence !== activeFence &&
@@ -1921,7 +1922,7 @@
         const tableQuoteDepth = listQuoteDepth;
         const headerT = getTableRowParts(currentLine);
         const headerListIndent = listContentIndent || (headerT.hasList ? countIndentCols(headerT.prefix) : 0);
-        const baseTableListIndent = (tableQuoteDepth ? 0 : headerListIndent) || outerListIndent;
+        const baseTableListIndent = (tableQuoteDepth ? 0 : headerListIndent) || (outerListIndent >= 3 ? outerListIndent : 0);
         const keepLookaheadUnindented = listOpenedViaTableLookahead;
         if (!headerT.hasList) {
           listOpenedViaTableLookahead = false;
@@ -1976,7 +1977,7 @@
             const t = getTableRowParts(tableLines[rIdx], rIdx === 1, rIdx < 2);
             const rawPrefix = t.prefix + t.rest.match(/^[ \t]*/)[0];
             const tableListIndent = (keepLookaheadUnindented && (rIdx === 0 || lineIndex >= normalizedLines.length || normalizedLines[lineIndex].trim() === '')) ? 0 : baseTableListIndent;
-            const rowPrefix = t.depth > 0 && outerListIndent > 0 && !t.hasList
+            const rowPrefix = t.depth > 0 && outerListIndent >= 3 && !t.hasList
               ? ' '.repeat(Math.max(0, outerListIndent - countIndentCols(rawPrefix.match(/^[ \t]*/)[0]))) + rawPrefix
               : rawPrefix + ' '.repeat(Math.max(0, tableListIndent - countIndentCols(rawPrefix)));
             if (rIdx === 1) {
