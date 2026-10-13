@@ -3094,5 +3094,29 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const tabbedBulletInParagraphBeforeTable = 'plain\n-\titem\nA | B\n--- | ---';
     const tabbedBulletInParagraphBeforeTableMarkdown = await convertPaste(page, { text: tabbedBulletInParagraphBeforeTable });
     expect(tabbedBulletInParagraphBeforeTableMarkdown).toBe('plain\n-\titem\n| A   | B   |\n| --- | --- |');
+
+    const invalidBacktickFenceBeforeValidFence = '``` a`\n```\nA | B\n--- | ---';
+    const invalidBacktickFenceBeforeValidFenceMarkdown = await convertPaste(page, { text: invalidBacktickFenceBeforeValidFence });
+    expect(invalidBacktickFenceBeforeValidFenceMarkdown).toBe('``` a`\n```\nA | B\n--- | ---');
+
+    const indentedFenceInListThenDedentedTable = '1. item\n    ```\nA | B\n--- | ---';
+    const indentedFenceInListThenDedentedTableMarkdown = await convertPaste(page, { text: indentedFenceInListThenDedentedTable });
+    expect(indentedFenceInListThenDedentedTableMarkdown).toBe('1. item\n    ```\n| A   | B   |\n| --- | --- |');
+
+    const invalidBacktickFenceAfterLazyListTable = '- item\nA | B\n--- | ---\n``` a`';
+    const invalidBacktickFenceAfterLazyListTableMarkdown = await convertPaste(page, { text: invalidBacktickFenceAfterLazyListTable });
+    expect(invalidBacktickFenceAfterLazyListTableMarkdown).toBe('- item\n  | A   | B   |\n  | --- | --- |\n``` a`');
+
+    const doubleDollarInsideMultiLineInlineContext = '> quote\n$$x\n$x$y（z）$\n---';
+    const doubleDollarInsideMultiLineInlineContextMarkdown = await convertPaste(page, { text: doubleDollarInsideMultiLineInlineContext });
+    expect(doubleDollarInsideMultiLineInlineContextMarkdown).toBe('> quote\n$$x\n$x$y（z）$\n---');
+
+    const unclosedIndentedFenceInListEndedByOrdered = '[a（x）]: /u\n- item\n    ```\n2. item\n[a（x）]';
+    const unclosedIndentedFenceInListEndedByOrderedMarkdown = await convertPaste(page, { text: unclosedIndentedFenceInListEndedByOrdered });
+    expect(unclosedIndentedFenceInListEndedByOrderedMarkdown).toBe('[a（x）]: /u\n- item\n    ```\n2. item\n[a（x）]');
+
+    const type7HtmlBeforeTableLookahead = 'plain\n<span title="x（y）">\n--- | ---\n--- | ---';
+    const type7HtmlBeforeTableLookaheadMarkdown = await convertPaste(page, { text: type7HtmlBeforeTableLookahead });
+    expect(type7HtmlBeforeTableLookaheadMarkdown).toBe('plain\n<span title="x（y）">\n--- | ---\n--- | ---');
   });
 });
