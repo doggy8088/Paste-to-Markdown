@@ -1140,7 +1140,10 @@
               k += 2;
               continue;
             }
-            if (str[k] === '[') {
+            if (
+              str[k] === '[' &&
+              !(bracketStack.length === 0 && /^[^\[\]]*(?:(?:ftp|https?):\/\/|www\.)(?:[a-zA-Z0-9-]+\.?)+/i.test(str.slice(runStart, k)))
+            ) {
               bracketStack.push(k);
             } else if (str[k] === ']' && bracketStack.length > 0) {
               labelOpenByClose.set(k, bracketStack.pop());
@@ -1388,7 +1391,7 @@
           !prevT ||
           qBefore.depth > listQuoteDepth ||
           prevProse.trim() === '' ||
-          isHeadingLineAt(currentProseLines, currentProseLines.length - 1) ||
+          (!inProseTable && isHeadingLineAt(currentProseLines, currentProseLines.length - 1)) ||
           /(?:^|\n[ \t]*\n)[ \t]{0,3}\[(?:\\.|[^\\\n\]])+\]:[ \t]*(?:\n[ \t]*)?(?:<[^>\r\n]+>|\S+)(?:(?:[ \t]+|[ \t]*\n[ \t]*)(?:"[^"\n]*"|'[^'\n]*'|\([^()\n]*\)))?[ \t]*$/.test(proseTail);
         const prevListIndent = prevProse.trim() === '' ? 0 : listContentIndent;
         const allowAnyOrdered = isBlockBoundary || prevListIndent > 0 || (qBefore.depth === 0 && outerListIndent > 0) || (!inProseTable && lineIdx + 1 < lines.length && TABLE_DELIMITER_REST_RE.test(getQuotePrefix(lines[lineIdx + 1]).rest));
@@ -1776,7 +1779,7 @@
         if (listContentIndent === 0) {
           listOpenedViaTableLookahead = false;
         } else if (prevIndentBeforeUpdate === 0) {
-          listOpenedViaTableLookahead = !baseAllowAnyOrdered;
+          listOpenedViaTableLookahead = !baseAllowAnyOrdered && /^[ \t]*(?!1[.)])\d{1,9}[.)]/.test(getQuotePrefix(rawCurrentLine).rest);
         }
         if (isBlockLine) {
           formattedLines.push(currentLine);
@@ -1785,7 +1788,7 @@
         }
         const tableQuoteDepth = listQuoteDepth;
         const headerT = getTableRowParts(currentLine);
-        const headerListIndent = listContentIndent || prevListIndent || (headerT.hasList ? countIndentCols(headerT.prefix) : 0);
+        const headerListIndent = listContentIndent || (headerT.hasList ? countIndentCols(headerT.prefix) : 0);
         const tableListIndent = listOpenedViaTableLookahead ? 0 : ((tableQuoteDepth ? 0 : headerListIndent) || outerListIndent);
         if (
           lineIndex + 1 < normalizedLines.length &&

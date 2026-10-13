@@ -2881,5 +2881,21 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const interleavedEmphasisSpan = '*_x（y）*z_* 與 *~~x（y）*z~~* 與 _*x（y）_z*_';
     const interleavedEmphasisSpanMarkdown = await convertPaste(page, { text: interleavedEmphasisSpan });
     expect(interleavedEmphasisSpanMarkdown).toBe('*_x (y)*z_* 與 *~~x (y)*z~~* 與 _*x (y)_z*_');
+
+    const oneOrderedAfterParaLazyTable = 'text\n1. item\nA | B\n--- | ---';
+    const oneOrderedAfterParaLazyTableMarkdown = await convertPaste(page, { text: oneOrderedAfterParaLazyTable });
+    expect(oneOrderedAfterParaLazyTableMarkdown).toBe('text\n1. item\n   | A   | B   |\n   | --- | --- |');
+
+    const looseListContThenTopLevelTable = '- item\n\n    cont\nA | B\n--- | ---';
+    const looseListContThenTopLevelTableMarkdown = await convertPaste(page, { text: looseListContThenTopLevelTable });
+    expect(looseListContThenTopLevelTableMarkdown).toBe('- item\n\n    cont\n| A   | B   |\n| --- | --- |');
+
+    const setextRowInsideTableBeforeFence = 'A | B\n- | -\n===\nplain\n~~~\n===';
+    const setextRowInsideTableBeforeFenceMarkdown = await convertPaste(page, { text: setextRowInsideTableBeforeFence });
+    expect(setextRowInsideTableBeforeFenceMarkdown).toBe('| A     | B   |\n| ----- | --- |\n| ===   |     |\n| plain |     |\n~~~\n===');
+
+    const bareUrlWithEmbeddedLinkLike = 'https://e.com/[x]()（bar） 說明（測試）';
+    const bareUrlWithEmbeddedLinkLikeMarkdown = await convertPaste(page, { text: bareUrlWithEmbeddedLinkLike });
+    expect(bareUrlWithEmbeddedLinkLikeMarkdown).toBe('https://e.com/[x]()（bar） 說明 (測試)');
   });
 });
