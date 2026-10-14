@@ -1,6 +1,6 @@
 {
   "name": "paste-to-markdown",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "private": true,
   "description": "End-to-end tests for Paste to Markdown. The app itself is static and needs no build step.",
   "license": "MIT",

@@ -1104,3 +1104,2390 @@ test.describe('Copilot CLI detection boundary', function () {
     expect(markdown).toBe('● Title\n detail');
   });
 });
+
+test.describe('Markdown syntax auto-correction', function () {
+  const sourceMarkdown = `## 目的與閱讀方式
+
+本文整理此儲存庫內所有網路基礎架構即程式碼（Infrastructure as Code，IaC）檔案，讓不熟悉思科（Cisco）網路設備的軟體工程師能理解：設定由哪些檔案組成、如何套用至設備，以及設定所描述的網路用途。
+
+本文只根據儲存庫中的設定推論，**沒有連線設備驗證實際狀態**。設備名稱、服務用途及設備之間的實體線路，有些只能從設定描述推測；有疑義之處列在文末。
+
+## 先建立幾個基本觀念
+
+- **交換器（switch）**主要在區域網路內轉送乙太網路封包；**路由器（router）**依照路由表，在不同網路之間轉送封包。此專案另外把核心交換器設定成具備第三層路由功能。
+- **虛擬區域網路（Virtual Local Area Network，VLAN）**是以邏輯方式切分的第二層網路。不同 VLAN 通常是不同的 IP 子網路，要互相通訊必須經過路由。
+- **交換器虛擬介面（Switched Virtual Interface，SVI）**是交換器上代表某個 VLAN 的第三層介面，可設定 IP 位址，並可能作為該 VLAN 裝置的預設閘道。
+- **存取埠（access port）**通常只承載一個 VLAN；**中繼埠（trunk port）**可用 IEEE 802.1Q（常寫作 802.1Q 或 dot1q）標記，在同一連線承載多個 VLAN。
+- **控制台設定（running-config）**是設備目前執行中的設定；**啟動設定（startup-config）**是設備重開機時載入的設定。修改執行中設定不等於已儲存，需另外寫入啟動設定。
+- **宣告式設定**描述希望設備具備的狀態。Ansible 的 \`merged\` 在此代表合併指定設定，不代表清除所有未列出的現有設定。
+- 設定中的 \`172.16.0.0/24\` 這類寫法是無類別網域間路由（Classless Inter-Domain Routing，CIDR）表示法；\`/24\` 表示網路遮罩有 24 個位元。
+
+## 專案如何執行
+
+此專案使用 Ansible，從執行指令的控制端透過安全殼層（Secure Shell，SSH）連到 Cisco 設備，再以設備專用模組下發設定。
+
+1. \`inventory.yml\` 列出三台設備的管理 IP，並指定使用 \`ansible.netcommon.network_cli\`、\`cisco.ios.ios\` 與 Paramiko SSH 傳輸。
+2. Playbook 讀取 \`secrets.yml\`，取得設備登入帳密，以及路由器要使用的遠端驗證及 VPN 金鑰。
+3. \`host_vars/<設備名稱>.yml\` 提供各設備的 VLAN、介面、路由與服務設定。
+4. \`playbooks/ping.yml\` 對設備執行 \`show version\`，用來確認可執行設備命令；它**不是**網路封包的 \`ping\` 測試。
+5. \`playbooks/configure.yml\` 先備份現有設定，再逐類套用設定，最後才把有變更的執行中設定儲存至啟動設定。
+6. \`ansible.cfg\` 啟用 SSH 主機金鑰檢查、設定連線逾時，並將 Ansible 的暫存檔放在專案目錄。
+
+專案依賴 Python 3.13 以上版本，透過 \`uv sync --locked\` 安裝；\`pyproject.toml\` 宣告 Ansible 與 Paramiko。README 提供以下命令：
+
+\`\`\`sh
+uv run ansible-playbook playbooks/ping.yml
+uv run ansible-playbook playbooks/configure.yml
+uv run ansible-playbook playbooks/configure.yml --limit sw3560_access
+uv run ansible-playbook playbooks/configure.yml --syntax-check
+\`\`\`
+
+建議首次操作先執行語法檢查與唯讀的版本查詢，再限制一台設備試跑並確認備份與差異，避免未審核就同時修改全部設備。
+
+## 檔案職責
+
+| 檔案 | 職責 |
+| --- | --- |
+| \`ansible.cfg\` | Ansible 的預設 Inventory、暫存目錄、主機金鑰檢查及 CLI 連線逾時設定。 |
+| \`inventory.yml\` | 設備名稱、管理 IP、網路連線方式與登入帳密變數的引用。 |
+| \`secrets.example.yml\` | 私密變數檔範本；複製成未追蹤的 \`secrets.yml\` 後填入帳密及共享金鑰。 |
+| \`host_vars/r2951.yml\` | R2951 路由器的 WAN/LAN、路由、NAT、VPN、驗證及管理服務設定。 |
+| \`host_vars/sw3560_core.yml\` | 核心 Catalyst 3560 的 VLAN、第三層閘道、訪客網路、路由及交換埠設定。 |
+| \`host_vars/sw3560_access.yml\` | 存取 Catalyst 3560 的 VLAN、端點埠、上行鏈路與管理介面設定。 |
+| \`playbooks/ping.yml\` | 在 Cisco 設備上執行 \`show version\`。 |
+| \`playbooks/configure.yml\` | 備份、套用設定，並在結尾儲存有變更的設定。 |
+| \`pyproject.toml\`、\`uv.lock\` | Python 專案相依套件需求及鎖定版本。 |
+| \`.gitignore\` | 排除 \`secrets.yml\`、設備設定備份及 Ansible 暫存資料。 |
+
+## 從設定推測的網路拓撲
+
+以下是**邏輯拓撲推論**。IP 位址及設定用途來自版本庫；實體線路與設備的真實連接方式仍需現場確認。
+
+\`\`\`text
+                    Internet／外部網路
+                     │               │
+             Hinet（推測）       Seednet（推測）
+                     │               │
+               R2951 GigabitEthernet0/0、GigabitEthernet0/1
+                     │
+               R2951 GigabitEthernet0/2
+               172.16.0.254/24
+                     │
+            VLAN 99「ToRouter」
+                     │
+     ┌───────────────┴────────────────┐
+核心交換器 SW3560-Core             存取交換器 SW3560-Access
+VLAN 99：172.16.0.253/24            VLAN 99：172.16.0.252/24
+VLAN 100：10.20.131.254/23          VLAN 100：10.20.131.253/23
+VLAN 110：10.20.133.254/23          VLAN 110：10.20.133.253/23
+VLAN 199：192.168.199.254/24        端點埠多數分配至 VLAN 100/110
+VLAN 100/110/199 間路由
+     │
+Port-channel1（設定推測為交換器間中繼鏈路）
+\`\`\`
+
+### 子網路與 VLAN
+
+| VLAN | 設定名稱 | 核心交換器 IP | 存取交換器 IP | 從設定推測用途 |
+| --- | --- | --- | --- | --- |
+| 99 | \`ToRouter\` | \`172.16.0.253/24\` | \`172.16.0.252/24\` | 連接路由器的網路，也承載核心與路由器之間的路由協定。 |
+| 100 | \`SRV\` | \`10.20.131.254/23\` | \`10.20.131.253/23\` | 伺服器網路；核心交換器介面設定了 DHCP 中繼位址 \`10.20.131.5\`。 |
+| 110 | \`CLT\` | \`10.20.133.254/23\` | \`10.20.133.253/23\` | 用戶端網路；核心交換器介面設定了 DHCP 中繼位址 \`10.20.131.5\`。 |
+| 199 | \`Guest\` | \`192.168.199.254/24\` | 未設定 SVI | 訪客網路；核心交換器設定 DHCP 範圍與入站存取控制清單。 |
+| 999 | \`Parketing\` | 未配置第三層 IP | 未定義 | 只在核心交換器宣告，名稱或用途需確認。 |
+
+核心交換器設定 VLAN 100、110、199 的第三層介面，並啟用 \`ip routing\`，因此它是這些網段的路由節點。核心與路由器在 VLAN 99 使用開放最短路徑優先路由協定（Open Shortest Path First，OSPF）交換路由。路由器與核心設定的 VLAN 99 介面都位於 OSPF 區域 0；核心另將 VLAN 100、110、199 放在區域 10。
+
+### 存取埠與上行鏈路
+
+- 存取交換器的實體埠 1–12 設定為 VLAN 100，埠 13–43 設定為 VLAN 110，埠 48 設定為 VLAN 99。
+- 核心交換器的埠 1–20、22、24–20?（請依設定檔逐埠檢視）大多設為 VLAN 110；埠 21 設為 VLAN 100，埠 23 設為 VLAN 199。
+- 兩台交換器皆將埠 44–47 加入通道群組 1；\`Port-channel1\` 設為中繼埠。設定推測其用途是交換器間的聚合鏈路，但各實體埠描述與實際對端未完整吻合，詳見待確認事項。
+- 生成樹（Spanning Tree Protocol，STP）用來避免第二層網路迴圈。核心交換器設定快速每 VLAN 生成樹（Rapid Per-VLAN Spanning Tree Plus，Rapid-PVST+），並將優先權設為 0；存取交換器也設定快速每 VLAN 生成樹，優先權為 4096。這看起來是要讓核心交換器成為生成樹根橋，但實際狀態尚未驗證。
+
+## 三台設備的設定用途
+
+### R2951 路由器
+
+- 兩個外部介面分別標示 \`hinet\`、\`seednet\`，並使用兩個上游下一跳設定預設路由；第一條路由由追蹤狀態控制，第二條設定較高的路由距離。
+- 網路位址轉譯（Network Address Translation，NAT）設定在內部與兩個外部介面間使用。多載模式（\`overload\`，亦常稱 PAT）讓多個內部連線共用外部介面位址；另有 TCP 80/443 與 UDP 1194 的靜態埠轉送。
+- \`NAT-ACL\` 列出可套用 NAT 的來源網段；兩個路由對映（\`route-map\`）分別依 ACL 與外部介面條件選擇 NAT 規則。這裡的 route-map 是 NAT 設定的一部分，不能只因名稱而理解為套用了策略路由。
+- 路由器的 OSPF 設定預設將介面設為被動，並將 GigabitEthernet0/2 設為參與路由協定；它還設定無論是否已學到預設路由都公告預設路由。這個設定的影響範圍應確認。
+- 網際網路協定服務等級協定（Internet Protocol Service Level Agreement，IP SLA）對 \`8.8.8.8\` 發出 ICMP Echo，來源指定為第一個外部介面；追蹤物件再用於預設路由。請確認此探測是否足以代表外部線路可用。
+- 設定有遠端驗證撥入使用者服務（Remote Authentication Dial-In User Service，RADIUS）伺服器群組 \`NPS\`，並引用網路政策伺服器（Network Policy Server，NPS）位址 \`10.20.131.5\`。這個服務用於帳號驗證與授權。
+- 設定虛擬私人網路（Virtual Private Network，VPN）相關的 L2TP/IPsec、PPP 驗證、VPN 位址池與埠轉送。L2TP 是第二層通道協定（Layer 2 Tunneling Protocol）；IPsec 是網際網路協定安全機制（Internet Protocol Security）；PPP 是點對點協定（Point-to-Point Protocol）。另外有 SSLVPN 驗證設定名稱，但此檔案片段不足以判斷其完整 VPN 實作。
+- \`secrets.yml\` 提供 RADIUS 共享密鑰與 IPsec 預共享金鑰。SSH 登入密碼和設備服務金鑰是不同類型的秘密。
+
+### SW3560-Core 核心交換器
+
+- 建立 VLAN 99、100、110、199、999，並在 VLAN 99、100、110、199 設定 SVI 位址。
+- 開啟 IP 路由，透過 OSPF 與路由器交換路由；對 VLAN 100、110、199 的用戶端廣播，設定轉送至 \`10.20.131.5\` 的 DHCP 中繼位址。
+- 建立訪客 DHCP 位址池，預設閘道為 \`192.168.199.254\`，DNS 伺服器為 \`8.8.8.8\`。
+- \`Block-Guest\` 存取控制清單（Access Control List，ACL）先允許 DHCP 封包，再允許特定來源主機，接著拒絕訪客子網路前往 \`10.20.130.0/23\` 與 \`10.20.132.0/23\`，最後允許其他 IP 流量。由於 ACL 規則依序比對，最後的允許規則代表其他未命中的目的地仍可通過。
+- 設定到 \`192.168.131.0/24\` 的靜態路由，下一跳是 \`10.20.131.252\`。
+- 設定系統記錄（syslog）與網路時間協定（Network Time Protocol，NTP）伺服器為 \`10.20.131.5\`，並設定以簡易檔案傳輸協定（Trivial File Transfer Protocol，TFTP）備份設定。
+
+### SW3560-Access 存取交換器
+
+- 建立 VLAN 99、100、110、199；端點埠主要配置在 VLAN 100 與 VLAN 110。
+- 將埠 44–47 設定為通道群組 1 的成員；\`Port-channel1\` 為中繼埠。
+- 設定 VLAN 99、100、110 的 SVI 位址，但沒有設定 \`ip routing\`；檔案中的 \`ip default-gateway\` 指向 \`10.20.131.254\`。
+- 關閉多個埠的連線狀態記錄，並設定系統時間、SSH、TFTP 來源介面、NTP 與 syslog。
+- 存取交換器設定了多條 \`line vty\` 的 SSH 存取；路由器另以 ACL 限制虛擬終端線路來源。
+
+## Playbook 套用時會發生什麼
+
+\`configure.yml\` 的順序如下：
+
+1. 備份目前設備設定至 \`backups/\`，並避免任務輸出記錄敏感資料。
+2. 視設備變數是否存在，合併 VLAN、介面、第二層交換埠、第三層介面、ACL、OSPF 與靜態路由設定。
+3. 以 \`ios_config\` 將主機名稱、全域命令及階層式設定區段寫入設備。
+4. 最後執行儲存任務；僅在設定有變更時，才將執行中設定儲存至啟動設定。
+
+\`ios_config\` 的 ACL 設定依行比對，且 Core 的拒絕命令保留了原始空白格式。Playbook 並未宣告「清除未列出設定」，所以它不是完整設備重建或完整還原工具。README 也指出，備份不涵蓋本機帳號雜湊值、啟用密碼、憑證與私鑰。
+
+## 名詞縮寫表
+
+| 縮寫 | 全名 | 本專案中的意義 |
+| --- | --- | --- |
+| ACL | Access Control List，存取控制清單 | 依規則允許或拒絕符合條件的封包。 |
+| AAA | Authentication, Authorization, and Accounting，認證、授權與記帳 | 控制登入驗證、可執行操作及活動記錄。 |
+| CIDR | Classless Inter-Domain Routing，無類別網域間路由 | 例如 \`/24\` 的網路前綴表示法。 |
+| DHCP | Dynamic Host Configuration Protocol，動態主機設定協定 | 自動提供用戶端 IP、閘道與 DNS 設定。 |
+| DNS | Domain Name System，網域名稱系統 | 將網域名稱解析為 IP 位址。 |
+| ICMP | Internet Control Message Protocol，網際網路控制訊息協定 | IP SLA 的 Echo 探測所使用的協定。 |
+| IP | Internet Protocol，網際網路協定 | 網路位址及封包轉送所依據的協定。 |
+| IPsec | Internet Protocol Security，網際網路協定安全機制 | VPN 使用的加密及驗證機制。 |
+| IP SLA | Internet Protocol Service Level Agreement，網際網路協定服務等級協定 | 用於探測目的地並供追蹤路由使用。 |
+| IaC | Infrastructure as Code，基礎架構即程式碼 | 以可追蹤的檔案管理網路設定。 |
+| L2 / L3 | Layer 2 / Layer 3，第二層／第三層 | 第二層指資料鏈結與交換；第三層指 IP 與路由。 |
+| LAN / WAN | Local Area Network / Wide Area Network，區域網路／廣域網路 | 內部網路／通往外部網路的連線。 |
+| L2TP | Layer 2 Tunneling Protocol，第二層通道協定 | 路由器設定中的 VPN 通道協定。 |
+| NAT | Network Address Translation，網路位址轉譯 | 改寫封包來源或目的 IP 位址。 |
+| NPS | Network Policy Server，網路政策伺服器 | 設定中作為 RADIUS 伺服器使用的服務名稱。 |
+| NTP | Network Time Protocol，網路時間協定 | 對時服務。 |
+| OSPF | Open Shortest Path First，開放最短路徑優先 | 路由器與核心交換器的動態路由協定。 |
+| PAT | Port Address Translation，連接埠位址轉譯 | NAT overload 讓多個連線共用位址。 |
+| PPP | Point-to-Point Protocol，點對點協定 | VPN 撥入連線使用的封裝與驗證協定。 |
+| RADIUS | Remote Authentication Dial-In User Service，遠端驗證撥入使用者服務 | 集中處理網路設備的使用者認證與授權。 |
+| SVI | Switched Virtual Interface，交換器虛擬介面 | VLAN 的第三層介面。 |
+| SSH | Secure Shell，安全殼層 | Ansible 遠端管理設備的加密連線協定。 |
+| STP | Spanning Tree Protocol，生成樹協定 | 避免第二層網路形成迴圈。 |
+| TCP / UDP | Transmission Control Protocol / User Datagram Protocol，傳輸控制協定／使用者資料包協定 | IP 網路常見的傳輸層協定。 |
+| TFTP | Trivial File Transfer Protocol，簡易檔案傳輸協定 | 設備設定封存所用的檔案傳輸方式。 |
+| VLAN | Virtual Local Area Network，虛擬區域網路 | 將交換網路切分成邏輯網段。 |
+| VPN | Virtual Private Network，虛擬私人網路 | 透過通道建立遠端或跨網路連線。 |
+| VTP | VLAN Trunking Protocol，VLAN 中繼協定 | Cisco VLAN 管理協定；此處設定為 transparent。 |
+| YAML | YAML Ain’t Markup Language，常用設定資料格式 | Inventory、Playbook 與設備變數檔的格式。 |
+
+## 待確認事項
+
+| 優先度 | 疑問 | 為什麼需要確認 |
+| --- | --- | --- |
+| 高 | 核心交換器 GigabitEthernet0/48 同時設定 \`access vlan 99\`、\`trunk\` 及 \`mode: access\`，且介面描述是 \`ToRouter\`。此埠實際應為 access 還是 trunk？ | 同一埠同時出現互相矛盾的交換模式設定，可能影響路由器連線及 VLAN 標記。 |
+| 高 | Core 與 Access 的埠 44–47 全部加入 Port-channel1，但 Core 的埠 45、46 描述為連到另一台交換器。這些線路實際對端與聚合關係是什麼？ | 聚合鏈路的各成員通常需連至同一對端，否則可能造成設定錯誤或迴圈。 |
+| 高 | 核心交換器訪客 ACL 的最終規則是 \`permit ip ... any\`。訪客網路是否只應阻擋列出的兩個內部網段？是否還需要限制其他內部網路？ | 未命中前面拒絕規則的目的地都會被允許。 |
+| 高 | 路由器設定 \`default_information.originate.always: true\`。即使路由器沒有可用的外部預設路由，是否仍應向 OSPF 公告預設路由？ | 核心可能因此把無法使用的路由當成有效的外部出口。 |
+| 高 | 路由器預設路由的追蹤物件依賴從 Hinet 介面探測 \`8.8.8.8\`；Seednet 備援路由與切換行為是否符合預期？ | 單一探測目標與特定來源介面可能無法涵蓋所有線路故障情境。 |
+| 中 | VLAN 99、100、110 的用途、實體連線位置與實際閘道是否如上述拓撲推論？ | 設定只能顯示 IP 與 VLAN，無法證明線路拓撲及業務用途。 |
+| 中 | Access 交換器有 VLAN 100、110 的 SVI IP，但未設定 \`ip routing\`；這些位址預期作管理、閘道，還是其他用途？ | 需要確認多個 SVI 與 \`ip default-gateway\` 在此設備上的預期行為。 |
+| 中 | Access 交換器的 \`ip default-gateway 10.20.131.254\` 位於 VLAN 100，而管理 IP 位於 VLAN 99。管理流量應走哪個網段？ | 管理來源與預設閘道可能不在同一子網路，需確認設備實際路由能力與管理路徑。 |
+| 中 | Core 已啟用 \`ip routing\`，同時設定 \`ip default-gateway 10.20.131.254\`。此命令是否仍需要？ | 啟用路由時，設備的預設路由通常由路由表中的路由項目控制；目前設定的用途需釐清。 |
+| 中 | VLAN 199 訪客 DHCP、ACL、允許來源 \`192.168.199.253\` 與無線設備的關係為何？ | 目前設定無法判斷 \`.253\` 是存取點、管理主機或其他設備。 |
+| 中 | Core 的靜態路由 \`192.168.131.0/24\` 下一跳 \`10.20.131.252\` 是否正確？該下一跳設備與網段用途為何？ | 下一跳位址在 VLAN 100 子網路內，但路由目的網段和其他設定的關係不明。 |
+| 中 | VLAN 999 名稱 \`Parketing\` 是否為拼字錯誤？此 VLAN 是否應建立埠配置或其他設定？ | 目前只看到核心交換器宣告 VLAN，沒有其用途說明。 |
+| 中 | R2951 的 \`Loopback0\` 與 VPN 位址池都使用 \`192.168.132.0/24\`。這是刻意設計，還是可能造成位址重疊？ | 重疊子網路可能影響 VPN 用戶端位址與路由判斷。 |
+| 中 | \`SSLVPN-Auth\` AAA 設定是否有對應的 SSL VPN 設定？ | 此儲存庫片段中未看到足以說明完整 SSL VPN 的設定。 |
+| 低 | 所有三台設備的設定是否曾在實際設備上驗證？ | 各 host-vars 註明依 running-config 建立但尚未連線驗證；模組支援與舊版 IOS 行為仍可能有差異。 |
+| 低 | \`10.20.131.5\` 上的 NPS、DHCP、TFTP、NTP、syslog 服務分別由哪些系統提供，備份與可用性要求為何？ | 多項網路服務共用此位址，但本儲存庫沒有描述服務主機或維運方式。 |
+| 低 | VLAN 100/110 的 \`/23\` 子網路、核心 OSPF 區域 10 及路由器的預設路由公告是否有網路設計文件可對照？ | 目前只能從設定推導設計意圖，缺少可核對的網路規劃文件。 |`;
+
+  const expectedMarkdown = `## 目的與閱讀方式
+
+本文整理此儲存庫內所有網路基礎架構即程式碼 (Infrastructure as Code，IaC) 檔案，讓不熟悉思科 (Cisco) 網路設備的軟體工程師能理解：設定由哪些檔案組成、如何套用至設備，以及設定所描述的網路用途。
+
+本文只根據儲存庫中的設定推論，**沒有連線設備驗證實際狀態**。設備名稱、服務用途及設備之間的實體線路，有些只能從設定描述推測；有疑義之處列在文末。
+
+## 先建立幾個基本觀念
+
+- **交換器 (switch)** 主要在區域網路內轉送乙太網路封包；**路由器 (router)** 依照路由表，在不同網路之間轉送封包。此專案另外把核心交換器設定成具備第三層路由功能。
+- **虛擬區域網路 (Virtual Local Area Network，VLAN)** 是以邏輯方式切分的第二層網路。不同 VLAN 通常是不同的 IP 子網路，要互相通訊必須經過路由。
+- **交換器虛擬介面 (Switched Virtual Interface，SVI)** 是交換器上代表某個 VLAN 的第三層介面，可設定 IP 位址，並可能作為該 VLAN 裝置的預設閘道。
+- **存取埠 (access port)** 通常只承載一個 VLAN；**中繼埠 (trunk port)** 可用 IEEE 802.1Q (常寫作 802.1Q 或 dot1q) 標記，在同一連線承載多個 VLAN。
+- **控制台設定 (running-config)** 是設備目前執行中的設定；**啟動設定 (startup-config)** 是設備重開機時載入的設定。修改執行中設定不等於已儲存，需另外寫入啟動設定。
+- **宣告式設定**描述希望設備具備的狀態。Ansible 的 \`merged\` 在此代表合併指定設定，不代表清除所有未列出的現有設定。
+- 設定中的 \`172.16.0.0/24\` 這類寫法是無類別網域間路由 (Classless Inter-Domain Routing，CIDR) 表示法；\`/24\` 表示網路遮罩有 24 個位元。
+
+## 專案如何執行
+
+此專案使用 Ansible，從執行指令的控制端透過安全殼層 (Secure Shell，SSH) 連到 Cisco 設備，再以設備專用模組下發設定。
+
+1. \`inventory.yml\` 列出三台設備的管理 IP，並指定使用 \`ansible.netcommon.network_cli\`、\`cisco.ios.ios\` 與 Paramiko SSH 傳輸。
+2. Playbook 讀取 \`secrets.yml\`，取得設備登入帳密，以及路由器要使用的遠端驗證及 VPN 金鑰。
+3. \`host_vars/<設備名稱>.yml\` 提供各設備的 VLAN、介面、路由與服務設定。
+4. \`playbooks/ping.yml\` 對設備執行 \`show version\`，用來確認可執行設備命令；它**不是**網路封包的 \`ping\` 測試。
+5. \`playbooks/configure.yml\` 先備份現有設定，再逐類套用設定，最後才把有變更的執行中設定儲存至啟動設定。
+6. \`ansible.cfg\` 啟用 SSH 主機金鑰檢查、設定連線逾時，並將 Ansible 的暫存檔放在專案目錄。
+
+專案依賴 Python 3.13 以上版本，透過 \`uv sync --locked\` 安裝；\`pyproject.toml\` 宣告 Ansible 與 Paramiko。README 提供以下命令：
+
+\`\`\`sh
+uv run ansible-playbook playbooks/ping.yml
+uv run ansible-playbook playbooks/configure.yml
+uv run ansible-playbook playbooks/configure.yml --limit sw3560_access
+uv run ansible-playbook playbooks/configure.yml --syntax-check
+\`\`\`
+
+建議首次操作先執行語法檢查與唯讀的版本查詢，再限制一台設備試跑並確認備份與差異，避免未審核就同時修改全部設備。
+
+## 檔案職責
+
+| 檔案                            | 職責                                             |
+| ----------------------------- | ---------------------------------------------- |
+| \`ansible.cfg\`                 | Ansible 的預設 Inventory、暫存目錄、主機金鑰檢查及 CLI 連線逾時設定。 |
+| \`inventory.yml\`               | 設備名稱、管理 IP、網路連線方式與登入帳密變數的引用。                   |
+| \`secrets.example.yml\`         | 私密變數檔範本；複製成未追蹤的 \`secrets.yml\` 後填入帳密及共享金鑰。      |
+| \`host_vars/r2951.yml\`         | R2951 路由器的 WAN/LAN、路由、NAT、VPN、驗證及管理服務設定。       |
+| \`host_vars/sw3560_core.yml\`   | 核心 Catalyst 3560 的 VLAN、第三層閘道、訪客網路、路由及交換埠設定。   |
+| \`host_vars/sw3560_access.yml\` | 存取 Catalyst 3560 的 VLAN、端點埠、上行鏈路與管理介面設定。       |
+| \`playbooks/ping.yml\`          | 在 Cisco 設備上執行 \`show version\`。                  |
+| \`playbooks/configure.yml\`     | 備份、套用設定，並在結尾儲存有變更的設定。                          |
+| \`pyproject.toml\`、\`uv.lock\`    | Python 專案相依套件需求及鎖定版本。                          |
+| \`.gitignore\`                  | 排除 \`secrets.yml\`、設備設定備份及 Ansible 暫存資料。         |
+
+## 從設定推測的網路拓撲
+
+以下是**邏輯拓撲推論**。IP 位址及設定用途來自版本庫；實體線路與設備的真實連接方式仍需現場確認。
+
+\`\`\`text
+                    Internet／外部網路
+                     │               │
+             Hinet(推測)       Seednet(推測)
+                     │               │
+               R2951 GigabitEthernet0/0、GigabitEthernet0/1
+                     │
+               R2951 GigabitEthernet0/2
+               172.16.0.254/24
+                     │
+            VLAN 99「ToRouter」
+                     │
+     ┌───────────────┴────────────────┐
+核心交換器 SW3560-Core             存取交換器 SW3560-Access
+VLAN 99：172.16.0.253/24            VLAN 99：172.16.0.252/24
+VLAN 100：10.20.131.254/23          VLAN 100：10.20.131.253/23
+VLAN 110：10.20.133.254/23          VLAN 110：10.20.133.253/23
+VLAN 199：192.168.199.254/24        端點埠多數分配至 VLAN 100/110
+VLAN 100/110/199 間路由
+     │
+Port-channel1(設定推測為交換器間中繼鏈路)
+\`\`\`
+
+### 子網路與 VLAN
+
+| VLAN | 設定名稱        | 核心交換器 IP             | 存取交換器 IP           | 從設定推測用途                                   |
+| ---- | ----------- | -------------------- | ------------------ | ----------------------------------------- |
+| 99   | \`ToRouter\`  | \`172.16.0.253/24\`    | \`172.16.0.252/24\`  | 連接路由器的網路，也承載核心與路由器之間的路由協定。                |
+| 100  | \`SRV\`       | \`10.20.131.254/23\`   | \`10.20.131.253/23\` | 伺服器網路；核心交換器介面設定了 DHCP 中繼位址 \`10.20.131.5\`。 |
+| 110  | \`CLT\`       | \`10.20.133.254/23\`   | \`10.20.133.253/23\` | 用戶端網路；核心交換器介面設定了 DHCP 中繼位址 \`10.20.131.5\`。 |
+| 199  | \`Guest\`     | \`192.168.199.254/24\` | 未設定 SVI            | 訪客網路；核心交換器設定 DHCP 範圍與入站存取控制清單。            |
+| 999  | \`Parketing\` | 未配置第三層 IP            | 未定義                | 只在核心交換器宣告，名稱或用途需確認。                       |
+
+核心交換器設定 VLAN 100、110、199 的第三層介面，並啟用 \`ip routing\`，因此它是這些網段的路由節點。核心與路由器在 VLAN 99 使用開放最短路徑優先路由協定 (Open Shortest Path First，OSPF) 交換路由。路由器與核心設定的 VLAN 99 介面都位於 OSPF 區域 0；核心另將 VLAN 100、110、199 放在區域 10。
+
+### 存取埠與上行鏈路
+
+- 存取交換器的實體埠 1–12 設定為 VLAN 100，埠 13–43 設定為 VLAN 110，埠 48 設定為 VLAN 99。
+- 核心交換器的埠 1–20、22、24–20?(請依設定檔逐埠檢視) 大多設為 VLAN 110；埠 21 設為 VLAN 100，埠 23 設為 VLAN 199。
+- 兩台交換器皆將埠 44–47 加入通道群組 1；\`Port-channel1\` 設為中繼埠。設定推測其用途是交換器間的聚合鏈路，但各實體埠描述與實際對端未完整吻合，詳見待確認事項。
+- 生成樹 (Spanning Tree Protocol，STP) 用來避免第二層網路迴圈。核心交換器設定快速每 VLAN 生成樹 (Rapid Per-VLAN Spanning Tree Plus，Rapid-PVST+)，並將優先權設為 0；存取交換器也設定快速每 VLAN 生成樹，優先權為 4096。這看起來是要讓核心交換器成為生成樹根橋，但實際狀態尚未驗證。
+
+## 三台設備的設定用途
+
+### R2951 路由器
+
+- 兩個外部介面分別標示 \`hinet\`、\`seednet\`，並使用兩個上游下一跳設定預設路由；第一條路由由追蹤狀態控制，第二條設定較高的路由距離。
+- 網路位址轉譯 (Network Address Translation，NAT) 設定在內部與兩個外部介面間使用。多載模式 (\`overload\`，亦常稱 PAT) 讓多個內部連線共用外部介面位址；另有 TCP 80/443 與 UDP 1194 的靜態埠轉送。
+- \`NAT-ACL\` 列出可套用 NAT 的來源網段；兩個路由對映 (\`route-map\`) 分別依 ACL 與外部介面條件選擇 NAT 規則。這裡的 route-map 是 NAT 設定的一部分，不能只因名稱而理解為套用了策略路由。
+- 路由器的 OSPF 設定預設將介面設為被動，並將 GigabitEthernet0/2 設為參與路由協定；它還設定無論是否已學到預設路由都公告預設路由。這個設定的影響範圍應確認。
+- 網際網路協定服務等級協定 (Internet Protocol Service Level Agreement，IP SLA) 對 \`8.8.8.8\` 發出 ICMP Echo，來源指定為第一個外部介面；追蹤物件再用於預設路由。請確認此探測是否足以代表外部線路可用。
+- 設定有遠端驗證撥入使用者服務 (Remote Authentication Dial-In User Service，RADIUS) 伺服器群組 \`NPS\`，並引用網路政策伺服器 (Network Policy Server，NPS) 位址 \`10.20.131.5\`。這個服務用於帳號驗證與授權。
+- 設定虛擬私人網路 (Virtual Private Network，VPN) 相關的 L2TP/IPsec、PPP 驗證、VPN 位址池與埠轉送。L2TP 是第二層通道協定 (Layer 2 Tunneling Protocol)；IPsec 是網際網路協定安全機制 (Internet Protocol Security)；PPP 是點對點協定 (Point-to-Point Protocol)。另外有 SSLVPN 驗證設定名稱，但此檔案片段不足以判斷其完整 VPN 實作。
+- \`secrets.yml\` 提供 RADIUS 共享密鑰與 IPsec 預共享金鑰。SSH 登入密碼和設備服務金鑰是不同類型的秘密。
+
+### SW3560-Core 核心交換器
+
+- 建立 VLAN 99、100、110、199、999，並在 VLAN 99、100、110、199 設定 SVI 位址。
+- 開啟 IP 路由，透過 OSPF 與路由器交換路由；對 VLAN 100、110、199 的用戶端廣播，設定轉送至 \`10.20.131.5\` 的 DHCP 中繼位址。
+- 建立訪客 DHCP 位址池，預設閘道為 \`192.168.199.254\`，DNS 伺服器為 \`8.8.8.8\`。
+- \`Block-Guest\` 存取控制清單 (Access Control List，ACL) 先允許 DHCP 封包，再允許特定來源主機，接著拒絕訪客子網路前往 \`10.20.130.0/23\` 與 \`10.20.132.0/23\`，最後允許其他 IP 流量。由於 ACL 規則依序比對，最後的允許規則代表其他未命中的目的地仍可通過。
+- 設定到 \`192.168.131.0/24\` 的靜態路由，下一跳是 \`10.20.131.252\`。
+- 設定系統記錄 (syslog) 與網路時間協定 (Network Time Protocol，NTP) 伺服器為 \`10.20.131.5\`，並設定以簡易檔案傳輸協定 (Trivial File Transfer Protocol，TFTP) 備份設定。
+
+### SW3560-Access 存取交換器
+
+- 建立 VLAN 99、100、110、199；端點埠主要配置在 VLAN 100 與 VLAN 110。
+- 將埠 44–47 設定為通道群組 1 的成員；\`Port-channel1\` 為中繼埠。
+- 設定 VLAN 99、100、110 的 SVI 位址，但沒有設定 \`ip routing\`；檔案中的 \`ip default-gateway\` 指向 \`10.20.131.254\`。
+- 關閉多個埠的連線狀態記錄，並設定系統時間、SSH、TFTP 來源介面、NTP 與 syslog。
+- 存取交換器設定了多條 \`line vty\` 的 SSH 存取；路由器另以 ACL 限制虛擬終端線路來源。
+
+## Playbook 套用時會發生什麼
+
+\`configure.yml\` 的順序如下：
+
+1. 備份目前設備設定至 \`backups/\`，並避免任務輸出記錄敏感資料。
+2. 視設備變數是否存在，合併 VLAN、介面、第二層交換埠、第三層介面、ACL、OSPF 與靜態路由設定。
+3. 以 \`ios_config\` 將主機名稱、全域命令及階層式設定區段寫入設備。
+4. 最後執行儲存任務；僅在設定有變更時，才將執行中設定儲存至啟動設定。
+
+\`ios_config\` 的 ACL 設定依行比對，且 Core 的拒絕命令保留了原始空白格式。Playbook 並未宣告「清除未列出設定」，所以它不是完整設備重建或完整還原工具。README 也指出，備份不涵蓋本機帳號雜湊值、啟用密碼、憑證與私鑰。
+
+## 名詞縮寫表
+
+| 縮寫        | 全名                                                                     | 本專案中的意義                            |
+| --------- | ---------------------------------------------------------------------- | ---------------------------------- |
+| ACL       | Access Control List，存取控制清單                                             | 依規則允許或拒絕符合條件的封包。                   |
+| AAA       | Authentication, Authorization, and Accounting，認證、授權與記帳                 | 控制登入驗證、可執行操作及活動記錄。                 |
+| CIDR      | Classless Inter-Domain Routing，無類別網域間路由                                | 例如 \`/24\` 的網路前綴表示法。                 |
+| DHCP      | Dynamic Host Configuration Protocol，動態主機設定協定                           | 自動提供用戶端 IP、閘道與 DNS 設定。             |
+| DNS       | Domain Name System，網域名稱系統                                              | 將網域名稱解析為 IP 位址。                    |
+| ICMP      | Internet Control Message Protocol，網際網路控制訊息協定                           | IP SLA 的 Echo 探測所使用的協定。            |
+| IP        | Internet Protocol，網際網路協定                                               | 網路位址及封包轉送所依據的協定。                   |
+| IPsec     | Internet Protocol Security，網際網路協定安全機制                                  | VPN 使用的加密及驗證機制。                    |
+| IP SLA    | Internet Protocol Service Level Agreement，網際網路協定服務等級協定                 | 用於探測目的地並供追蹤路由使用。                   |
+| IaC       | Infrastructure as Code，基礎架構即程式碼                                        | 以可追蹤的檔案管理網路設定。                     |
+| L2 / L3   | Layer 2 / Layer 3，第二層／第三層                                              | 第二層指資料鏈結與交換；第三層指 IP 與路由。           |
+| LAN / WAN | Local Area Network / Wide Area Network，區域網路／廣域網路                       | 內部網路／通往外部網路的連線。                    |
+| L2TP      | Layer 2 Tunneling Protocol，第二層通道協定                                     | 路由器設定中的 VPN 通道協定。                  |
+| NAT       | Network Address Translation，網路位址轉譯                                     | 改寫封包來源或目的 IP 位址。                   |
+| NPS       | Network Policy Server，網路政策伺服器                                          | 設定中作為 RADIUS 伺服器使用的服務名稱。           |
+| NTP       | Network Time Protocol，網路時間協定                                           | 對時服務。                              |
+| OSPF      | Open Shortest Path First，開放最短路徑優先                                      | 路由器與核心交換器的動態路由協定。                  |
+| PAT       | Port Address Translation，連接埠位址轉譯                                       | NAT overload 讓多個連線共用位址。            |
+| PPP       | Point-to-Point Protocol，點對點協定                                          | VPN 撥入連線使用的封裝與驗證協定。                |
+| RADIUS    | Remote Authentication Dial-In User Service，遠端驗證撥入使用者服務                 | 集中處理網路設備的使用者認證與授權。                 |
+| SVI       | Switched Virtual Interface，交換器虛擬介面                                     | VLAN 的第三層介面。                       |
+| SSH       | Secure Shell，安全殼層                                                      | Ansible 遠端管理設備的加密連線協定。             |
+| STP       | Spanning Tree Protocol，生成樹協定                                           | 避免第二層網路形成迴圈。                       |
+| TCP / UDP | Transmission Control Protocol / User Datagram Protocol，傳輸控制協定／使用者資料包協定 | IP 網路常見的傳輸層協定。                     |
+| TFTP      | Trivial File Transfer Protocol，簡易檔案傳輸協定                                | 設備設定封存所用的檔案傳輸方式。                   |
+| VLAN      | Virtual Local Area Network，虛擬區域網路                                      | 將交換網路切分成邏輯網段。                      |
+| VPN       | Virtual Private Network，虛擬私人網路                                         | 透過通道建立遠端或跨網路連線。                    |
+| VTP       | VLAN Trunking Protocol，VLAN 中繼協定                                       | Cisco VLAN 管理協定；此處設定為 transparent。 |
+| YAML      | YAML Ain’t Markup Language，常用設定資料格式                                    | Inventory、Playbook 與設備變數檔的格式。      |
+
+## 待確認事項
+
+| 優先度 | 疑問                                                                                                                 | 為什麼需要確認                                                        |
+| --- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
+| 高   | 核心交換器 GigabitEthernet0/48 同時設定 \`access vlan 99\`、\`trunk\` 及 \`mode: access\`，且介面描述是 \`ToRouter\`。此埠實際應為 access 還是 trunk？ | 同一埠同時出現互相矛盾的交換模式設定，可能影響路由器連線及 VLAN 標記。                         |
+| 高   | Core 與 Access 的埠 44–47 全部加入 Port-channel1，但 Core 的埠 45、46 描述為連到另一台交換器。這些線路實際對端與聚合關係是什麼？                            | 聚合鏈路的各成員通常需連至同一對端，否則可能造成設定錯誤或迴圈。                               |
+| 高   | 核心交換器訪客 ACL 的最終規則是 \`permit ip ... any\`。訪客網路是否只應阻擋列出的兩個內部網段？是否還需要限制其他內部網路？                                          | 未命中前面拒絕規則的目的地都會被允許。                                            |
+| 高   | 路由器設定 \`default_information.originate.always: true\`。即使路由器沒有可用的外部預設路由，是否仍應向 OSPF 公告預設路由？                             | 核心可能因此把無法使用的路由當成有效的外部出口。                                       |
+| 高   | 路由器預設路由的追蹤物件依賴從 Hinet 介面探測 \`8.8.8.8\`；Seednet 備援路由與切換行為是否符合預期？                                                      | 單一探測目標與特定來源介面可能無法涵蓋所有線路故障情境。                                   |
+| 中   | VLAN 99、100、110 的用途、實體連線位置與實際閘道是否如上述拓撲推論？                                                                          | 設定只能顯示 IP 與 VLAN，無法證明線路拓撲及業務用途。                                |
+| 中   | Access 交換器有 VLAN 100、110 的 SVI IP，但未設定 \`ip routing\`；這些位址預期作管理、閘道，還是其他用途？                                           | 需要確認多個 SVI 與 \`ip default-gateway\` 在此設備上的預期行為。                  |
+| 中   | Access 交換器的 \`ip default-gateway 10.20.131.254\` 位於 VLAN 100，而管理 IP 位於 VLAN 99。管理流量應走哪個網段？                           | 管理來源與預設閘道可能不在同一子網路，需確認設備實際路由能力與管理路徑。                           |
+| 中   | Core 已啟用 \`ip routing\`，同時設定 \`ip default-gateway 10.20.131.254\`。此命令是否仍需要？                                            | 啟用路由時，設備的預設路由通常由路由表中的路由項目控制；目前設定的用途需釐清。                        |
+| 中   | VLAN 199 訪客 DHCP、ACL、允許來源 \`192.168.199.253\` 與無線設備的關係為何？                                                            | 目前設定無法判斷 \`.253\` 是存取點、管理主機或其他設備。                                |
+| 中   | Core 的靜態路由 \`192.168.131.0/24\` 下一跳 \`10.20.131.252\` 是否正確？該下一跳設備與網段用途為何？                                              | 下一跳位址在 VLAN 100 子網路內，但路由目的網段和其他設定的關係不明。                        |
+| 中   | VLAN 999 名稱 \`Parketing\` 是否為拼字錯誤？此 VLAN 是否應建立埠配置或其他設定？                                                              | 目前只看到核心交換器宣告 VLAN，沒有其用途說明。                                     |
+| 中   | R2951 的 \`Loopback0\` 與 VPN 位址池都使用 \`192.168.132.0/24\`。這是刻意設計，還是可能造成位址重疊？                                             | 重疊子網路可能影響 VPN 用戶端位址與路由判斷。                                      |
+| 中   | \`SSLVPN-Auth\` AAA 設定是否有對應的 SSL VPN 設定？                                                                             | 此儲存庫片段中未看到足以說明完整 SSL VPN 的設定。                                  |
+| 低   | 所有三台設備的設定是否曾在實際設備上驗證？                                                                                              | 各 host-vars 註明依 running-config 建立但尚未連線驗證；模組支援與舊版 IOS 行為仍可能有差異。 |
+| 低   | \`10.20.131.5\` 上的 NPS、DHCP、TFTP、NTP、syslog 服務分別由哪些系統提供，備份與可用性要求為何？                                                  | 多項網路服務共用此位址，但本儲存庫沒有描述服務主機或維運方式。                                |
+| 低   | VLAN 100/110 的 \`/23\` 子網路、核心 OSPF 區域 10 及路由器的預設路由公告是否有網路設計文件可對照？                                                    | 目前只能從設定推導設計意圖，缺少可核對的網路規劃文件。                                    |`;
+
+  test('auto-corrects full-width parentheses spacing and aligns GFM tables on plain text paste', async function ({ page }) {
+    await gotoApp(page);
+    const markdown = await convertPaste(page, { text: sourceMarkdown });
+    expect(markdown).toBe(expectedMarkdown);
+  });
+
+  test('auto-corrects markdown syntax when pasted from VS Code', async function ({ page }) {
+    await gotoApp(page);
+    const vscodeData = { version: 1, isFromEmptySelection: false, mode: 'markdown' };
+    const markdown = await convertPaste(page, { vscode: vscodeData, text: sourceMarkdown });
+    expect(markdown).toBe(expectedMarkdown);
+  });
+
+  test('preserves GFM table alignment colons and escaped pipes when aligning columns', async function ({ page }) {
+    await gotoApp(page);
+    const tableWithAlign = [
+      '| 左對齊 | 置中對齊 | 右對齊 | 預設 |',
+      '| :--- | :---: | ---: | --- |',
+      '| A \\| B | 測試（值） | 100 | X |'
+    ].join('\n');
+    const expectedTable = [
+      '| 左對齊    | 置中對齊   | 右對齊 | 預設  |',
+      '| :----- | :----: | --: | --- |',
+      '| A \\| B | 測試 (值) | 100 | X   |'
+    ].join('\n');
+    const markdown = await convertPaste(page, { text: tableWithAlign });
+    expect(markdown).toBe(expectedTable);
+  });
+
+  test('does not apply markdown syntax correction when VS Code mode is not markdown', async function ({ page }) {
+    await gotoApp(page);
+    const vscodeData = { version: 1, isFromEmptySelection: false, mode: 'javascript' };
+    const code = '  const msg = "測試（值）";\n  console.log(msg);';
+    const markdown = await convertPaste(page, { vscode: vscodeData, text: code });
+    expect(markdown).toBe('const msg = "測試（值）";\nconsole.log(msg);');
+    const malformed = await convertPaste(page, { vscode: 'invalid-json', text: code });
+    expect(malformed).toBe('const msg = "測試（值）";\nconsole.log(msg);');
+  });
+
+  test('handles four-backtick, tilde, blockquote, list, container-exit, and over-indented fences without premature close or table formatting', async function ({ page }) {
+    await gotoApp(page);
+    const input = [
+      '````markdown',
+      '```',
+      '範例（內嵌）文字',
+      '```',
+      '````',
+      '   ~~~text',
+      '      ~~~',
+      '| A | B |',
+      '| --- | --- |',
+      '| 1（一） | 2 |',
+      '   ~~~',
+      '> ~~~',
+      '> 引用區塊（程式碼）',
+      '> ~~~',
+      '>     ```',
+      '> 引用縮排後文字（仍應修正）',
+      '> ```',
+      '> 未關閉引用（程式碼）',
+      '2. 非中斷（內）',
+      'A | B',
+      '--- | ---',
+      'x（內） | y',
+      '1. 中斷引用（仍應修正）',
+      '離開引用（仍應修正）',
+      '- ```',
+      '  清單未關閉（程式碼）',
+      'A | B',
+      '--- | ---',
+      'x（內） | y',
+      '- 清單項目（仍應修正）',
+      '',
+      '```',
+      '頂層圍欄（程式碼）',
+      '```',
+      '圍欄後（散文）',
+      '- - ```',
+      '    雙層清單（程式碼）',
+      '    ```',
+      '- > ```',
+      '  > 清單引用（程式碼）',
+      '  > ```',
+      '> - > ```',
+      '  >   > 交錯（程式碼）',
+      '  >   > ```',
+      '> ```',
+      '> 分隔線前（程式碼）',
+      '---',
+      '分隔線後（散文）',
+      '      > 縮排大於（散文）',
+      '\t```',
+      'Tab縮排後（散文）',
+      '<!--',
+      '```',
+      '註解（保留）',
+      '```',
+      '-->',
+      '<!DOCTYPE html>',
+      '<div>',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      '</div>',
+      '',
+      '<xmp>',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      '</xmp>',
+      '',
+      '> <pre>',
+      '> 引用內區塊（保留）',
+      'code（x）',
+      '</pre>',
+      '離開引用區塊（散文）',
+      '<pre>',
+      '```',
+      '原樣（保留）',
+      '```',
+      '</pre>',
+      '區塊後（散文）',
+      '',
+      '<custom-box>',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      '</custom-box>',
+      '',
+      '段落前（一）',
+      '<span>',
+      '段落後（二）',
+      '1234567890. ~~~',
+      '            十位數（非清單）',
+      '            ~~~',
+      '<pre>',
+      '未閉合（保留）'
+    ].join('\n');
+    const expected = [
+      '````markdown',
+      '```',
+      '範例(內嵌)文字',
+      '```',
+      '````',
+      '   ~~~text',
+      '      ~~~',
+      '| A | B |',
+      '| --- | --- |',
+      '| 1(一) | 2 |',
+      '   ~~~',
+      '> ~~~',
+      '> 引用區塊(程式碼)',
+      '> ~~~',
+      '>     ```',
+      '> 引用縮排後文字 (仍應修正)',
+      '> ```',
+      '> 未關閉引用(程式碼)',
+      '2. 非中斷(內)',
+      'A | B',
+      '--- | ---',
+      'x(內) | y',
+      '1. 中斷引用 (仍應修正)',
+      '離開引用 (仍應修正)',
+      '- ```',
+      '  清單未關閉(程式碼)',
+      'A | B',
+      '--- | ---',
+      'x(內) | y',
+      '- 清單項目 (仍應修正)',
+      '',
+      '```',
+      '頂層圍欄(程式碼)',
+      '```',
+      '圍欄後 (散文)',
+      '- - ```',
+      '    雙層清單(程式碼)',
+      '    ```',
+      '- > ```',
+      '  > 清單引用(程式碼)',
+      '  > ```',
+      '> - > ```',
+      '  >   > 交錯(程式碼)',
+      '  >   > ```',
+      '> ```',
+      '> 分隔線前(程式碼)',
+      '---',
+      '分隔線後 (散文)',
+      '      > 縮排大於 (散文)',
+      '\t```',
+      'Tab縮排後 (散文)',
+      '<!--',
+      '```',
+      '註解（保留）',
+      '```',
+      '-->',
+      '<!DOCTYPE html>',
+      '<div>',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      '</div>',
+      '',
+      '<xmp>',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      '</xmp>',
+      '',
+      '> <pre>',
+      '> 引用內區塊（保留）',
+      'code（x）',
+      '</pre>',
+      '離開引用區塊 (散文)',
+      '<pre>',
+      '```',
+      '原樣（保留）',
+      '```',
+      '</pre>',
+      '區塊後 (散文)',
+      '',
+      '<custom-box>',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      '</custom-box>',
+      '',
+      '> - <div>',
+      '>   A | B',
+      '>   --- | ---',
+      '>   x（1） | y',
+      '> </div>',
+      '',
+      '段落前 (一)',
+      '<span>',
+      '段落後 (二)',
+      '1234567890. ~~~',
+      '            十位數 (非清單)',
+      '            ~~~',
+      '<pre>',
+      '未閉合（保留）'
+    ].join('\n');
+    const markdown = await convertPaste(page, { text: input.replace('<custom-box>\nA | B\n--- | ---\nx（1） | y\n</custom-box>\n', '<custom-box>\nA | B\n--- | ---\nx（1） | y\n</custom-box>\n\n> - <div>\n>   A | B\n>   --- | ---\n>   x（1） | y\n> </div>\n') });
+    expect(markdown).toBe(expected);
+  });
+
+  test('protects deeply nested link destinations, bare/angle/reference URLs, raw HTML, math, and inline/multiline code while handling brackets, nested emphasis, and Unicode intraword underscores', async function ({ page }) {
+    await gotoApp(page);
+    const input = [
+      '請參考 [文件（一）](foo(a(b（c）))\\))（連結）、[角度連結](<./foo bar（baz）>)（說明）、[網址連結](<https://example.com/a（b）>)（說明）、[跨行連結](',
+      'foo（bar） "標題（一）")（說明）、[跨行無標題](',
+      'foo(bar))（說明）、[https://example.com/foo](url)（說明）後、[參照（一）][id（a）]、[空參照][]、說明](版本（x）)後、[未閉合](foo 與 [標籤]（測試）及 `呼叫（值）`（參數）、`<kbd>x（1）</kbd>`（按鍵）以及 `跨行（',
+      '測試）` 範例、測試 ``代碼（x）` 後，並顯示 \\`符號（test）\\` 與 literal \\（x\\） 後文與 \uE002P2MSPAN0\uE003（測試） 與 foo_bar（baz）_qux、foo_テスト（x）_bar、foo_（x）_bar、_（x）_bar 識別字。',
+      '裸網址 https://example.com/foo（bar） 與 www.example.com/a（b（c）d） 與 ftp://example.com/a（b） 與 (https://example.com/foo(bar))（說明）與（請見 https://example.com/x（y））後文與 <https://example.com/auto（link）>（說明）後 皆保持不變。',
+      'HTML <a title="1 > 0" href="page（test）.html">連結（一）</a> 與 <a',
+      'href="page（x）.html">連結（二）</a> 與 <strong>公司</strong>（Cisco）產品 與 <code>call（arg）</code>（說明）後 與 <code>a `b` c（d）</code> 與 <pre>原樣（保留）</pre> 屬性不變，而比較 <a（b）>產品 則正常轉換。',
+      '段落後非定義',
+      '[not-def]: foo（bar）',
+      '# 標題後定義',
+      '[after-head]: https://example.com/head（目標）',
+      '',
+      '[id（a）]: https://example.com/ref（目標）',
+      '[a\\]b]: https://example.com/escaped（目標）',
+      '[cont]:',
+      '  page（目標）',
+      '公式 $x（1）$（說明）、$a（x）\\$、$x（1）$$、跨行行內公式 $a',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      'z$ 與區塊：',
+      '$$',
+      'a | b（1）',
+      '--- | ---',
+      'c | d',
+      '$$',
+      '$$',
+      'A | B',
+      '--- | ---',
+      '$$a$$',
+      '一般文字 $$值（x）$$ 後、前文*（註）**粗體**後、**公司**（Cisco）產品與**思科**公司（Cisco）**設備**、~~公司（Cisco）~~產品、~~**公司（x）**~~產品、~~公司~~（Cisco）~~設備~~、**交換器（switch）**主要功能、***路由器（router）***主要用途、**甲（x）****乙**、**甲（x）**__乙__、**甲（x）**~~乙~~、~~丙 **丁（x）**~~後 與 *丙 **丁（x）***後 與 *公司（x）*尾**（後）產品 與 *a（x）*b尾*後（y）產品* 與 *公司（x）*尾**後（y）** 與 **交換器',
+      '型號（switch）**主要。'
+    ].join('\n');
+    const expected = [
+      '請參考 [文件 (一)](foo(a(b（c）))\\)) (連結)、[角度連結](<./foo bar（baz）>) (說明)、[網址連結](<https://example.com/a（b）>) (說明)、[跨行連結](',
+      'foo（bar） "標題（一）") (說明)、[跨行無標題](',
+      'foo(bar)) (說明)、[https://example.com/foo](url) (說明) 後、[參照 (一)][id（a）]、[空參照][]、說明](版本 (x))後、[未閉合](foo 與 [標籤] (測試) 及 `呼叫（值）` (參數)、`<kbd>x（1）</kbd>` (按鍵) 以及 `跨行（',
+      '測試）` 範例、測試 ``代碼 (x) ` 後，並顯示 \\`符號 (test)\\` 與 literal \\\\(x\\\\) 後文與 \uE002P2MSPAN0\uE003(測試) 與 foo_bar (baz)_qux、foo_テスト (x)_bar、foo_(x)_bar、_(x)_bar 識別字。',
+      '裸網址 https://example.com/foo（bar） 與 www.example.com/a（b（c）d） 與 ftp://example.com/a（b） 與 (https://example.com/foo(bar)) (說明) 與 (請見 https://example.com/x（y）) 後文與 <https://example.com/auto（link）> (說明) 後 皆保持不變。',
+      'HTML <a title="1 > 0" href="page（test）.html">連結 (一)</a> 與 <a',
+      'href="page（x）.html">連結 (二)</a> 與 <strong>公司</strong> (Cisco) 產品 與 <code>call（arg）</code> (說明) 後 與 <code>a `b` c（d）</code> 與 <pre>原樣（保留）</pre> 屬性不變，而比較 <a (b)>產品 則正常轉換。',
+      '段落後非定義',
+      '[not-def]: foo (bar)',
+      '# 標題後定義',
+      '[after-head]: https://example.com/head（目標）',
+      '',
+      '[id（a）]: https://example.com/ref（目標）',
+      '[a\\]b]: https://example.com/escaped（目標）',
+      '[cont]:',
+      '  page（目標）',
+      '公式 $x（1）$ (說明)、$a（x）\\$、$x（1）$$、跨行行內公式 $a',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      'z$ 與區塊：',
+      '$$',
+      'a | b（1）',
+      '--- | ---',
+      'c | d',
+      '$$',
+      '$$',
+      'A | B',
+      '--- | ---',
+      '$$a$$',
+      '一般文字 $$值 (x)$$ 後、前文*(註) **粗體**後、**公司** (Cisco) 產品與**思科**公司 (Cisco) **設備**、~~公司 (Cisco)~~ 產品、~~**公司 (x)**~~ 產品、~~公司~~ (Cisco) ~~設備~~、**交換器 (switch)** 主要功能、***路由器 (router)*** 主要用途、**甲 (x)** **乙**、**甲 (x)** __乙__、**甲 (x)** ~~乙~~、~~丙 **丁 (x)**~~ 後 與 *丙 **丁 (x)*** 後 與 *公司 (x)*尾** (後) 產品 與 *a (x)*b尾*後 (y) 產品* 與 *公司 (x)*尾**後 (y)** 與 **交換器',
+      '型號 (switch)** 主要。'
+    ].join('\n');
+    const markdown = await convertPaste(page, { text: input });
+    expect(markdown).toBe(expected);
+  });
+
+  test('handles optional boundary pipes, nested/blockquoted table indentation, front matter, even backslashes, header column schema, following list, top-level 4-space fence, and specialized rule post-processing', async function ({ page }) {
+    await gotoApp(page);
+    const input = [
+      '---',
+      'permalink: /guide（zh）/index',
+      '[fm（x）]: /u',
+      'A | B',
+      '--- | ---',
+      '---',
+      '[fm（x）]',
+      '',
+      '[x]: foo|bar',
+      '---|---',
+      '',
+      '[y]: foo',
+      '  "title | here"',
+      '--- | ---',
+      '- [z]: /url',
+      '  "title | here"',
+      '  --- | ---',
+      '',
+      'A | [x](',
+      'foo)',
+      '--- | ---',
+      'a | b',
+      '    a | b',
+      '    --- | ---',
+      '    - a | b',
+      '    --- | ---',
+      '- 清單後主題分隔線重置縮排',
+      '* * *',
+      '    A | B',
+      '    --- | ---',
+      '- 清單後頂層圍欄重置縮排',
+      '```',
+      'code',
+      '```',
+      '    A | B',
+      '    --- | ---',
+      '- 直接表頭 | 欄位',
+      '  --- | ---',
+      '  1 | 2345',
+      '頂層文字 | 不併入清單表格',
+      '- [ ] 待辦表頭 | 欄位',
+      '  --- | ---',
+      '  1 | 2345',
+      '- [ ] ```',
+      '  code（x）after',
+      '  ```',
+      '-     A | B',
+      '      --- | ---',
+      '      x（1） | y',
+      '- 清單內表格：',
+      '  Name | Value',
+      '  --- | ---',
+      '  `a \\| b` | `c` | 忽略',
+      '  A \\\\| B | 多餘欄位 | 忽略',
+      '- 選項 A | 選項 B',
+      '1. 編號清單懶惰表格',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      '- > 欄甲 | 欄乙',
+      '  > --- | ---',
+      '  > 1 | 2345',
+      '- > 另一項 | 非同表',
+      '> | 甲 | 乙 |',
+      '> | --- | --- |',
+      '> | 1 | 2345 |',
+      '| 1234 | 5 |',
+      '',
+      '> A | B',
+      '--- | ---',
+      '',
+      'A | [x](foo|bar)',
+      '--- | ---',
+      'z | y',
+      '',
+      'A | `x|y`',
+      '--- | ---',
+      'z | y',
+      '# 標題後自訂標籤與縮排程式碼',
+      '<custom>',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      '</custom>',
+      '[ref-before-html]: /url',
+      '<custom>',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      '</custom>',
+      '前導段落',
+      '- <custom>',
+      '  A | B',
+      '  --- | ---',
+      '  x（1） | y',
+      '  </custom>',
+      '1. 清單懶惰自訂標籤',
+      '<custom>',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      '</custom>',
+      '',
+      '- outer',
+      '  - inner',
+      '  outer',
+      '    <custom>',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      '</custom>',
+      '',
+      '前導段落二',
+      '> <custom>',
+      '> A | B',
+      '> --- | ---',
+      '> x（1） | y',
+      '> </custom>',
+      '',
+      '    call（x）after',
+      '    next（y）line',
+      '',
+      '> ```',
+      '> code',
+      '<?pi?>',
+      'after（x）',
+      '> ```',
+      '一般段落重置清單縮排',
+      '2. ~~~',
+      '   code（x）after',
+      '   ```',
+      'next（y）',
+      '```',
+      '<a href="foo',
+      '',
+      'bar（x）">link</a>',
+      '    ```',
+      '後段文字（仍應修正）',
+      '[ ] ~~~',
+      '公司（x）產品',
+      '[ ] ~~~',
+      'after（y）',
+      '>\t公司（x）產品',
+      '>\tA | B',
+      '>\t--- | ---',
+      '>\tx（1） | y',
+      '',
+      '- 清單後空白行重置表格縮排',
+      '  ```',
+      '',
+      'A | B',
+      '--- | ---',
+      'foo（x）',
+      '',
+      '\\``x（y）z` 後段（一）',
+      '> <pre>',
+      '> raw（x）',
+      '# head',
+      'out（y）',
+      '- <pre>',
+      '  raw（x）',
+      '# head2',
+      'out2（y）',
+      '$a',
+      '',
+      'b（x）$',
+      '比較 \\<a href="foo（x）">產品',
+      '',
+      '===',
+      '<custom>',
+      'A | B',
+      '--- | ---',
+      'https://example.com/a|b',
+      '<https://example.com/a|b>',
+      '<span title="x|y">',
+      '</custom>',
+      '',
+      'text',
+      'A | B',
+      '--- | ---',
+      '===',
+      '',
+      'pre ```',
+      'x（y）',
+      '```',
+      '',
+      '- ```',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      '',
+      'text <code>a（x）',
+      '',
+      'b（y）',
+      '',
+      '> - A | B',
+      '>     --- | ---',
+      '>     x（1） | y',
+      '',
+      '> - ```',
+      '> A | B',
+      '> --- | ---',
+      '> x（1） | y',
+      '',
+      '> intro',
+      '> A | B',
+      '> --- | ---',
+      '> x（1） | y',
+      '===',
+      '',
+      '- item',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      '===',
+      '',
+      '- item',
+      'A | B',
+      '- | -',
+      'x（1） | y',
+      '',
+      '- item',
+      '<!--',
+      'raw（x）',
+      '-->',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      '',
+      '<xmp>',
+      'raw（x）',
+      '',
+      'out（y）',
+      '<div\tclass="x">',
+      'raw（x）',
+      '# 標題 $$值（x）$$',
+      '- 項目 $$值（x）$$',
+      '1） 項目（說明）',
+      '`a|b（x）` ``a`b（x）`` <code>a|b（x）</code> <https://example.com/a|b（x）> https://example.com/a|b（x） \\\\$a（x）$',
+      '',
+      'A | B',
+      '- | -',
+      '`a|b（x）`',
+      '[x](foo|bar) | y',
+      '[x](<foo|bar>) | y',
+      '$a|b（x）$ | y',
+      'x（1） | y',
+      '    code（x）after',
+      '',
+      '> A | B',
+      '--- | ---',
+      'x（1） | y',
+      '',
+      'text',
+      '> A | B',
+      '> --- | ---',
+      '> x（1） | y',
+      '===',
+      '',
+      '- ```',
+      '  > x（y）z',
+      '  ```',
+      '',
+      ' | ',
+      '--- |',
+      'x（1） | y',
+      '',
+      '> A | B',
+      '- | -',
+      'x（1） | y',
+      '',
+      '> intro',
+      'A | B',
+      '- | -',
+      'x（1） | y',
+      '',
+      '> - A | B',
+      '> - | -',
+      'x（1） | y',
+      '',
+      '- item',
+      '  text $$值（x）$$',
+      '',
+      '- item',
+      'text $$值（x）$$',
+      '',
+      '</pre>',
+      'raw（x）',
+      '',
+      'abc\uE004def（x）',
+      '',
+      '[a（x）]: /one',
+      '[a\\]b（x）]: /two',
+      '',
+      '[a（x）] 與 [a\\]b（x）] 與 [a（x）][] 與 [說明（一）][a（x）] 與 [說明（二）][未定義（y）] 與 [普通（文字）]',
+      '',
+      'https://example.com/a)（b）後 與 https://example.com/a(b（說明） 與 https://example.com/a(b） 與 https://example.com/a） 與 [x](foo） 與 [x](foo\\） 與 [x](foo）） 與 [x](   foo） 與 [x](foo(a）)',
+      '',
+      'text',
+      'A | B',
+      '- | -',
+      '> q',
+      '===',
+      '',
+      'title',
+      '```',
+      '---',
+      'prose（x）',
+      '',
+      '1. item',
+      '> A | B',
+      '--- | ---',
+      'x（1） | y',
+      'text',
+      '',
+      '1. > A | B',
+      '--- | ---',
+      'x（1） | y',
+      'text',
+      '',
+      '1. item',
+      'text',
+      'A | B',
+      '--- | ---',
+      'x（y） | z',
+      '',
+      '- item',
+      '',
+      '> A | B',
+      '> --- | ---',
+      '> x（y） | z',
+      '',
+      '- item',
+      '',
+      '<div>',
+      '# raw（x）',
+      'A | B',
+      '- | -',
+      'x（y） | z',
+      '</div>',
+      '',
+      '- item',
+      '',
+      '  - nested',
+      '  A | B',
+      '--- | ---',
+      '',
+      '- nested',
+      '    A | B',
+      '--- | ---',
+      '  - | -',
+      '',
+      '- outer',
+      '  - inner',
+      '',
+      '  outer',
+      '',
+      '- <div>',
+      '> raw（x）',
+      '',
+      '$a',
+      '# b（x）$',
+      '',
+      '`a',
+      '# b（x）`',
+      '',
+      'text',
+      'A | B',
+      '- | -',
+      '```x',
+      '===',
+      '',
+      'text',
+      '```',
+      '> q',
+      '===',
+      '[x](foo）',
+      '',
+      'text',
+      '# h',
+      '> A | B',
+      '> --- | ---',
+      '===',
+      '',
+      'text',
+      '>',
+      '===',
+      '[s（x）]: /u',
+      '',
+      '[x][s（x）]',
+      '',
+      '> q',
+      '===',
+      '[q（x）]: /u',
+      '[x][q（x）]',
+      '',
+      '>',
+      'x（y） | z',
+      '> --- | ---',
+      '===',
+      '',
+      'plain（x）',
+      'A | B',
+      '- | -',
+      '>',
+      '---',
+      '',
+      '- item',
+      '>',
+      'A | B',
+      '- | -',
+      '',
+      'intro',
+      '10. item',
+      'A | B',
+      '--- | ---',
+      'x（y） | z',
+      '',
+      '2. item',
+      '```x',
+      '---',
+      '    code',
+      '```',
+      '[x](foo(a）)',
+      '',
+      'text',
+      '2. A | B',
+      '- | -',
+      '',
+      '- item',
+      '',
+      '  > A | B',
+      '--- | ---',
+      '',
+      '- item',
+      '',
+      '  > A | B',
+      '  > --- | ---',
+      'x（y） | z',
+      '',
+      'text',
+      'A | B',
+      '- | -',
+      '# h',
+      'C | D',
+      '- | -',
+      '',
+      'text',
+      '```',
+      'q（1）',
+      'text2',
+      '```',
+      'q（2）'
+    ].join('\n');
+    const expected = [
+      '---',
+      'permalink: /guide（zh）/index',
+      '[fm（x）]: /u',
+      'A | B',
+      '--- | ---',
+      '---',
+      '[fm（x）]',
+      '',
+      '[x]: foo|bar',
+      '---|---',
+      '',
+      '[y]: foo',
+      '  "title | here"',
+      '--- | ---',
+      '- [z]: /url',
+      '  "title | here"',
+      '  --- | ---',
+      '',
+      'A | [x](',
+      'foo)',
+      '--- | ---',
+      'a | b',
+      '    a | b',
+      '    --- | ---',
+      '    - a | b',
+      '    --- | ---',
+      '- 清單後主題分隔線重置縮排',
+      '* * *',
+      '    A | B',
+      '    --- | ---',
+      '- 清單後頂層圍欄重置縮排',
+      '```',
+      'code',
+      '```',
+      '    A | B',
+      '    --- | ---',
+      '- | 直接表頭 | 欄位   |',
+      '  | ---- | ---- |',
+      '  | 1    | 2345 |',
+      '頂層文字 | 不併入清單表格',
+      '- [ ] | 待辦表頭 | 欄位   |',
+      '  | ---- | ---- |',
+      '  | 1    | 2345 |',
+      '- [ ] ```',
+      '  code(x)after',
+      '  ```',
+      '-     A | B',
+      '      --- | ---',
+      '      x(1) | y',
+      '- 清單內表格：',
+      '  | Name     | Value |',
+      '  | -------- | ----- |',
+      '  | `a \\| b` | `c`   | 忽略 |',
+      '  | A \\\\     | B     | 多餘欄位 | 忽略 |',
+      '- 選項 A | 選項 B',
+      '1. 編號清單懶惰表格',
+      '   | A     | B   |',
+      '   | ----- | --- |',
+      '   | x (1) | y   |',
+      '- > | 欄甲  | 欄乙   |',
+      '  > | --- | ---- |',
+      '  > | 1   | 2345 |',
+      '- > 另一項 | 非同表',
+      '> | 甲    | 乙    |',
+      '> | ---- | ---- |',
+      '> | 1    | 2345 |',
+      '| 1234 | 5    |',
+      '',
+      '> | A   | B   |',
+      '| --- | --- |',
+      '',
+      'A | [x](foo|bar)',
+      '--- | ---',
+      'z | y',
+      '',
+      'A | `x|y`',
+      '--- | ---',
+      'z | y',
+      '# 標題後自訂標籤與縮排程式碼',
+      '<custom>',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      '</custom>',
+      '[ref-before-html]: /url',
+      '<custom>',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      '</custom>',
+      '前導段落',
+      '- <custom>',
+      '  A | B',
+      '  --- | ---',
+      '  x（1） | y',
+      '  </custom>',
+      '1. 清單懶惰自訂標籤',
+      '<custom>',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      '</custom>',
+      '',
+      '- outer',
+      '  - inner',
+      '  outer',
+      '    <custom>',
+      'A | B',
+      '--- | ---',
+      'x（1） | y',
+      '</custom>',
+      '',
+      '前導段落二',
+      '> <custom>',
+      '> A | B',
+      '> --- | ---',
+      '> x（1） | y',
+      '> </custom>',
+      '',
+      '    call(x)after',
+      '    next(y)line',
+      '',
+      '> ```',
+      '> code',
+      '<?pi?>',
+      'after(x)',
+      '> ```',
+      '一般段落重置清單縮排',
+      '2. ~~~',
+      '   code (x) after',
+      '   ```',
+      'next(y)',
+      '```',
+      '<a href="foo',
+      '',
+      'bar (x)">link</a>',
+      '    ```',
+      '後段文字 (仍應修正)',
+      '[ ] ~~~',
+      '公司 (x) 產品',
+      '[ ] ~~~',
+      'after (y)',
+      '>\t公司 (x) 產品',
+      '>\t| A     | B   |',
+      '>\t| ----- | --- |',
+      '>\t| x (1) | y   |',
+      '',
+      '- 清單後空白行重置表格縮排',
+      '  ```',
+      '',
+      '| A       | B   |',
+      '| ------- | --- |',
+      '| foo (x) |     |',
+      '',
+      '\\``x（y）z` 後段 (一)',
+      '> <pre>',
+      '> raw（x）',
+      '# head',
+      'out (y)',
+      '- <pre>',
+      '  raw（x）',
+      '# head2',
+      'out2 (y)',
+      '$a',
+      '',
+      'b (x)$',
+      '比較 \\<a href="foo (x)">產品',
+      '',
+      '===',
+      '<custom>',
+      '| A                      | B   |',
+      '| ---------------------- | --- |',
+      '| https://example.com/a  | b   |',
+      '| <https://example.com/a | b>  |',
+      '| <span title="x         | y"> |',
+      '| </custom>              |     |',
+      '',
+      'text',
+      'A | B',
+      '--- | ---',
+      '===',
+      '',
+      'pre ```',
+      'x（y）',
+      '```',
+      '',
+      '- ```',
+      '| A     | B   |',
+      '| ----- | --- |',
+      '| x (1) | y   |',
+      '',
+      'text <code>a（x）',
+      '',
+      'b (y)',
+      '',
+      '> - | A     | B   |',
+      '>     | ----- | --- |',
+      '>     | x (1) | y   |',
+      '',
+      '> - ```',
+      '> | A     | B   |',
+      '> | ----- | --- |',
+      '> | x (1) | y   |',
+      '',
+      '> intro',
+      '> A | B',
+      '> --- | ---',
+      '> x (1) | y',
+      '===',
+      '',
+      '- item',
+      'A | B',
+      '--- | ---',
+      'x (1) | y',
+      '===',
+      '',
+      '- item',
+      'A | B',
+      '- | -',
+      'x (1) | y',
+      '',
+      '- item',
+      '<!--',
+      'raw（x）',
+      '-->',
+      '  | A     | B   |',
+      '  | ----- | --- |',
+      '  | x (1) | y   |',
+      '',
+      '<xmp>',
+      'raw（x）',
+      '',
+      'out (y)',
+      '<div\tclass="x">',
+      'raw (x)',
+      '# 標題 $$值 (x)$$',
+      '- 項目 $$值 (x)$$',
+      '1） 項目 (說明)',
+      '`a|b（x）` ``a`b（x）`` <code>a|b（x）</code> <https://example.com/a|b（x）> https://example.com/a|b（x） \\\\$a（x）$',
+      '',
+      '| A        | B       |',
+      '| -------- | ------- |',
+      '| `a       | b (x) ` |',
+      '| [x](foo  | bar)    | y |',
+      '| [x](<foo | bar>)   | y |',
+      '| $a       | b (x)$  | y |',
+      '| x (1)    | y       |',
+      '    code(x)after',
+      '',
+      '> | A     | B   |',
+      '| ----- | --- |',
+      '| x (1) | y   |',
+      '',
+      'text',
+      '> A | B',
+      '> --- | ---',
+      '> x (1) | y',
+      '===',
+      '',
+      '- ```',
+      '  > x(y)z',
+      '  ```',
+      '',
+      ' | ',
+      '--- |',
+      'x (1) | y',
+      '',
+      '> A | B',
+      '- | -',
+      'x (1) | y',
+      '',
+      '> intro',
+      'A | B',
+      '- | -',
+      'x (1) | y',
+      '',
+      '> - A | B',
+      '> - | -',
+      'x (1) | y',
+      '',
+      '- item',
+      '  text $$值 (x)$$',
+      '',
+      '- item',
+      'text $$值 (x)$$',
+      '',
+      '</pre>',
+      'raw (x)',
+      '',
+      'abc\uE004def (x)',
+      '',
+      '[a（x）]: /one',
+      '[a\\]b（x）]: /two',
+      '',
+      '[a（x）] 與 [a\\]b（x）] 與 [a（x）][] 與 [說明 (一)][a（x）] 與 [說明 (二)][未定義（y）] 與 [普通 (文字)]',
+      '',
+      'https://example.com/a)（b）後 與 https://example.com/a(b (說明) 與 https://example.com/a(b） 與 https://example.com/a） 與 [x](foo） 與 [x](foo\\） 與 [x](foo）） 與 [x](   foo） 與 [x](foo(a）)',
+      '',
+      'text',
+      'A | B',
+      '- | -',
+      '> q',
+      '===',
+      '',
+      'title',
+      '```',
+      '---',
+      'prose (x)',
+      '',
+      '1. item',
+      '   > | A     | B   |',
+      '   | ----- | --- |',
+      '   | x (1) | y   |',
+      '   | text  |     |',
+      '',
+      '1. > | A     | B   |',
+      '   | ----- | --- |',
+      '   | x (1) | y   |',
+      '   | text  |     |',
+      '',
+      '1. item',
+      'text',
+      '   | A     | B   |',
+      '   | ----- | --- |',
+      '   | x (y) | z   |',
+      '',
+      '- item',
+      '',
+      '> | A     | B   |',
+      '> | ----- | --- |',
+      '> | x (y) | z   |',
+      '',
+      '- item',
+      '',
+      '<div>',
+      '# raw（x）',
+      'A | B',
+      '- | -',
+      'x（y） | z',
+      '</div>',
+      '',
+      '- item',
+      '',
+      '  - nested',
+      '  A | B',
+      '--- | ---',
+      '',
+      '- nested',
+      '    | A   | B   |',
+      '  | --- | --- |',
+      '  - | -',
+      '',
+      '- outer',
+      '  - inner',
+      '',
+      '  outer',
+      '',
+      '- <div>',
+      '> raw（x）',
+      '',
+      '$a',
+      '# b (x)$',
+      '',
+      '`a',
+      '# b (x) `',
+      '',
+      'text',
+      'A | B',
+      '- | -',
+      '```x',
+      '===',
+      '',
+      'text',
+      '```',
+      '> q',
+      '===',
+      '[x](foo）',
+      '',
+      'text',
+      '# h',
+      '> A | B',
+      '> --- | ---',
+      '===',
+      '',
+      'text',
+      '>',
+      '===',
+      '[s（x）]: /u',
+      '',
+      '[x][s（x）]',
+      '',
+      '> q',
+      '===',
+      '[q（x）]: /u',
+      '[x][q（x）]',
+      '',
+      '>',
+      'x (y) | z',
+      '> --- | ---',
+      '===',
+      '',
+      'plain (x)',
+      'A | B',
+      '- | -',
+      '>',
+      '---',
+      '',
+      '- item',
+      '>',
+      'A | B',
+      '- | -',
+      '',
+      'intro',
+      '10. item',
+      '| A     | B   |',
+      '| ----- | --- |',
+      '| x (y) | z   |',
+      '',
+      '2. item',
+      '```x',
+      '---',
+      '    code',
+      '```',
+      '[x](foo(a）)',
+      '',
+      'text',
+      '2. A | B',
+      '- | -',
+      '',
+      '- item',
+      '',
+      '  > A | B',
+      '--- | ---',
+      '',
+      '- item',
+      '',
+      '  > | A   | B   |',
+      '  > | --- | --- |',
+      'x (y) | z',
+      '',
+      'text',
+      '| A   | B   |',
+      '| --- | --- |',
+      '# h',
+      '| C   | D   |',
+      '| --- | --- |',
+      '',
+      'text',
+      '```',
+      'q(1)',
+      'text2',
+      '```',
+      'q (2)'
+    ].join('\n');
+    const markdown = await convertPaste(page, { text: input });
+    expect(markdown).toBe(expected);
+
+    const repeatedSetextInput = Array(10000).fill('===').join('\n') + '\n文字（一）';
+    const repeatedSetextMarkdown = await convertPaste(page, { text: repeatedSetextInput });
+    expect(repeatedSetextMarkdown).toBe(Array(10000).fill('===').join('\n') + '\n文字 (一)');
+
+    const repeatedTablesInput = Array(200).fill('A | B\n- | -\n# h').join('\n');
+    const repeatedTablesMarkdown = await convertPaste(page, { text: repeatedTablesInput });
+    expect(repeatedTablesMarkdown).toBe(Array(200).fill('| A   | B   |\n| --- | --- |\n# h').join('\n'));
+
+    const repeatedFencesInput = Array(200).fill('text\n```\nq（x）\n```').join('\n');
+    const repeatedFencesMarkdown = await convertPaste(page, { text: repeatedFencesInput });
+    expect(repeatedFencesMarkdown).toBe(Array(200).fill('text\n```\nq(x)\n```').join('\n'));
+
+    const deepQuotes = '> '.repeat(25);
+    const deepQuotesMarkdown = await convertPaste(page, { text: deepQuotes + 'x（y）' });
+    expect(deepQuotesMarkdown).toBe(deepQuotes + 'x (y)');
+
+    const longSpanTag = 'P2MSPAN1X ' + 'P2MSPAN' + 'X'.repeat(5000);
+    const longSpanMarkdown = await convertPaste(page, { text: longSpanTag + ' `code` 測試（一）' });
+    expect(longSpanMarkdown).toBe(longSpanTag + ' `code` 測試 (一)');
+
+    const longStars = '*'.repeat(30000);
+    const longTail = 'a'.repeat(30000);
+    const longStarMarkdown = await convertPaste(page, { text: longStars + '（x）' + longTail });
+    expect(longStarMarkdown).toBe(longStars + '(x) ' + longTail);
+
+    const longUnclosedLinks = '[a](b'.repeat(20000);
+    const longUnclosedMarkdown = await convertPaste(page, { text: longUnclosedLinks + '（測試）' });
+    expect(longUnclosedMarkdown).toBe(longUnclosedLinks + ' (測試)');
+
+    const longUnclosedMath = '$a '.repeat(40000);
+    const longUnclosedMathMarkdown = await convertPaste(page, { text: longUnclosedMath + '（測試）' });
+    expect(longUnclosedMathMarkdown).toBe(longUnclosedMath + '(測試)');
+
+    const longUnclosedBlockMath = '$$a '.repeat(2001);
+    const longUnclosedBlockMathMarkdown = await convertPaste(page, { text: longUnclosedBlockMath + '（測試）' });
+    expect(longUnclosedBlockMathMarkdown).toBe(longUnclosedBlockMath + '(測試)');
+
+    const longEmphasisBody = 'a'.repeat(501);
+    const longEmphasisMarkdown = await convertPaste(page, { text: '**' + longEmphasisBody + '**（Cisco）產品' });
+    expect(longEmphasisMarkdown).toBe('**' + longEmphasisBody + '** (Cisco) 產品');
+
+    const tomlInput = '+++\ntitle = "標題（測試）"\n+++\n段落（散文）';
+    const tomlMarkdown = await convertPaste(page, { text: tomlInput });
+    expect(tomlMarkdown).toBe('+++\ntitle = "標題（測試）"\n+++\n段落 (散文)');
+
+    const copilotInput = ' ● **交換器（switch）**主要\n   後續（說明）文字';
+    const copilotMarkdown = await convertPaste(page, { text: copilotInput });
+    expect(copilotMarkdown).toBe('**交換器 (switch)** 主要\n後續 (說明) 文字');
+
+    const wordNestedInput = '\uf06e\t巢狀項目（測試）';
+    const wordNestedMarkdown = await convertPaste(page, { text: wordNestedInput });
+    expect(wordNestedMarkdown).toBe('  - 巢狀項目 (測試)');
+
+    const crlfInput = '```\r\nCRLF（程式碼）\r\n```\r\n段落（散文）';
+    const crlfMarkdown = await convertPaste(page, { text: crlfInput });
+    expect(crlfMarkdown).toBe('```\nCRLF(程式碼)\n```\n段落 (散文)');
+
+    const escapedFinalLinkClose = '[share](foo（bar）\\) 說明（測試）';
+    const escapedFinalLinkCloseMarkdown = await convertPaste(page, { text: escapedFinalLinkClose });
+    expect(escapedFinalLinkCloseMarkdown).toBe('[share](foo（bar）\\) 說明 (測試)');
+
+    const incompleteLinkPairedFw = '[x](（x） 說明（測試）';
+    const incompleteLinkPairedFwMarkdown = await convertPaste(page, { text: incompleteLinkPairedFw });
+    expect(incompleteLinkPairedFwMarkdown).toBe('[x](（x） 說明 (測試)');
+
+    const setextAfterIndentedList = 'text\n  - item\n===\n> A | B\n--- | ---';
+    const setextAfterIndentedListMarkdown = await convertPaste(page, { text: setextAfterIndentedList });
+    expect(setextAfterIndentedListMarkdown).toBe('text\n  - item\n===\n> | A   | B   |\n| --- | --- |');
+
+    const manyUrlsOnLine = Array.from({ length: 5000 }, function (_, idx) {
+      return 'https://example.com/a(b)c' + idx;
+    }).concat(['說明（測試）']).join(' ');
+    const expectedManyUrls = Array.from({ length: 5000 }, function (_, idx) {
+      return 'https://example.com/a(b)c' + idx;
+    }).concat(['說明 (測試)']).join(' ');
+    const manyUrlsMarkdown = await convertPaste(page, { text: manyUrlsOnLine });
+    expect(manyUrlsMarkdown).toBe(expectedManyUrls);
+
+    const repeatedListMarkers = '- '.repeat(50);
+    const repeatedListMarkersMarkdown = await convertPaste(page, { text: repeatedListMarkers + 'x（y）' });
+    expect(repeatedListMarkersMarkdown).toBe(repeatedListMarkers + 'x (y)');
+
+    const orderedLazySiblingBullet = 'text\n2. item\n--- | ---\n  - | -';
+    const orderedLazySiblingBulletMarkdown = await convertPaste(page, { text: orderedLazySiblingBullet });
+    expect(orderedLazySiblingBulletMarkdown).toBe(orderedLazySiblingBullet);
+
+    const escapedCloseNestedParen = '[x](a（(\\) 說明（測試）';
+    const escapedCloseNestedParenMarkdown = await convertPaste(page, { text: escapedCloseNestedParen });
+    expect(escapedCloseNestedParenMarkdown).toBe('[x](a（(\\) 說明 (測試)');
+
+    const defAfterLooseListCont = '- item\n\n  cont\n[a（x）]: /u\n[use][a（x）]\n說明（測試）';
+    const defAfterLooseListContMarkdown = await convertPaste(page, { text: defAfterLooseListCont });
+    expect(defAfterLooseListContMarkdown).toBe('- item\n\n  cont\n[a（x）]: /u\n[use][a（x）]\n說明 (測試)');
+
+    const supplementaryCjkTable = '| 𠀀𠀀 | A |\n| --- | --- |\n| 測測 | B |';
+    const supplementaryCjkTableMarkdown = await convertPaste(page, { text: supplementaryCjkTable });
+    expect(supplementaryCjkTableMarkdown).toBe('| 𠀀𠀀  | A   |\n| --- | --- |\n| 測測  | B   |');
+
+    const refDefThenOrderedSiblingBullet = '[d]: /u\n2. item\nA | B\n- | -';
+    const refDefThenOrderedSiblingBulletMarkdown = await convertPaste(page, { text: refDefThenOrderedSiblingBullet });
+    expect(refDefThenOrderedSiblingBulletMarkdown).toBe(refDefThenOrderedSiblingBullet);
+
+    const setextHtmlTagBeforeRefDef = 'text\n[a（x）]: /u\n<div>\n---\n[a（x）]: /u';
+    const setextHtmlTagBeforeRefDefMarkdown = await convertPaste(page, { text: setextHtmlTagBeforeRefDef });
+    expect(setextHtmlTagBeforeRefDefMarkdown).toBe(setextHtmlTagBeforeRefDef);
+
+    const lazyTableEnablingNonOneOrderedList = 'text\n10. item\n--- | ---\n:-- | --:';
+    const lazyTableEnablingNonOneOrderedListMarkdown = await convertPaste(page, { text: lazyTableEnablingNonOneOrderedList });
+    expect(lazyTableEnablingNonOneOrderedListMarkdown).toBe('text\n10. item\n| --- | --- |\n| :-- | --: |');
+  });
+
+  test('handles container boundary, Setext heading, reference definition, and performance edge cases', async function ({ page }) {
+    await gotoApp(page);
+    const nonOneOrderedRowInActiveTable = 'H | J\n- | -\n2. item\nA | B\n- | -';
+    const nonOneOrderedRowInActiveTableMarkdown = await convertPaste(page, { text: nonOneOrderedRowInActiveTable });
+    expect(nonOneOrderedRowInActiveTableMarkdown).toBe('| H       | J   |\n| ------- | --- |\n| 2. item |     |\n| A       | B   |\n- | -');
+
+    const lazyQuoteTableInsideOrderedList = '1. item\n> note\nA | B\n--- | ---\nplain';
+    const lazyQuoteTableInsideOrderedListMarkdown = await convertPaste(page, { text: lazyQuoteTableInsideOrderedList });
+    expect(lazyQuoteTableInsideOrderedListMarkdown).toBe('1. item\n> note\n   | A     | B   |\n   | ----- | --- |\n   | plain |     |');
+
+    const asciiCloseBeforeFwCloseInLink = '[x]((a（)） 說明（測試）';
+    const asciiCloseBeforeFwCloseInLinkMarkdown = await convertPaste(page, { text: asciiCloseBeforeFwCloseInLink });
+    expect(asciiCloseBeforeFwCloseInLinkMarkdown).toBe('[x]((a（)） 說明 (測試)');
+
+    const bareUrlUnmatchedParenFwSuffix = 'https://e.com/(（x） 說明（測試）';
+    const bareUrlUnmatchedParenFwSuffixMarkdown = await convertPaste(page, { text: bareUrlUnmatchedParenFwSuffix });
+    expect(bareUrlUnmatchedParenFwSuffixMarkdown).toBe('https://e.com/(（x） 說明 (測試)');
+
+    const setextAcrossEmptyQuoteMarker = 'cont\n>\n> A | B\n--- | ---\n===\n說明（測試）';
+    const setextAcrossEmptyQuoteMarkerMarkdown = await convertPaste(page, { text: setextAcrossEmptyQuoteMarker });
+    expect(setextAcrossEmptyQuoteMarkerMarkdown).toBe('cont\n>\n> A | B\n--- | ---\n===\n說明 (測試)');
+
+    const refDefWithFwTitleSuffix = '[a（b）]: /u（x） （title）\n[a（b）]';
+    const refDefWithFwTitleSuffixMarkdown = await convertPaste(page, { text: refDefWithFwTitleSuffix });
+    expect(refDefWithFwTitleSuffixMarkdown).toBe('[a (b)]: /u (x) （title）\n[a (b)]');
+
+    const lazyQuoteTableSiblingOrderedItem = '1. item\n> note\nA | B\n--- | ---\n2. sibling';
+    const lazyQuoteTableSiblingOrderedItemMarkdown = await convertPaste(page, { text: lazyQuoteTableSiblingOrderedItem });
+    expect(lazyQuoteTableSiblingOrderedItemMarkdown).toBe('1. item\n> note\n   | A   | B   |\n   | --- | --- |\n2. sibling');
+
+    const wsLinkNestedParenWithTitle = '[x]( u(（v） "t") 說明（測試）';
+    const wsLinkNestedParenWithTitleMarkdown = await convertPaste(page, { text: wsLinkNestedParenWithTitle });
+    expect(wsLinkNestedParenWithTitleMarkdown).toBe('[x]( u(（v） "t") 說明 (測試)');
+
+    const bareUrlWithSquareBrackets = 'https://example.com/wiki/Foo[1]（bar） 說明（測試）';
+    const bareUrlWithSquareBracketsMarkdown = await convertPaste(page, { text: bareUrlWithSquareBrackets });
+    expect(bareUrlWithSquareBracketsMarkdown).toBe('https://example.com/wiki/Foo[1]（bar） 說明 (測試)');
+
+    const interleavedEmphasisSpan = '*_x（y）*z_* 與 *~~x（y）*z~~* 與 _*x（y）_z*_';
+    const interleavedEmphasisSpanMarkdown = await convertPaste(page, { text: interleavedEmphasisSpan });
+    expect(interleavedEmphasisSpanMarkdown).toBe('*_x (y)*z_* 與 *~~x (y)*z~~* 與 _*x (y)_z*_');
+
+    const oneOrderedAfterParaLazyTable = 'text\n1. item\nA | B\n--- | ---';
+    const oneOrderedAfterParaLazyTableMarkdown = await convertPaste(page, { text: oneOrderedAfterParaLazyTable });
+    expect(oneOrderedAfterParaLazyTableMarkdown).toBe('text\n1. item\n   | A   | B   |\n   | --- | --- |');
+
+    const looseListContThenTopLevelTable = '- item\n\n    cont\nA | B\n--- | ---';
+    const looseListContThenTopLevelTableMarkdown = await convertPaste(page, { text: looseListContThenTopLevelTable });
+    expect(looseListContThenTopLevelTableMarkdown).toBe('- item\n\n    cont\n| A   | B   |\n| --- | --- |');
+
+    const setextRowInsideTableBeforeFence = 'A | B\n- | -\n===\nplain\n~~~\n===';
+    const setextRowInsideTableBeforeFenceMarkdown = await convertPaste(page, { text: setextRowInsideTableBeforeFence });
+    expect(setextRowInsideTableBeforeFenceMarkdown).toBe('| A     | B   |\n| ----- | --- |\n| ===   |     |\n| plain |     |\n~~~\n===');
+
+    const bareUrlWithEmbeddedLinkLike = 'https://e.com/[x]()（bar） 說明（測試）';
+    const bareUrlWithEmbeddedLinkLikeMarkdown = await convertPaste(page, { text: bareUrlWithEmbeddedLinkLike });
+    expect(bareUrlWithEmbeddedLinkLikeMarkdown).toBe('https://e.com/[x]()（bar） 說明 (測試)');
+
+    const laterTableInsideLookaheadList = 'text\n2. sibling\n--- | ---\nplain\nx | y\n:-- | --:\ncode';
+    const laterTableInsideLookaheadListMarkdown = await convertPaste(page, { text: laterTableInsideLookaheadList });
+    expect(laterTableInsideLookaheadListMarkdown).toBe('text\n2. sibling\n--- | ---\nplain\n   | x    | y   |\n   | :--- | --: |\n   | code |     |');
+
+    const emptyHrefFwTitleOpener = '[x]( （ x)) 與 [x](（ x)) 說明（測試）';
+    const emptyHrefFwTitleOpenerMarkdown = await convertPaste(page, { text: emptyHrefFwTitleOpener });
+    expect(emptyHrefFwTitleOpenerMarkdown).toBe('[x]( （ x)) 與 [x](（ x)) 說明 (測試)');
+
+    const siblingMarkerWidthGrowth = '9. first\n\n10. item\nA | B\n- | -';
+    const siblingMarkerWidthGrowthMarkdown = await convertPaste(page, { text: siblingMarkerWidthGrowth });
+    expect(siblingMarkerWidthGrowthMarkdown).toBe('9. first\n\n10. item\nA | B\n- | -');
+
+    const fenceAfterBlockquoteExit = '> note\n~~~\n---\nA | B\n- | -\n~~~\n\n> note\nplain\n~~~\n===\nA | B\n- | -\n~~~\n\nlead\n> note\nplain\n~~~\n---\nA | B\n- | -';
+    const fenceAfterBlockquoteExitMarkdown = await convertPaste(page, { text: fenceAfterBlockquoteExit });
+    expect(fenceAfterBlockquoteExitMarkdown).toBe('> note\n~~~\n---\nA | B\n- | -\n~~~\n\n> note\nplain\n~~~\n===\nA | B\n- | -\n~~~\n\nlead\n> note\nplain\n~~~\n---\n| A   | B   |\n| --- | --- |');
+
+    const codeSpanAfterMultipleEscapedBackticks = '\\`\\``）`中（說明） 與 \\`\\`\\``（`中（說明）';
+    const codeSpanAfterMultipleEscapedBackticksMarkdown = await convertPaste(page, { text: codeSpanAfterMultipleEscapedBackticks });
+    expect(codeSpanAfterMultipleEscapedBackticksMarkdown).toBe('\\`\\``）`中 (說明) 與 \\`\\`\\``（`中 (說明)');
+
+    const indentedLineInPendingSetext = 'plain\n___\n    code\n:-- | --:\n--- | ---\n===';
+    const indentedLineInPendingSetextMarkdown = await convertPaste(page, { text: indentedLineInPendingSetext });
+    expect(indentedLineInPendingSetextMarkdown).toBe('plain\n___\n    code\n:-- | --:\n--- | ---\n===');
+
+    const defAfterAdjacentBlockquoteListSetext = '> note\n1. item\n>\n===\n[a（x）]: /u\n[use][a（x）]';
+    const defAfterAdjacentBlockquoteListSetextMarkdown = await convertPaste(page, { text: defAfterAdjacentBlockquoteListSetext });
+    expect(defAfterAdjacentBlockquoteListSetextMarkdown).toBe('> note\n1. item\n>\n===\n[a（x）]: /u\n[use][a（x）]');
+
+    const paddedTableRowFollowedByBlockquoteInList = 'text\n9. item\n--- | ---\n--- | ---\nlongvalue | x\nA | B\n> note\ncontinued';
+    const paddedTableRowFollowedByBlockquoteInListMarkdown = await convertPaste(page, { text: paddedTableRowFollowedByBlockquoteInList });
+    expect(paddedTableRowFollowedByBlockquoteInListMarkdown).toBe('text\n9. item\n| ---       | --- |\n   | --------- | --- |\n   | longvalue | x   |\n   | A         | B   |\n> note\ncontinued');
+
+    const singleLineBlockMathWithPipeBeforeDelim = '$$a | b$$\n--- | ---\n\n   $$a | b$$\n--- | ---';
+    const singleLineBlockMathWithPipeBeforeDelimMarkdown = await convertPaste(page, { text: singleLineBlockMathWithPipeBeforeDelim });
+    expect(singleLineBlockMathWithPipeBeforeDelimMarkdown).toBe('$$a | b$$\n--- | ---\n\n   | $$a | b$$ |\n| --- | --- |');
+
+    const defAfterBlockMath = '$$a | b$$\n[a（x）]: /u\n[use][a（x）]';
+    const defAfterBlockMathMarkdown = await convertPaste(page, { text: defAfterBlockMath });
+    expect(defAfterBlockMathMarkdown).toBe('$$a | b$$\n[a（x）]: /u\n[use][a（x）]');
+
+    const quotedLineInsideOuterSetextBeforeTableCandidate = 'plain\n> A | B\n===\nA | B\n> - | -\n\nplain\n> A | B\n---\nA | B\n> - | -\n\n> outer\nplain\n>> A | B\n===\nA | B\n>> - | -\n\nplain\n> note\n===\n[b（x）]: /u\n[use][b（x）]';
+    const quotedLineInsideOuterSetextBeforeTableCandidateMarkdown = await convertPaste(page, { text: quotedLineInsideOuterSetextBeforeTableCandidate });
+    expect(quotedLineInsideOuterSetextBeforeTableCandidateMarkdown).toBe('plain\n> A | B\n===\nA | B\n> - | -\n\nplain\n> A | B\n---\nA | B\n> - | -\n\n> outer\nplain\n>> A | B\n===\nA | B\n>> - | -\n\nplain\n> note\n===\n[b（x）]: /u\n[use][b（x）]');
+
+    const singleHyphenTableAfterFenceBeforeHr = 'plain\n~~~\nx\n~~~\nA | B\n- | -\n---\n\nplain\n~~~\n- item\n~~~\nA | B\n- | -\n---\n\n~~~\nx\n~~~\nA | B\n- | -\n---';
+    const singleHyphenTableAfterFenceBeforeHrMarkdown = await convertPaste(page, { text: singleHyphenTableAfterFenceBeforeHr });
+    expect(singleHyphenTableAfterFenceBeforeHrMarkdown).toBe('plain\n~~~\nx\n~~~\nA | B\n- | -\n---\n\nplain\n~~~\n- item\n~~~\n| A   | B   |\n| --- | --- |\n---\n\n~~~\nx\n~~~\n| A   | B   |\n| --- | --- |\n---');
+
+    const fenceAfterCompletedListAndCode = '---\n    indented\n- sibling\n```\n---\nx | y\n--- | ---\n```\n\nplain\n- item\n* * *\n```\n===\nx | y\n--- | ---';
+    const fenceAfterCompletedListAndCodeMarkdown = await convertPaste(page, { text: fenceAfterCompletedListAndCode });
+    expect(fenceAfterCompletedListAndCodeMarkdown).toBe('---\n    indented\n- sibling\n```\n---\nx | y\n--- | ---\n```\n\nplain\n- item\n* * *\n```\n===\nx | y\n--- | ---');
+
+    const topLevelTableAfterCompletedListFence = '- item\n```\n```\n===\n10. item\nA | B\n--- | ---';
+    const topLevelTableAfterCompletedListFenceMarkdown = await convertPaste(page, { text: topLevelTableAfterCompletedListFence });
+    expect(topLevelTableAfterCompletedListFenceMarkdown).toBe('- item\n```\n```\n===\n10. item\n| A   | B   |\n| --- | --- |');
+
+    const tableBeforeSiblingItemBlockquote = '10. first\n> note\n10. second\nx | y\n--- | ---\n> quote';
+    const tableBeforeSiblingItemBlockquoteMarkdown = await convertPaste(page, { text: tableBeforeSiblingItemBlockquote });
+    expect(tableBeforeSiblingItemBlockquoteMarkdown).toBe('10. first\n> note\n10. second\n    | x   | y   |\n    | --- | --- |\n> quote');
+
+    const parenthesizedLinkTitleWithFullWidthParens = '[x](url (title（x）)) 與 [x（y）](url (title（x）))';
+    const parenthesizedLinkTitleWithFullWidthParensMarkdown = await convertPaste(page, { text: parenthesizedLinkTitleWithFullWidthParens });
+    expect(parenthesizedLinkTitleWithFullWidthParensMarkdown).toBe('[x](url (title（x）)) 與 [x (y)](url (title（x）))');
+
+    const displayMathBeforeIndentedCodeAndDef = '[use][a（x）]\n$$x$$\n    code\n[a（x）]: /u';
+    const displayMathBeforeIndentedCodeAndDefMarkdown = await convertPaste(page, { text: displayMathBeforeIndentedCodeAndDef });
+    expect(displayMathBeforeIndentedCodeAndDefMarkdown).toBe('[use][a（x）]\n$$x$$\n    code\n[a（x）]: /u');
+
+    const listSetextAcrossProtectedMath = '1. item\n$$x$$\nA | B\n--- | ---\n===';
+    const listSetextAcrossProtectedMathMarkdown = await convertPaste(page, { text: listSetextAcrossProtectedMath });
+    expect(listSetextAcrossProtectedMathMarkdown).toBe('1. item\n$$x$$\nA | B\n--- | ---\n===');
+
+    const nestedParenthesizedLinkTitle = '[x](url (a（x）())) 與 [x（y）](url (a（x）()))';
+    const nestedParenthesizedLinkTitleMarkdown = await convertPaste(page, { text: nestedParenthesizedLinkTitle });
+    expect(nestedParenthesizedLinkTitleMarkdown).toBe('[x](url (a（x）())) 與 [x (y)](url (a（x）()))');
+
+    const unmatchedBlockMathRescannedAsInline = '$$x（1）$ 與 # $$y（2）$';
+    const unmatchedBlockMathRescannedAsInlineMarkdown = await convertPaste(page, { text: unmatchedBlockMathRescannedAsInline });
+    expect(unmatchedBlockMathRescannedAsInlineMarkdown).toBe('$$x（1）$ 與 # $$y (2)$');
+
+    const yamlFrontMatterWithLeadingComments = '---\n# generated metadata\n\ntitle: foo（bar）\n---\n段落（散文）';
+    const yamlFrontMatterWithLeadingCommentsMarkdown = await convertPaste(page, { text: yamlFrontMatterWithLeadingComments });
+    expect(yamlFrontMatterWithLeadingCommentsMarkdown).toBe('---\n# generated metadata\n\ntitle: foo（bar）\n---\n段落 (散文)');
+
+    const fenceAfterSetextAndTable = 'plain\n```\n===\nA | B\n--- | ---\n```\ncode（x）\n```\n\nplain\n```\n===\npara\n```\ncode（y）';
+    const fenceAfterSetextAndTableMarkdown = await convertPaste(page, { text: fenceAfterSetextAndTable });
+    expect(fenceAfterSetextAndTableMarkdown).toBe('plain\n```\n===\n| A   | B   |\n| --- | --- |\n```\ncode(x)\n```\n\nplain\n```\n===\npara\n```\ncode(y)');
+
+    const longDollarRun = '$'.repeat(80000) + '（測試）';
+    const longDollarRunMarkdown = await convertPaste(page, { text: longDollarRun });
+    expect(longDollarRunMarkdown).toBe('$'.repeat(80000) + '(測試)');
+
+    const multiCellInlineMathFromDoubleDollar = 'A | B | C\n--- | --- | ---\nx | $$y（1）$ | $$z（2）$';
+    const multiCellInlineMathFromDoubleDollarMarkdown = await convertPaste(page, { text: multiCellInlineMathFromDoubleDollar });
+    expect(multiCellInlineMathFromDoubleDollarMarkdown).toBe('| A   | B       | C       |\n| --- | ------- | ------- |\n| x   | $$y（1）$ | $$z（2）$ |');
+
+    const greedySingleCharInlineMath = 'a$x$y（x）$z 與 a$x$（y）';
+    const greedySingleCharInlineMathMarkdown = await convertPaste(page, { text: greedySingleCharInlineMath });
+    expect(greedySingleCharInlineMathMarkdown).toBe('a$x$y（x）$z 與 a$x$ (y)');
+
+    const escapedDollarPairInlineMath = '\\$$）$ 與 a \\$$）$ 與 \\\\$$）$\n\n$$$x（1）$';
+    const escapedDollarPairInlineMathMarkdown = await convertPaste(page, { text: escapedDollarPairInlineMath });
+    expect(escapedDollarPairInlineMathMarkdown).toBe('\\$$）$ 與 a \\$$）$ 與 \\\\$$）$\n\n$$$x (1)$');
+
+    const fenceAfterNonOneOrderedContinuation = 'a\n10. item\n```\nx\n---\nA | B\n:-- | --:\n```\n\na\n10. item\nx\n```\n---\nA | B\n:-- | --:';
+    const fenceAfterNonOneOrderedContinuationMarkdown = await convertPaste(page, { text: fenceAfterNonOneOrderedContinuation });
+    expect(fenceAfterNonOneOrderedContinuationMarkdown).toBe('a\n10. item\n```\nx\n---\nA | B\n:-- | --:\n```\n\na\n10. item\nx\n```\n---\nA | B\n:-- | --:');
+
+    const rawHtmlAfterQuotedList = '> - item\n<div>\n> x\n- | -\nA | B\n--- | ---';
+    const rawHtmlAfterQuotedListMarkdown = await convertPaste(page, { text: rawHtmlAfterQuotedList });
+    expect(rawHtmlAfterQuotedListMarkdown).toBe('> - item\n<div>\n> x\n- | -\nA | B\n--- | ---');
+
+    const dedentedFirstContentInListFence = '- item\n    ```\nA | B\n--- | ---';
+    const dedentedFirstContentInListFenceMarkdown = await convertPaste(page, { text: dedentedFirstContentInListFence });
+    expect(dedentedFirstContentInListFenceMarkdown).toBe('- item\n    ```\nA | B\n--- | ---');
+
+    const incompleteLinkInUnmatchedParenRun = '([x](foo） 與 ([x](foo(bar）';
+    const incompleteLinkInUnmatchedParenRunMarkdown = await convertPaste(page, { text: incompleteLinkInUnmatchedParenRun });
+    expect(incompleteLinkInUnmatchedParenRunMarkdown).toBe('([x](foo） 與 ([x](foo(bar）');
+
+    const siblingListAfterEmptyListQuote = '- >\nA | B\n- | -';
+    const siblingListAfterEmptyListQuoteMarkdown = await convertPaste(page, { text: siblingListAfterEmptyListQuote });
+    expect(siblingListAfterEmptyListQuoteMarkdown).toBe('- >\nA | B\n- | -');
+
+    const lazyQuoteFenceInSetextHeading = 'plain\n> ~~~\n[x](url (t（a）)) 與 說明（測試）\n===\n\nplain\n> text\n> ~~~\n[x](url (t（b）))\n===';
+    const lazyQuoteFenceInSetextHeadingMarkdown = await convertPaste(page, { text: lazyQuoteFenceInSetextHeading });
+    expect(lazyQuoteFenceInSetextHeadingMarkdown).toBe('plain\n> ~~~\n[x](url (t（a）)) 與 說明 (測試)\n===\n\nplain\n> text\n> ~~~\n[x](url (t（b）))\n===');
+
+    const fenceAfterListItemBlockquote = '1. item\n> quote\n```\n---\nA | B\n--- | ---';
+    const fenceAfterListItemBlockquoteMarkdown = await convertPaste(page, { text: fenceAfterListItemBlockquote });
+    expect(fenceAfterListItemBlockquoteMarkdown).toBe('1. item\n> quote\n```\n---\nA | B\n--- | ---');
+
+    const indentedCodeAndDefAfterSetextHeading = '[use][a（x）]\n---\n    code\n[a（x）]: /u\n---';
+    const indentedCodeAndDefAfterSetextHeadingMarkdown = await convertPaste(page, { text: indentedCodeAndDefAfterSetextHeading });
+    expect(indentedCodeAndDefAfterSetextHeadingMarkdown).toBe('[use][a（x）]\n---\n    code\n[a（x）]: /u\n---');
+
+    const oversizedTableInput = ['A（測試） | B', '--- | ---', 'x'.repeat(5000) + ' | y'].concat(Array.from({ length: 210 }, function () {
+      return 'z | q';
+    })).join('\n');
+    const oversizedTableExpected = ['A (測試) | B', '--- | ---', 'x'.repeat(5000) + ' | y'].concat(Array.from({ length: 210 }, function () {
+      return 'z | q';
+    })).join('\n');
+    const oversizedTableMarkdown = await convertPaste(page, { text: oversizedTableInput });
+    expect(oversizedTableMarkdown).toBe(oversizedTableExpected);
+
+    const fenceAfterDefAndQuote = '[a]: /u\n> quote\n```\n===\nA | B\n--- | ---';
+    const fenceAfterDefAndQuoteMarkdown = await convertPaste(page, { text: fenceAfterDefAndQuote });
+    expect(fenceAfterDefAndQuoteMarkdown).toBe('[a]: /u\n> quote\n```\n===\nA | B\n--- | ---');
+
+    const siblingListAfterLeadingBlankDef = '\n[a]: /u\n9. item\nA | B\n- | -\n\n[b]:\n[c]:\n/u';
+    const siblingListAfterLeadingBlankDefMarkdown = await convertPaste(page, { text: siblingListAfterLeadingBlankDef });
+    expect(siblingListAfterLeadingBlankDefMarkdown).toBe('\n[a]: /u\n9. item\nA | B\n- | -\n\n[b]:\n[c]:\n/u');
+
+    const allBmpCodeUnitsInput = '```\n' + Array.from({ length: 65536 }, function (_, i) {
+      return String.fromCharCode(i);
+    }).join('');
+    const allBmpCodeUnitsExpected = allBmpCodeUnitsInput.replace(/\r\n?/g, '\n').replace(/（/g, '(').replace(/）/g, ')');
+    const allBmpCodeUnitsMarkdown = await convertPaste(page, { text: allBmpCodeUnitsInput });
+    expect(allBmpCodeUnitsMarkdown).toBe(allBmpCodeUnitsExpected);
+
+    const invalidLinkWithDoubleFullwidthOpenTitle = '[t](u （（x）) 與 [t](u ((x）)';
+    const invalidLinkWithDoubleFullwidthOpenTitleMarkdown = await convertPaste(page, { text: invalidLinkWithDoubleFullwidthOpenTitle });
+    expect(invalidLinkWithDoubleFullwidthOpenTitleMarkdown).toBe('[t](u （（x）) 與 [t](u ((x）)');
+
+    const nestedListLazyTableFollowedByQuote = '- outer\n    - inner\nA | B\n--- | ---\n> q';
+    const nestedListLazyTableFollowedByQuoteMarkdown = await convertPaste(page, { text: nestedListLazyTableFollowedByQuote });
+    expect(nestedListLazyTableFollowedByQuoteMarkdown).toBe('- outer\n    - inner\n     | A   | B   |\n     | --- | --- |\n> q');
+
+    const attachedFullwidthLinkTitleOpener = '[x](url（ title）) 與 [x](url（a b）)';
+    const attachedFullwidthLinkTitleOpenerMarkdown = await convertPaste(page, { text: attachedFullwidthLinkTitleOpener });
+    expect(attachedFullwidthLinkTitleOpenerMarkdown).toBe('[x](url（ title）) 與 [x](url（a b）)');
+
+    const manyReferenceDefsInput = Array.from({ length: 4000 }, function (_, idx) {
+      return '[r' + idx + ']: /u' + idx;
+    }).concat(['段落（測試）']).join('\n');
+    const manyReferenceDefsExpected = Array.from({ length: 4000 }, function (_, idx) {
+      return '[r' + idx + ']: /u' + idx;
+    }).concat(['段落 (測試)']).join('\n');
+    const manyReferenceDefsMarkdown = await convertPaste(page, { text: manyReferenceDefsInput });
+    expect(manyReferenceDefsMarkdown).toBe(manyReferenceDefsExpected);
+
+    const lazyListTableThenNestedBullet = '- A | B\n:-- | --:\n--- | ---\n    - | -';
+    const lazyListTableThenNestedBulletMarkdown = await convertPaste(page, { text: lazyListTableThenNestedBullet });
+    expect(lazyListTableThenNestedBulletMarkdown).toBe('- | A   | B   |\n  | :-- | --: |\n  | --- | --- |\n    - | -');
+
+    const lazyListTableWithDelimLookingRows = '- A | B\n--- | ---\n:-- | --:\n--- | ---\ntext';
+    const lazyListTableWithDelimLookingRowsMarkdown = await convertPaste(page, { text: lazyListTableWithDelimLookingRows });
+    expect(lazyListTableWithDelimLookingRowsMarkdown).toBe('- | A    | B   |\n  | ---- | --- |\n  | :--  | --: |\n  | ---  | --- |\n  | text |     |');
+
+    const longTrailingParensUrlInput = '（https://x.com/' + ')'.repeat(64000) + '）說明 https://x.com/path&amp;; https://x.com/path(unclosed';
+    const longTrailingParensUrlMarkdown = await convertPaste(page, { text: longTrailingParensUrlInput });
+    expect(longTrailingParensUrlMarkdown).toBe('(https://x.com/' + ')'.repeat(64000) + ') 說明 https://x.com/path&amp;; https://x.com/path(unclosed');
+
+    const tabbedBulletInParagraphBeforeTable = 'plain\n-\titem\nA | B\n--- | ---';
+    const tabbedBulletInParagraphBeforeTableMarkdown = await convertPaste(page, { text: tabbedBulletInParagraphBeforeTable });
+    expect(tabbedBulletInParagraphBeforeTableMarkdown).toBe('plain\n-\titem\n| A   | B   |\n| --- | --- |');
+
+    const invalidBacktickFenceBeforeValidFence = '``` a`\n```\nA | B\n--- | ---';
+    const invalidBacktickFenceBeforeValidFenceMarkdown = await convertPaste(page, { text: invalidBacktickFenceBeforeValidFence });
+    expect(invalidBacktickFenceBeforeValidFenceMarkdown).toBe('``` a`\n```\nA | B\n--- | ---');
+
+    const indentedFenceInListThenDedentedTable = '1. item\n    ```\nA | B\n--- | ---';
+    const indentedFenceInListThenDedentedTableMarkdown = await convertPaste(page, { text: indentedFenceInListThenDedentedTable });
+    expect(indentedFenceInListThenDedentedTableMarkdown).toBe('1. item\n    ```\n| A   | B   |\n| --- | --- |');
+
+    const invalidBacktickFenceAfterLazyListTable = '- item\nA | B\n--- | ---\n``` a`';
+    const invalidBacktickFenceAfterLazyListTableMarkdown = await convertPaste(page, { text: invalidBacktickFenceAfterLazyListTable });
+    expect(invalidBacktickFenceAfterLazyListTableMarkdown).toBe('- item\n  | A   | B   |\n  | --- | --- |\n``` a`');
+
+    const doubleDollarInsideMultiLineInlineContext = '> quote\n$$x\n$x$y（z）$\n---';
+    const doubleDollarInsideMultiLineInlineContextMarkdown = await convertPaste(page, { text: doubleDollarInsideMultiLineInlineContext });
+    expect(doubleDollarInsideMultiLineInlineContextMarkdown).toBe('> quote\n$$x\n$x$y（z）$\n---');
+
+    const unclosedIndentedFenceInListEndedByOrdered = '[a（x）]: /u\n- item\n    ```\n2. item\n[a（x）]';
+    const unclosedIndentedFenceInListEndedByOrderedMarkdown = await convertPaste(page, { text: unclosedIndentedFenceInListEndedByOrdered });
+    expect(unclosedIndentedFenceInListEndedByOrderedMarkdown).toBe('[a（x）]: /u\n- item\n    ```\n2. item\n[a（x）]');
+
+    const type7HtmlBeforeTableLookahead = 'plain\n<span title="x（y）">\n--- | ---\n--- | ---';
+    const type7HtmlBeforeTableLookaheadMarkdown = await convertPaste(page, { text: type7HtmlBeforeTableLookahead });
+    expect(type7HtmlBeforeTableLookaheadMarkdown).toBe('plain\n<span title="x（y）">\n--- | ---\n--- | ---');
+
+    const indentedFenceAfterListBlockquote = '- item\n> q\n    ```\nA | B\n--- | ---';
+    const indentedFenceAfterListBlockquoteMarkdown = await convertPaste(page, { text: indentedFenceAfterListBlockquote });
+    expect(indentedFenceAfterListBlockquoteMarkdown).toBe('- item\n> q\n    ```\nA | B\n--- | ---');
+
+    const invalidFenceAfterQuotedListTable = '1. item\n> A | B\n> --- | ---\n``` a`';
+    const invalidFenceAfterQuotedListTableMarkdown = await convertPaste(page, { text: invalidFenceAfterQuotedListTable });
+    expect(invalidFenceAfterQuotedListTableMarkdown).toBe('1. item\n   > | A   | B   |\n   > | --- | --- |\n``` a`');
+
+    const quotedYamlFrontMatterKey = '---\n"schema:name": "版本（舊）"\n---\n正文（新）';
+    const quotedYamlFrontMatterKeyMarkdown = await convertPaste(page, { text: quotedYamlFrontMatterKey });
+    expect(quotedYamlFrontMatterKeyMarkdown).toBe('---\n"schema:name": "版本（舊）"\n---\n正文 (新)');
+
+    const setextHeadingAfterCompletedList = '- item\n``` a`\nA | B\n--- | ---\n===\n中（文）';
+    const setextHeadingAfterCompletedListMarkdown = await convertPaste(page, { text: setextHeadingAfterCompletedList });
+    expect(setextHeadingAfterCompletedListMarkdown).toBe('- item\n``` a`\nA | B\n--- | ---\n===\n中 (文)');
+
+    const refDefAfterExitedQuotedFenceInList = '- item\n> ```\n[a]: /u\n（x）\n中（文）';
+    const refDefAfterExitedQuotedFenceInListMarkdown = await convertPaste(page, { text: refDefAfterExitedQuotedFenceInList });
+    expect(refDefAfterExitedQuotedFenceInListMarkdown).toBe('- item\n> ```\n[a]: /u\n（x）\n中 (文)');
+
+    const refDefAfterExitedQuotedInvalidFenceInList = '- item\n> ```a`\n[a（y）]: /u\n[a（y）]\n中（文）';
+    const refDefAfterExitedQuotedInvalidFenceInListMarkdown = await convertPaste(page, { text: refDefAfterExitedQuotedInvalidFenceInList });
+    expect(refDefAfterExitedQuotedInvalidFenceInListMarkdown).toBe('- item\n> ```a`\n[a（y）]: /u\n[a（y）]\n中 (文)');
+
+    const lazyTableRowsInOrderedListAtEof = 'text\n2. item\n--- | ---\n--- | ---\nA | B\n[a]: /u';
+    const lazyTableRowsInOrderedListAtEofMarkdown = await convertPaste(page, { text: lazyTableRowsInOrderedListAtEof });
+    expect(lazyTableRowsInOrderedListAtEofMarkdown).toBe('text\n2. item\n| ---     | --- |\n   | ------- | --- |\n   | A       | B   |\n   | [a]: /u |     |');
+
+    const contextualDefInsidePendingSetextHeading = 'plain\n# h\n[a]: /u\n> A | B\n> --- | ---\n===\n中（文）';
+    const contextualDefInsidePendingSetextHeadingMarkdown = await convertPaste(page, { text: contextualDefInsidePendingSetextHeading });
+    expect(contextualDefInsidePendingSetextHeadingMarkdown).toBe('plain\n# h\n[a]: /u\n> A | B\n> --- | ---\n===\n中 (文)');
+
+    const attachedTitleInInvalidRefDef = '[a]: foo（ title）\n[a]\n中（文）';
+    const attachedTitleInInvalidRefDefMarkdown = await convertPaste(page, { text: attachedTitleInInvalidRefDef });
+    expect(attachedTitleInInvalidRefDefMarkdown).toBe('[a]: foo（ title）\n[a]\n中 (文)');
+
+    const longBackslashRunBeforeFullWidthParen = '\\'.repeat(64001) + '（測試）';
+    const longBackslashRunBeforeFullWidthParenMarkdown = await convertPaste(page, { text: longBackslashRunBeforeFullWidthParen });
+    expect(longBackslashRunBeforeFullWidthParenMarkdown).toBe('\\'.repeat(64002) + '(測試)');
+
+    const quotedOrderedListLazyTable = '> 1. item\nA | B\n--- | ---\nlong | x\n\n> 1. item\n> A | B\n> --- | ---\n> long | x';
+    const quotedOrderedListLazyTableMarkdown = await convertPaste(page, { text: quotedOrderedListLazyTable });
+    expect(quotedOrderedListLazyTableMarkdown).toBe('> 1. item\n   | A    | B   |\n   | ---- | --- |\n   | long | x   |\n\n> 1. item\n>    | A    | B   |\n>    | ---- | --- |\n>    | long | x   |');
+
+    const compactFullWidthEnumerator = '1）item（說明）';
+    const compactFullWidthEnumeratorMarkdown = await convertPaste(page, { text: compactFullWidthEnumerator });
+    expect(compactFullWidthEnumeratorMarkdown).toBe('1）item (說明)');
+
+    const manyIncompleteLinkTitles = '[x](u （'.repeat(8000) + '尾（完）';
+    const manyIncompleteLinkTitlesMarkdown = await convertPaste(page, { text: manyIncompleteLinkTitles });
+    expect(manyIncompleteLinkTitlesMarkdown).toBe('[x](u ('.repeat(8000) + '尾 (完)');
+
+    const deepBlockquoteLines = Array.from({ length: 400 }, function (_, i) {
+      return '> '.repeat(i + 1) + '段落（測試）';
+    }).join('\n');
+    const deepBlockquoteExpected = Array.from({ length: 400 }, function (_, i) {
+      return '> '.repeat(i + 1) + '段落 (測試)';
+    }).join('\n');
+    const deepBlockquoteMarkdown = await convertPaste(page, { text: deepBlockquoteLines });
+    expect(deepBlockquoteMarkdown).toBe(deepBlockquoteExpected);
+
+    const quotedTableBeforeOrderedSibling = '> - item\n>> q\nA | B\n> --- | ---\n2. item';
+    const quotedTableBeforeOrderedSiblingMarkdown = await convertPaste(page, { text: quotedTableBeforeOrderedSibling });
+    expect(quotedTableBeforeOrderedSiblingMarkdown).toBe('> - item\n>> q\n| A   | B   |\n> | --- | --- |\n2. item');
+
+    const orderedListTableAfterHeading = '2. item\n    # h\n    code\nA | B\n--- | ---\ntext';
+    const orderedListTableAfterHeadingMarkdown = await convertPaste(page, { text: orderedListTableAfterHeading });
+    expect(orderedListTableAfterHeadingMarkdown).toBe('2. item\n    # h\n    code\n   | A    | B   |\n   | ---- | --- |\n   | text |     |');
+
+    const manyLinesInput = Array(130000).fill('a').join('\n') + '\n尾（完）';
+    const manyLinesMarkdown = await convertPaste(page, { text: manyLinesInput });
+    expect(manyLinesMarkdown).toBe(Array(130000).fill('a').join('\n') + '\n尾 (完)');
+
+    const displayMathAfterQuotedInlineMath = '> $a$\n$$b\n\\$c（d）$\n$$\n\n> $a$\n$$b\n\\$c（d）$\n---';
+    const displayMathAfterQuotedInlineMathMarkdown = await convertPaste(page, { text: displayMathAfterQuotedInlineMath });
+    expect(displayMathAfterQuotedInlineMathMarkdown).toBe('> $a$\n$$b\n\\$c（d）$\n$$\n\n> $a$\n$$b\n\\$c (d)$\n---');
+
+    const deeplyNestedBrackets = '['.repeat(128000) + ']'.repeat(128000) + '（x）';
+    const deeplyNestedBracketsMarkdown = await convertPaste(page, { text: deeplyNestedBrackets });
+    expect(deeplyNestedBracketsMarkdown).toBe('['.repeat(128000) + ']'.repeat(128000) + ' (x)');
+
+    const topLevelHtmlBlockAfterListHtmlCloseBlankLine = '- x\n</div>\n\n<div>\n1. item\n> A | B\n--- | ---\n\n- x\n<pre>\nraw\n</pre>\n中（文）';
+    const topLevelHtmlBlockAfterListHtmlCloseBlankLineMarkdown = await convertPaste(page, { text: topLevelHtmlBlockAfterListHtmlCloseBlankLine });
+    expect(topLevelHtmlBlockAfterListHtmlCloseBlankLineMarkdown).toBe('- x\n</div>\n\n<div>\n1. item\n> A | B\n--- | ---\n\n- x\n<pre>\nraw\n</pre>\n中 (文)');
+
+    const lazyQuotedSetextHeadingAfterOrderedItem = '> --- | ---\n2. item\nx\n> --- | ---\n> --- | ---\n> q\n===';
+    const lazyQuotedSetextHeadingAfterOrderedItemMarkdown = await convertPaste(page, { text: lazyQuotedSetextHeadingAfterOrderedItem });
+    expect(lazyQuotedSetextHeadingAfterOrderedItemMarkdown).toBe('> --- | ---\n2. item\nx\n> --- | ---\n> --- | ---\n> q\n===');
+
+    const nonInterruptingOrderedLookaheadAndLazyListExit = [
+      'plain',
+      '2. A | B',
+      '    --- | ---',
+      '',
+      '  2. item',
+      'x | y',
+      '--- | ---',
+      'text',
+      '',
+      '   10. > A | B',
+      '> --- | ---',
+      'text',
+      '',
+      '**http://x**[x](',
+      '（）',
+      '',
+      '_http://x_[x](',
+      '（）',
+      '',
+      '~~http://x~~[x](',
+      '（）',
+      '',
+      'foo_bar http://example.com/a_）',
+      '',
+      '<!--',
+      '> q',
+      '-->',
+      'x | y',
+      '> --- | ---'
+    ].join('\n');
+    const nonInterruptingOrderedLookaheadAndLazyListExitMarkdown = await convertPaste(page, { text: nonInterruptingOrderedLookaheadAndLazyListExit });
+    expect(nonInterruptingOrderedLookaheadAndLazyListExitMarkdown).toBe([
+      'plain',
+      '2. A | B',
+      '    --- | ---',
+      '',
+      '  2. item',
+      'x | y',
+      '--- | ---',
+      'text',
+      '',
+      '   10. > A | B',
+      '> --- | ---',
+      'text',
+      '',
+      '**http://x**[x](',
+      '（）',
+      '',
+      '_http://x_[x](',
+      '（）',
+      '',
+      '~~http://x~~[x](',
+      '（）',
+      '',
+      'foo_bar http://example.com/a_）',
+      '',
+      '<!--',
+      '> q',
+      '-->',
+      'x | y',
+      '> --- | ---'
+    ].join('\n'));
+
+    const flowYamlFrontMatter = '---\n{title: "版本（舊）"}\n---\n正文（新）';
+    const flowYamlFrontMatterMarkdown = await convertPaste(page, { text: flowYamlFrontMatter });
+    expect(flowYamlFrontMatterMarkdown).toBe('---\n{title: "版本（舊）"}\n---\n正文 (新)');
+
+    const quotedTableThenIndentedCodeThenListExit = '> A | B\n--- | ---\n    code\nA | B\n- | -';
+    const quotedTableThenIndentedCodeThenListExitMarkdown = await convertPaste(page, { text: quotedTableThenIndentedCodeThenListExit });
+    expect(quotedTableThenIndentedCodeThenListExitMarkdown).toBe('> | A   | B   |\n| --- | --- |\n    code\nA | B\n- | -');
+
+    const displayMathAcrossFencedLookingLines = '$$\n~~~\n~~~\nA | B\n--- | ---\n$$\n\n$$\n~~~\nunclosed（x）';
+    const displayMathAcrossFencedLookingLinesMarkdown = await convertPaste(page, { text: displayMathAcrossFencedLookingLines });
+    expect(displayMathAcrossFencedLookingLinesMarkdown).toBe('$$\n~~~\n~~~\nA | B\n--- | ---\n$$\n\n$$\n~~~\nunclosed(x)');
+
+    const lazyListTableBeforeQuoteAndNextBullet = '- item\nA | B | > q\n--- | --- | ---\n | # h | z | extra\n> quote\n- next';
+    const lazyListTableBeforeQuoteAndNextBulletMarkdown = await convertPaste(page, { text: lazyListTableBeforeQuoteAndNextBullet });
+    expect(lazyListTableBeforeQuoteAndNextBulletMarkdown).toBe('- item\nA | B | > q\n--- | --- | ---\n | # h | z | extra\n> quote\n- next');
+
+    const indentedListTableThenIndentedCode = '  1. item\nA | B\n| --- | --- |\n    code（x）';
+    const indentedListTableThenIndentedCodeMarkdown = await convertPaste(page, { text: indentedListTableThenIndentedCode });
+    expect(indentedListTableThenIndentedCodeMarkdown).toBe('  1. item\n     | A   | B   |\n     | --- | --- |\n    code(x)');
+
+    const explicitKeyYamlFrontMatter = '---\n? foo\n: 版本（舊）\n---\n正文（新）';
+    const explicitKeyYamlFrontMatterMarkdown = await convertPaste(page, { text: explicitKeyYamlFrontMatter });
+    expect(explicitKeyYamlFrontMatterMarkdown).toBe('---\n? foo\n: 版本（舊）\n---\n正文 (新)');
+
+    const mismatchedUnderscoresAndEmojiTable = [
+      'start _x-__（note）',
+      '',
+      '_start _x__（note）',
+      '',
+      '👨‍👩‍👧‍👦 | B',
+      '--- | ---',
+      'a | b'
+    ].join('\n');
+    const mismatchedUnderscoresAndEmojiTableMarkdown = await convertPaste(page, { text: mismatchedUnderscoresAndEmojiTable });
+    expect(mismatchedUnderscoresAndEmojiTableMarkdown).toBe([
+      'start _x-__(note)',
+      '',
+      '_start _x__ (note)',
+      '',
+      '| 👨‍👩‍👧‍👦   | B   |',
+      '| --- | --- |',
+      '| a   | b   |'
+    ].join('\n'));
+
+    const inlineNestedListLazyTableExit = '  1. - A | B\n--- | ---\nx（1）';
+    const inlineNestedListLazyTableExitMarkdown = await convertPaste(page, { text: inlineNestedListLazyTableExit });
+    expect(inlineNestedListLazyTableExitMarkdown).toBe('  1. - A | B\n--- | ---\nx (1)');
+
+    const repeatedEmphasizedUrls = '*http://x/a* '.repeat(4000) + '（x）';
+    const repeatedEmphasizedUrlsMarkdown = await convertPaste(page, { text: repeatedEmphasizedUrls });
+    expect(repeatedEmphasizedUrlsMarkdown).toBe('*http://x/a* '.repeat(4000) + '(x)');
+
+    const compactCheckboxLabels = [
+      '- [x]（note）後文（測試）',
+      '- [ ]（note）',
+      '- [foo]（note）',
+      '',
+      '[x]: u',
+      '[foo]: v'
+    ].join('\n');
+    const compactCheckboxLabelsMarkdown = await convertPaste(page, { text: compactCheckboxLabels });
+    expect(compactCheckboxLabelsMarkdown).toBe([
+      '- [x]（note）後文 (測試)',
+      '- [ ]（note）',
+      '- [foo] (note)',
+      '',
+      '[x]: u',
+      '[foo]: v'
+    ].join('\n'));
+
+    const nestedBlockquotedListTable1 = [
+      '  2. item',
+      '> - A | B',
+      '| --- | --- |',
+      'x | y',
+      'text'
+    ].join('\n');
+    const nestedBlockquotedListTable1Markdown = await convertPaste(page, { text: nestedBlockquotedListTable1 });
+    expect(nestedBlockquotedListTable1Markdown).toBe([
+      '  2. item',
+      '     > - | A    | B   |',
+      '     | ---- | --- |',
+      '     | x    | y   |',
+      '     | text |     |'
+    ].join('\n'));
+
+    const nestedBlockquotedListTable2 = [
+      '1. item',
+      '> 1. A | B',
+      '| --- | --- |',
+      'x | y',
+      'text'
+    ].join('\n');
+    const nestedBlockquotedListTable2Markdown = await convertPaste(page, { text: nestedBlockquotedListTable2 });
+    expect(nestedBlockquotedListTable2Markdown).toBe([
+      '1. item',
+      '   > 1. | A    | B   |',
+      '      | ---- | --- |',
+      '      | x    | y   |',
+      '      | text |     |'
+    ].join('\n'));
+
+    const outdentedQuoteInListAndNonOneListTableInterrupt = [
+      '- item',
+      '    > [x](u（v）) 與 x（y）',
+      '',
+      'foo',
+      '  2. --- | ---',
+      ':--- | ---:',
+      '  A | B',
+      '',
+      'plain',
+      '2. item',
+      ' 1. item',
+      '===',
+      'A | B',
+      '- | -'
+    ].join('\n');
+    const outdentedQuoteInListAndNonOneListTableInterruptMarkdown = await convertPaste(page, { text: outdentedQuoteInListAndNonOneListTableInterrupt });
+    expect(outdentedQuoteInListAndNonOneListTableInterruptMarkdown).toBe([
+      '- item',
+      '    > [x](u（v）) 與 x (y)',
+      '',
+      'foo',
+      '  2. | --- | --- |',
+      '| :-- | --: |',
+      '     | A   | B   |',
+      '',
+      'plain',
+      '2. item',
+      ' 1. item',
+      '===',
+      'A | B',
+      '- | -'
+    ].join('\n'));
+
+    const whitespaceHeavyIneligible = 'x\n' + ' '.repeat(20000) + 'y';
+    const whitespaceHeavyIneligibleMarkdown = await convertPaste(page, { text: whitespaceHeavyIneligible });
+    expect(whitespaceHeavyIneligibleMarkdown).toBe(whitespaceHeavyIneligible);
+
+    const deepInlineListMarkers = '- '.repeat(5000) + 'x（y）';
+    const deepInlineListMarkersMarkdown = await convertPaste(page, { text: deepInlineListMarkers });
+    expect(deepInlineListMarkersMarkdown).toBe('- '.repeat(5000) + 'x (y)');
+
+    const anchoredFrontMatterInput = [
+      '---',
+      '&meta',
+      'display title: "版本（舊）"',
+      '---',
+      '正文（新）與 *u）*x 與 （a）*u）*x 與 foo *- *~**（note）',
+      '',
+      '- item',
+      '> - A | B',
+      '--- | ---',
+      'text',
+      '  2. item',
+      '',
+      '> q',
+      '2. item',
+      '===',
+      '2. A | B',
+      '    --- | ---',
+      '',
+      '> q',
+      '  2. A | B',
+      '> --- | ---',
+      '',
+      'x',
+      'y',
+      '- --- | ---',
+      '--- | ---'
+    ].join('\n');
+    const anchoredFrontMatterMarkdown = await convertPaste(page, { text: anchoredFrontMatterInput });
+    expect(anchoredFrontMatterMarkdown).toBe([
+      '---',
+      '&meta',
+      'display title: "版本（舊）"',
+      '---',
+      '正文 (新) 與 *u)*x 與 (a)*u)*x 與 foo *- *~**(note)',
+      '',
+      '- item',
+      '> - | A    | B   |',
+      '| ---- | --- |',
+      '| text |     |',
+      '  2. item',
+      '',
+      '> q',
+      '2. item',
+      '===',
+      '2. A | B',
+      '    --- | ---',
+      '',
+      '> q',
+      '  2. | A   | B   |',
+      '> | --- | --- |',
+      '',
+      'x',
+      'y',
+      '- --- | ---',
+      '--- | ---'
+    ].join('\n'));
+
+    await page.evaluate(function () {
+      window.__origSegmenter = Intl.Segmenter;
+      delete Intl.Segmenter;
+    });
+    const noSegmenterMarkdown = await convertPaste(page, { text: 'A | B\n--- | ---\n測試（值） | y' });
+    await page.evaluate(function () {
+      Intl.Segmenter = window.__origSegmenter;
+      delete window.__origSegmenter;
+    });
+    expect(noSegmenterMarkdown).toBe('| A      | B   |\n| ------ | --- |\n| 測試 (值) | y   |');
+  });
+});
+
+
