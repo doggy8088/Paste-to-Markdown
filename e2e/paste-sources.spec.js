@@ -3418,5 +3418,56 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const deepInlineListMarkers = '- '.repeat(5000) + 'x（y）';
     const deepInlineListMarkersMarkdown = await convertPaste(page, { text: deepInlineListMarkers });
     expect(deepInlineListMarkersMarkdown).toBe('- '.repeat(5000) + 'x (y)');
+
+    const anchoredFrontMatterInput = [
+      '---',
+      '&meta',
+      'title: 版本（舊）',
+      '---',
+      '正文（新）與 *u）*x 與 （a）*u）*x',
+      '',
+      '- item',
+      '> - A | B',
+      '--- | ---',
+      'text',
+      '  2. item',
+      '',
+      '> q',
+      '2. item',
+      '===',
+      '2. A | B',
+      '    --- | ---',
+      '',
+      'x',
+      'y',
+      '- --- | ---',
+      '--- | ---'
+    ].join('\n');
+    const anchoredFrontMatterMarkdown = await convertPaste(page, { text: anchoredFrontMatterInput });
+    expect(anchoredFrontMatterMarkdown).toBe([
+      '---',
+      '&meta',
+      'title: 版本（舊）',
+      '---',
+      '正文 (新) 與 *u)*x 與 (a)*u)*x',
+      '',
+      '- item',
+      '> - | A    | B   |',
+      '| ---- | --- |',
+      '| text |     |',
+      '  2. item',
+      '',
+      '> q',
+      '2. item',
+      '===',
+      '2. A | B',
+      '    --- | ---',
+      '',
+      'x',
+      'y',
+      '- --- | ---',
+      '--- | ---'
+    ].join('\n'));
   });
 });
+
