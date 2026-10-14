@@ -3302,7 +3302,7 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const mismatchedUnderscoresAndEmojiTable = [
       'start _x-__（note）',
       '',
-      '_start _x-__（note）',
+      '_start _x__（note）',
       '',
       '👨‍👩‍👧‍👦 | B',
       '--- | ---',
@@ -3312,7 +3312,7 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     expect(mismatchedUnderscoresAndEmojiTableMarkdown).toBe([
       'start _x-__(note)',
       '',
-      '_start _x-__ (note)',
+      '_start _x__ (note)',
       '',
       '| 👨‍👩‍👧‍👦   | B   |',
       '| --- | --- |',
@@ -3422,9 +3422,9 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const anchoredFrontMatterInput = [
       '---',
       '&meta',
-      'title: 版本（舊）',
+      'display title: "版本（舊）"',
       '---',
-      '正文（新）與 *u）*x 與 （a）*u）*x',
+      '正文（新）與 *u）*x 與 （a）*u）*x 與 foo *- *~**（note）',
       '',
       '- item',
       '> - A | B',
@@ -3438,6 +3438,10 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '2. A | B',
       '    --- | ---',
       '',
+      '> q',
+      '  2. A | B',
+      '> --- | ---',
+      '',
       'x',
       'y',
       '- --- | ---',
@@ -3447,9 +3451,9 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     expect(anchoredFrontMatterMarkdown).toBe([
       '---',
       '&meta',
-      'title: 版本（舊）',
+      'display title: "版本（舊）"',
       '---',
-      '正文 (新) 與 *u)*x 與 (a)*u)*x',
+      '正文 (新) 與 *u)*x 與 (a)*u)*x 與 foo *- *~**(note)',
       '',
       '- item',
       '> - | A    | B   |',
@@ -3463,11 +3467,27 @@ Port-channel1(設定推測為交換器間中繼鏈路)
       '2. A | B',
       '    --- | ---',
       '',
+      '> q',
+      '  2. | A   | B   |',
+      '> | --- | --- |',
+      '',
       'x',
       'y',
       '- --- | ---',
       '--- | ---'
     ].join('\n'));
+
+    await page.evaluate(function () {
+      window.__origSegmenter = Intl.Segmenter;
+      delete Intl.Segmenter;
+    });
+    const noSegmenterMarkdown = await convertPaste(page, { text: 'A | B\n--- | ---\n測試（值） | y' });
+    await page.evaluate(function () {
+      Intl.Segmenter = window.__origSegmenter;
+      delete window.__origSegmenter;
+    });
+    expect(noSegmenterMarkdown).toBe('| A      | B   |\n| ------ | --- |\n| 測試 (值) | y   |');
   });
 });
+
 

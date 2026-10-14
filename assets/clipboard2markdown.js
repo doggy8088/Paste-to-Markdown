@@ -1157,9 +1157,9 @@
         });
       };
 
-      const graphemeSegmenter = new Intl.Segmenter();
+      const graphemeSegmenter = typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function' ? new Intl.Segmenter() : null;
       const countCellChars = function (str) {
-        return Array.from(graphemeSegmenter.segment(str)).length;
+        return Array.from(graphemeSegmenter ? graphemeSegmenter.segment(str) : str).length;
       };
 
       const getOutdentedCols = function (rest, hasList) {
@@ -1449,7 +1449,7 @@
       const fmCloseIdx = fmCloseRe ? lines.slice(1).findIndex(function (l) {
         return fmCloseRe.test(l);
       }) + 1 : 0;
-      const fmEndIdx = fmCloseIdx > 0 && (fmOpen[1] === '+++' || /^[ \t]*(?:(?:&[^\s[\]{},#]+|!(?:<[^\s>]+>|[\w!-]*))[ \t]+)*(?:\?(?:[ \t]+|$)|(?:\{[ \t]*)*(?:[\p{L}\p{N}_.-]+|"(?:\\.|[^"\\])*"|'(?:''|[^'])*')[ \t]*:(?:[ \t\}]|$))/u.test(lines.slice(1, fmCloseIdx).find(function (l) {
+      const fmEndIdx = fmCloseIdx > 0 && (fmOpen[1] === '+++' || /^[ \t]*(?:(?:&[^\s[\]{},#]+|!(?:<[^\s>]+>|[\w!-]*))[ \t]+)*(?:\?(?:[ \t]+|$)|(?:\{[ \t]*)*(?:(?!-?[ \t]|[,[\]{}#&*!|>'"%@`]|(?:\?|:)(?:[ \t]|$))(?:[^\s:#]|:(?![ \t\}]|$)|[ \t]+(?![ \t]*#))+|"(?:\\.|[^"\\])*"|'(?:''|[^'])*')[ \t]*:(?:[ \t\}]|$))/u.test(lines.slice(1, fmCloseIdx).find(function (l) {
         return !/^[ \t]*(?:#|\{[ \t]*$|(?:(?:&[^\s[\]{},#]+|!(?:<[^\s>]+>|[\w!-]*))[ \t]*)+(?:#.*)?$|$)/.test(l);
       }) || '')) ? fmCloseIdx : 0;
       if (fmEndIdx > 0) {
@@ -2115,7 +2115,7 @@
                 const emphWithNext = compactEmphWithNext(emphPrefix + fullStr.slice(emphPos, offset) + 'a');
                 emphPrefix = emphWithNext.slice(0, -1);
                 emphPos = offset;
-                if (!closesPreUrlEmphasis(emphWithNext, delim[0])) {
+                if ((!innerTrailingMatch && extraClose && /[\p{P}$+<=>`^|~]$/u.test(inner)) || !closesPreUrlEmphasis(emphWithNext, delim[0])) {
                   return match;
                 }
               }
@@ -2282,10 +2282,10 @@
             const t = getTableRowParts(tableLines[rIdx], rIdx === 1, rIdx < 2);
             const qPrefix = getQuotePrefix(tableLines[rIdx]).prefix;
             const rawPrefix = t.prefix + t.rest.match(/^[ \t]*/)[0];
-            const tableListIndent = (keepLookaheadUnindented && (rIdx === 0 || (rIdx === 1 && (headerT.hasList || (rows.length === 2 && (lineIndex >= normalizedLines.length || normalizedLines[lineIndex].trim() === '')))))) ? 0 : baseTableListIndent;
+            const skipRowIndent = keepLookaheadUnindented && (rIdx === 0 || (rIdx === 1 && (headerT.hasList || (rows.length === 2 && (lineIndex >= normalizedLines.length || normalizedLines[lineIndex].trim() === '')))));
             const rowPrefix = t.depth > 0
-              ? (!/^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]/.test(qPrefix) ? ' '.repeat(Math.max(0, effOuterTableIndent - countIndentCols(qPrefix.match(/^[ \t]*/)[0]))) : '') + rawPrefix + ' '.repeat(Math.max(0, effInnerTableIndent - countIndentCols(rawPrefix.slice(qPrefix.length))))
-              : rawPrefix + ' '.repeat(Math.max(0, tableListIndent - countIndentCols(rawPrefix)));
+              ? (!/^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]/.test(qPrefix) ? ' '.repeat(Math.max(0, effOuterTableIndent - countIndentCols(qPrefix.match(/^[ \t]*/)[0]))) : '') + rawPrefix + ' '.repeat(Math.max(0, (skipRowIndent ? 0 : effInnerTableIndent) - countIndentCols(rawPrefix.slice(qPrefix.length))))
+              : rawPrefix + ' '.repeat(Math.max(0, (skipRowIndent ? 0 : baseTableListIndent) - countIndentCols(rawPrefix)));
             if (rIdx === 1) {
               formattedLines.push(rowPrefix + '| ' + colWidths.map(function (width, cIdx) {
                 const rawSep = row[cIdx] || '';
