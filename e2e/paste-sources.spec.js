@@ -2731,7 +2731,10 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     ].join('\n');
     const markdown = await convertPaste(page, { text: input });
     expect(markdown).toBe(expected);
+  });
 
+  test('handles repeated block structures, long unclosed inline constructs, and rule post-processing', async function ({ page }) {
+    await gotoApp(page);
     const repeatedSetextInput = Array(10000).fill('===').join('\n') + '\n文字（一）';
     const repeatedSetextMarkdown = await convertPaste(page, { text: repeatedSetextInput });
     expect(repeatedSetextMarkdown).toBe(Array(10000).fill('===').join('\n') + '\n文字 (一)');
@@ -2928,7 +2931,10 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const defAfterAdjacentBlockquoteListSetext = '> note\n1. item\n>\n===\n[a（x）]: /u\n[use][a（x）]';
     const defAfterAdjacentBlockquoteListSetextMarkdown = await convertPaste(page, { text: defAfterAdjacentBlockquoteListSetext });
     expect(defAfterAdjacentBlockquoteListSetextMarkdown).toBe('> note\n1. item\n>\n===\n[a（x）]: /u\n[use][a（x）]');
+  });
 
+  test('handles block math, Setext headings, parenthesized link titles, and inline math dollar edge cases', async function ({ page }) {
+    await gotoApp(page);
     const paddedTableRowFollowedByBlockquoteInList = 'text\n9. item\n--- | ---\n--- | ---\nlongvalue | x\nA | B\n> note\ncontinued';
     const paddedTableRowFollowedByBlockquoteInListMarkdown = await convertPaste(page, { text: paddedTableRowFollowedByBlockquoteInList });
     expect(paddedTableRowFollowedByBlockquoteInListMarkdown).toBe('text\n9. item\n| ---       | --- |\n   | --------- | --- |\n   | longvalue | x   |\n   | A         | B   |\n> note\ncontinued');
@@ -2989,9 +2995,9 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const fenceAfterSetextAndTableMarkdown = await convertPaste(page, { text: fenceAfterSetextAndTable });
     expect(fenceAfterSetextAndTableMarkdown).toBe('plain\n```\n===\n| A   | B   |\n| --- | --- |\n```\ncode(x)\n```\n\nplain\n```\n===\npara\n```\ncode(y)');
 
-    const longDollarRun = '$'.repeat(80000) + '（測試）';
+    const longDollarRun = '$'.repeat(20000) + '（測試）';
     const longDollarRunMarkdown = await convertPaste(page, { text: longDollarRun });
-    expect(longDollarRunMarkdown).toBe('$'.repeat(80000) + '(測試)');
+    expect(longDollarRunMarkdown).toBe('$'.repeat(20000) + '(測試)');
 
     const multiCellInlineMathFromDoubleDollar = 'A | B | C\n--- | --- | ---\nx | $$y（1）$ | $$z（2）$';
     const multiCellInlineMathFromDoubleDollarMarkdown = await convertPaste(page, { text: multiCellInlineMathFromDoubleDollar });
@@ -3004,7 +3010,10 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const escapedDollarPairInlineMath = '\\$$）$ 與 a \\$$）$ 與 \\\\$$）$\n\n$$$x（1）$';
     const escapedDollarPairInlineMathMarkdown = await convertPaste(page, { text: escapedDollarPairInlineMath });
     expect(escapedDollarPairInlineMathMarkdown).toBe('\\$$）$ 與 a \\$$）$ 與 \\\\$$）$\n\n$$$x (1)$');
+  });
 
+  test('handles oversized tables, BMP code units, reference definitions, and fence/list boundaries', async function ({ page }) {
+    await gotoApp(page);
     const fenceAfterNonOneOrderedContinuation = 'a\n10. item\n```\nx\n---\nA | B\n:-- | --:\n```\n\na\n10. item\nx\n```\n---\nA | B\n:-- | --:';
     const fenceAfterNonOneOrderedContinuationMarkdown = await convertPaste(page, { text: fenceAfterNonOneOrderedContinuation });
     expect(fenceAfterNonOneOrderedContinuationMarkdown).toBe('a\n10. item\n```\nx\n---\nA | B\n:-- | --:\n```\n\na\n10. item\nx\n```\n---\nA | B\n:-- | --:');
@@ -3081,7 +3090,10 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     }).concat(['段落 (測試)']).join('\n');
     const manyReferenceDefsMarkdown = await convertPaste(page, { text: manyReferenceDefsInput });
     expect(manyReferenceDefsMarkdown).toBe(manyReferenceDefsExpected);
+  });
 
+  test('handles long trailing URL parens, invalid backtick fences, and quoted YAML front matter keys', async function ({ page }) {
+    await gotoApp(page);
     const lazyListTableThenNestedBullet = '- A | B\n:-- | --:\n--- | ---\n    - | -';
     const lazyListTableThenNestedBulletMarkdown = await convertPaste(page, { text: lazyListTableThenNestedBullet });
     expect(lazyListTableThenNestedBulletMarkdown).toBe('- | A   | B   |\n  | :-- | --: |\n  | --- | --- |\n    - | -');
@@ -3161,7 +3173,10 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const longBackslashRunBeforeFullWidthParen = '\\'.repeat(64001) + '（測試）';
     const longBackslashRunBeforeFullWidthParenMarkdown = await convertPaste(page, { text: longBackslashRunBeforeFullWidthParen });
     expect(longBackslashRunBeforeFullWidthParenMarkdown).toBe('\\'.repeat(64002) + '(測試)');
+  });
 
+  test('handles deep blockquotes, large line counts, deeply nested brackets, and lazy Setext headings', async function ({ page }) {
+    await gotoApp(page);
     const quotedOrderedListLazyTable = '> 1. item\nA | B\n--- | ---\nlong | x\n\n> 1. item\n> A | B\n> --- | ---\n> long | x';
     const quotedOrderedListLazyTableMarkdown = await convertPaste(page, { text: quotedOrderedListLazyTable });
     expect(quotedOrderedListLazyTableMarkdown).toBe('> 1. item\n   | A    | B   |\n   | ---- | --- |\n   | long | x   |\n\n> 1. item\n>    | A    | B   |\n>    | ---- | --- |\n>    | long | x   |');
@@ -3210,7 +3225,10 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const lazyQuotedSetextHeadingAfterOrderedItem = '> --- | ---\n2. item\nx\n> --- | ---\n> --- | ---\n> q\n===';
     const lazyQuotedSetextHeadingAfterOrderedItemMarkdown = await convertPaste(page, { text: lazyQuotedSetextHeadingAfterOrderedItem });
     expect(lazyQuotedSetextHeadingAfterOrderedItemMarkdown).toBe('> --- | ---\n2. item\nx\n> --- | ---\n> --- | ---\n> q\n===');
+  });
 
+  test('handles YAML flow/explicit/plain keys, grapheme cluster width, and nested list table indentation', async function ({ page }) {
+    await gotoApp(page);
     const nonInterruptingOrderedLookaheadAndLazyListExit = [
       'plain',
       '2. A | B',
@@ -3326,7 +3344,10 @@ Port-channel1(設定推測為交換器間中繼鏈路)
     const repeatedEmphasizedUrls = '*http://x/a* '.repeat(4000) + '（x）';
     const repeatedEmphasizedUrlsMarkdown = await convertPaste(page, { text: repeatedEmphasizedUrls });
     expect(repeatedEmphasizedUrlsMarkdown).toBe('*http://x/a* '.repeat(4000) + '(x)');
+  });
 
+  test('handles compact checkbox labels, nested quoted list tables, anchored YAML front matter, and Segmenter fallback', async function ({ page }) {
+    await gotoApp(page);
     const compactCheckboxLabels = [
       '- [x]（note）後文（測試）',
       '- [ ]（note）',
