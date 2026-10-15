@@ -2545,6 +2545,30 @@
         (event.key === 'c' || event.key === 'C' || event.code === 'KeyC');
     }
 
+    function isPreviewTabActive() {
+      var previewTab = document.querySelector('#preview-tab');
+      return !!previewTab && previewTab.classList.contains('active');
+    }
+
+    function hasTextSelection() {
+      var selection = window.getSelection ? window.getSelection() : null;
+      return !!selection && !selection.isCollapsed && selection.toString() !== '';
+    }
+
+    // Ctrl+C (Cmd+C on macOS) on the Preview tab behaves like the Copy button. A text selection
+    // keeps the browser's native copy so users can still copy just a fragment of the preview.
+    function matchesPreviewCopyShortcut(event) {
+      var hasPlatformModifier = isMacPlatform
+        ? event.metaKey && !event.ctrlKey
+        : event.ctrlKey && !event.metaKey;
+      return hasPlatformModifier &&
+        !event.altKey &&
+        !event.shiftKey &&
+        (event.key === 'c' || event.key === 'C') &&
+        isPreviewTabActive() &&
+        !hasTextSelection();
+    }
+
     function getClipboardHtml(markdown) {
       if (!markdown || !markdown.trim()) {
         return '';
@@ -3351,7 +3375,7 @@
         executeShareAction();
       }
 
-      if (matchesCopyShortcut(event)) {
+      if (matchesCopyShortcut(event) || matchesPreviewCopyShortcut(event)) {
         event.preventDefault();
         executeCopyAction();
       }

@@ -633,6 +633,91 @@ test.describe('Copy - Shortcut Matching', function () {
   });
 });
 
+test.describe('Copy - Ctrl+C / Cmd+C on the Preview tab', function () {
+  async function stubPlatform(page, platform) {
+    await page.addInitScript(function (name) {
+      Object.defineProperty(navigator, 'userAgentData', {
+        value: { platform: name },
+        configurable: true
+      });
+    }, platform);
+  }
+
+  async function openPreview(page, platform, markdown) {
+    await stubPlatform(page, platform);
+    await setupClipboardStubs(page);
+    await gotoApp(page);
+    await setMarkdown(page, markdown);
+    await page.locator('.tab-button[data-tab="preview"]').click();
+    await expect(page.locator('#preview-tab')).toHaveClass(/active/);
+  }
+
+  async function clipboardWriteCount(page) {
+    await page.waitForTimeout(200);
+    return page.evaluate(() => window.__clipboardWrites.length);
+  }
+
+  [
+    { platform: 'Windows', shortcut: 'Control+KeyC', ignored: 'Meta+KeyC' },
+    { platform: 'Linux', shortcut: 'Control+KeyC', ignored: 'Meta+KeyC' },
+    { platform: 'macOS', shortcut: 'Meta+KeyC', ignored: 'Control+KeyC' }
+  ].forEach(function (scenario) {
+    test(scenario.shortcut + ' copies like the Copy button on ' + scenario.platform, async function ({ page }) {
+      await openPreview(page, scenario.platform, '# Title\n\n**bold**');
+
+      await page.keyboard.press(scenario.shortcut);
+
+      await expect.poll(() => page.evaluate(() => window.__clipboardWrites.length)).toBe(1);
+      const writes = await page.evaluate(() => window.__clipboardWrites);
+      expect(writes[0]['text/plain']).toBe('# Title\n\n**bold**');
+      expect(writes[0]['text/html']).toContain('<h1');
+    });
+
+    test(scenario.ignored + ' is ignored on ' + scenario.platform, async function ({ page }) {
+      await openPreview(page, scenario.platform, 'ignored');
+
+      await page.keyboard.press(scenario.ignored);
+
+      expect(await clipboardWriteCount(page)).toBe(0);
+    });
+  });
+
+  test('keeps the native copy when text is selected in the preview', async function ({ page }) {
+    await openPreview(page, 'Windows', 'selected text');
+    await page.evaluate(() => {
+      const range = document.createRange();
+      range.selectNodeContents(document.querySelector('#preview p'));
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+
+    await page.keyboard.press('Control+KeyC');
+
+    expect(await clipboardWriteCount(page)).toBe(0);
+  });
+
+  test('does not hijack Ctrl+C on the Edit tab', async function ({ page }) {
+    await stubPlatform(page, 'Windows');
+    await setupClipboardStubs(page);
+    await gotoApp(page);
+    await setMarkdown(page, 'edit tab');
+
+    await page.locator('#output').press('Control+KeyC');
+
+    expect(await clipboardWriteCount(page)).toBe(0);
+  });
+
+  test('ignores Ctrl+Shift+C and Ctrl+Alt+C on the Preview tab', async function ({ page }) {
+    await openPreview(page, 'Windows', 'ignored');
+
+    await page.keyboard.press('Control+Shift+KeyC');
+    await page.keyboard.press('Control+Alt+KeyC');
+
+    expect(await clipboardWriteCount(page)).toBe(0);
+  });
+});
+
 test.describe('Copy - Clipboard Unavailable', function () {
   test('throws error when clipboard API is completely unavailable', async function ({ page }) {
     await page.addInitScript(function () {
