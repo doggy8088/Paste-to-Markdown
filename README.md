@@ -23,6 +23,7 @@ A fast, private, and client-side web application for converting clipboard conten
     - Wikipedia math formula images (`alt` attribute containing TeX)
     - Custom HTML data attributes (`data-tex`, `data-formula`, `data-latex`)
   - Built-in offline KaTeX rendering in the **Preview** tab with zero external network requests.
+  - ` ```mermaid ` code blocks render as diagrams in the **Preview** tab, compiled locally by [Ondine](https://github.com/wevm/ondine) (WASM, loaded only when a diagram is present).
 
 - 📋 **Universal Multi-Source Clipboard Conversion**
   - Seamlessly handles rich text copied from:
@@ -89,7 +90,8 @@ Paste-to-Markdown/
 │   ├── turndown/                # Turndown HTML-to-Markdown converter
 │   ├── turndown-plugin-gfm/     # GFM table and task list plugin
 │   ├── marked/                  # Markdown parser and renderer
-│   └── katex/                   # Local offline KaTeX library, fonts, and stylesheets
+│   ├── katex/                   # Local offline KaTeX library, fonts, and stylesheets
+│   └── ondine/                  # Ondine Mermaid-to-SVG renderer (ES modules + WASM)
 ├── i18n/                        # Localization dictionaries (15 languages)
 ├── e2e/                         # Playwright end-to-end tests and coverage tooling
 ├── tests/                       # Golden HTML-to-Markdown fixtures used by the E2E tests
@@ -150,6 +152,7 @@ The coverage report is written to `coverage/` (open `coverage/index.html`). Ever
 - Based on [to-markdown](https://github.com/domchristie/to-markdown) by Dom Christie.
 - Markdown conversion powered by [Turndown](https://github.com/mixmark-io/turndown) and [Marked](https://github.com/markedjs/marked).
 - Math rendering powered by [KaTeX](https://katex.org/).
+- Mermaid diagram rendering powered by [Ondine](https://ondine.sh/).
 - Designed, developed, and maintained by [Will 保哥的技術交流中心](https://www.facebook.com/will.fans/).
 
 ---

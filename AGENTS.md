@@ -9,7 +9,7 @@ This repository contains a simple, client-side web application for converting cl
   - `clipboard2markdown.js`: Main application logic, handles paste events and UI updates.
   - `to-markdown.js`: Custom conversion logic and utilities.
   - `bootstrap.css`: Styling (Bootstrap 3 based).
-- `vendor/`: Third-party libraries (Turndown, Marked, GFM plugin, KaTeX).
+- `vendor/`: Third-party libraries (Turndown, Marked, GFM plugin, KaTeX, Ondine).
 - `assets/background.svg`: Background image for the application.
 - `e2e/`: Playwright end-to-end tests (`*.spec.js`) and their harness in `e2e/support/`.
 - `tests/`: Golden fixtures (`tcN-source.html` → `tcN-perfect.md`) asserted by the E2E tests.
@@ -111,6 +111,12 @@ Conversion is primarily handled by `TurndownService` with the GFM tables plugin.
   - Custom `marked` extensions (`blockMath` and `inlineMath`) intercept `$$...$$`, `$...$`, and ````math```` code blocks.
   - Math is rendered locally offline using KaTeX (`vendor/katex/`).
   - Preprocesses pasted HTML (KaTeX, MathJax, MathML, Wikipedia math, and data attributes) into clean Markdown math syntax.
+- **Mermaid (Ondine)**:
+  - The `marked` `code` renderer emits ` ```mermaid ` blocks as `<div class="mermaid-diagram"><pre><code>source</code></pre></div>`; that source is also what Copy keeps.
+  - `renderMermaidDiagrams()` runs after the preview is set. It lazy-loads `vendor/ondine/Render.js` with a dynamic `import()` and the 1.4 MB `all.generated.wasm` with `fetch` + `WebAssembly.compile` (no build step, nothing loads unless a diagram exists), then swaps in the SVG.
+  - The SVG is passed through `sanitizeHtml()` too. A failed render keeps the source and shows Ondine's error message.
+  - Colors come from `--ondine-*` custom properties set in `index.html` from the app's theme tokens, so light/dark needs no re-render.
+  - `vendor/ondine/` holds unmodified copies of files from the `ondine` npm package (see `vendor/ondine/README.txt`); update by re-copying them.
 - **Sanitization**: All output from `marked.parse()` MUST pass through `sanitizeHtml()`.
 - **Theming**:
   - UI components use Bootstrap 3 classes.

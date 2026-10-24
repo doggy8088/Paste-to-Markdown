@@ -165,6 +165,11 @@
             }
             return '<div class="katex-display katex-error"><code>' + escapeHtml(code) + '</code></div>\n';
           }
+          if (String(infostring || '').trim().split(/\s+/)[0] === 'mermaid') {
+            // The source stays readable until the preview swaps in the SVG
+            // (see renderMermaidDiagrams), and is what Copy and failed renders keep.
+            return '<div class="mermaid-diagram"><pre><code>' + escapeHtml(code) + '</code></pre></div>\n';
+          }
           return false;
         }
       }
@@ -2768,6 +2773,9 @@
       });
     });
 
+    // Declared before the first updatePreview() call so it is initialized by then.
+    let mermaidRendererPromise = null;
+
     // Function to update preview with rendered markdown
     function updatePreview() {
       var markdown = output.value;
@@ -2788,6 +2796,7 @@
         html = sanitizeHtml(html);
 
         preview.innerHTML = html;
+        renderMermaidDiagrams(preview);
       } else {
         preview.innerHTML = '<p class="empty-preview">' + (window.i18n ? i18n.t('noPreview') : 'No content to preview') + '</p>';
       }
@@ -3021,6 +3030,64 @@
       }
 
       return doc.body.innerHTML;
+    }
+
+    // Ondine (Rust compiled to WASM) renders Mermaid to SVG. Its ES modules and the
+    // 1.4 MB WASM module are fetched the first time a preview has a mermaid block.
+    function loadMermaidRenderer() {
+      if (!mermaidRendererPromise) {
+        const wasmModule = fetch('./vendor/ondine/internal/all.generated.wasm')
+          .then(function (response) {
+            if (!response.ok) {
+              throw new Error('Failed to fetch Ondine WASM: HTTP ' + response.status);
+            }
+            return response.arrayBuffer();
+          })
+          .then(function (bytes) {
+            return WebAssembly.compile(bytes);
+          });
+        mermaidRendererPromise = Promise.all([import('../vendor/ondine/Render.js'), wasmModule])
+          .then(function (loaded) {
+            return loaded[0].create({ modules: { all: loaded[1] } });
+          })
+          .catch(function (error) {
+            // Let the next preview retry, e.g. after a network hiccup.
+            mermaidRendererPromise = null;
+            throw error;
+          });
+      }
+      return mermaidRendererPromise;
+    }
+
+    // Replaces each mermaid code block in the freshly rendered preview with its SVG.
+    // The source (and Ondine's error message) stays visible when a diagram cannot render.
+    // The SVG is attacker-controlled output for shared links, so it is sanitized as well.
+    function renderMermaidDiagrams(container) {
+      const diagrams = Array.from(container.querySelectorAll('.mermaid-diagram'));
+      if (!diagrams.length) {
+        return;
+      }
+
+      loadMermaidRenderer().then(function (renderer) {
+        diagrams.forEach(function (diagram) {
+          // Skip blocks of a preview that has been re-rendered while the WASM loaded.
+          if (!diagram.isConnected) {
+            return;
+          }
+          try {
+            diagram.innerHTML = sanitizeHtml(renderer.render(diagram.textContent).svg);
+            diagram.classList.add('mermaid-rendered');
+          } catch (error) {
+            const message = document.createElement('div');
+            message.className = 'mermaid-error-message';
+            message.textContent = error && error.message ? error.message : String(error);
+            diagram.classList.add('mermaid-failed');
+            diagram.insertBefore(message, diagram.firstChild);
+          }
+        });
+      }).catch(function (error) {
+        console.error('Failed to load the Mermaid renderer.', error);
+      });
     }
 
     // Validate URL to prevent XSS attacks

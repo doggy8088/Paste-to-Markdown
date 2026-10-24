@@ -16,6 +16,7 @@ const CONTENT_TYPES = {
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
+  '.wasm': 'application/wasm',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
   '.woff': 'font/woff',
