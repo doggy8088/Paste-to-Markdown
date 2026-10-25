@@ -23,6 +23,7 @@ A fast, private, and client-side web application for converting clipboard conten
     - Wikipedia math formula images (`alt` attribute containing TeX)
     - Custom HTML data attributes (`data-tex`, `data-formula`, `data-latex`)
   - Built-in offline KaTeX rendering in the **Preview** tab with zero external network requests.
+  - Tolerant inline math parsing: loosely formatted delimiters such as `中文$L$中文` or `$ L $` are normalized before rendering, so CJK-adjacent `$...$` formulas still render with KaTeX.
   - ` ```mermaid ` code blocks render as diagrams in the **Preview** tab, compiled locally by [Ondine](https://github.com/wevm/ondine) (WASM, loaded only when a diagram is present).
 
 - 📋 **Universal Multi-Source Clipboard Conversion**

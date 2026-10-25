@@ -123,7 +123,7 @@
       return -1;
     },
     tokenizer: function (src) {
-      var match = /^\$([^\s$](?:[\s\S]*?[^\s$])?)\$(?!\d)/.exec(src);
+      var match = /^\$([^\s$](?:[^$]*?[^\s$])??)\$(?!\d)/.exec(src);
       if (match) {
         return {
           type: 'inlineMath',
@@ -174,6 +174,100 @@
         }
       }
     });
+  }
+
+  // Inline math is often typed tightly against CJK text ("中文$L$中文") or with
+  // stray padding ("$ L $"). Normalize those before parsing so the KaTeX
+  // extensions can pick the delimiters up; code spans, fenced code blocks and
+  // $$ blocks are left untouched.
+  var CJK_CHAR_RE = /[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uAC00-\uD7AF]/;
+
+  function isCjkChar(ch) {
+    return !!ch && CJK_CHAR_RE.test(ch);
+  }
+
+  function normalizeMathLine(line) {
+    if (line.indexOf('$') === -1) {
+      return line;
+    }
+
+    var protectedParts = [];
+    var text = line.replace(/\\.|(`+)[^`\n]*\1/g, function (match) {
+      protectedParts.push(match);
+      return '\u0000' + (protectedParts.length - 1) + '\u0000';
+    });
+
+    text = text.replace(/\$([^$\n]+?)\$(?!\d)/g, function (match, body, offset, whole) {
+      var trimmed = body.trim();
+      if (!trimmed) {
+        return match;
+      }
+      // Trim inner padding only for math-looking content: "$100 and then $x$"
+      // is prose, not a padded formula.
+      var padded = /^\s/.test(body) || /\s$/.test(body);
+      if (padded && /\s/.test(trimmed) && !/[\\{}^_=<>+\-*/]/.test(trimmed)) {
+        return match;
+      }
+
+      var before = whole.charAt(offset - 1);
+      var after = whole.charAt(offset + match.length);
+      return (isCjkChar(before) ? ' ' : '') + '$' + trimmed + '$' + (isCjkChar(after) ? ' ' : '');
+    });
+
+    return text.replace(/\u0000(\d+)\u0000/g, function (match, id) {
+      return protectedParts[+id];
+    });
+  }
+
+  function normalizeInlineMath(markdown) {
+    var source = String(markdown == null ? '' : markdown);
+    if (source.indexOf('$') === -1) {
+      return source;
+    }
+
+    var lines = source.split('\n');
+    var fence = '';
+    var inDisplayMath = false;
+
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      var fenceMatch = /^[ \t]{0,3}(`{3,}|~{3,})/.exec(line);
+
+      if (fence) {
+        if (fenceMatch && fenceMatch[1].charAt(0) === fence.charAt(0) &&
+            fenceMatch[1].length >= fence.length) {
+          fence = '';
+        }
+        continue;
+      }
+      if (fenceMatch) {
+        fence = fenceMatch[1];
+        continue;
+      }
+      if (inDisplayMath) {
+        if (/\$\$[ \t]*$/.test(line)) {
+          inDisplayMath = false;
+        }
+        continue;
+      }
+
+      var displayStart = /^[ \t]{0,3}\$\$/.exec(line);
+      if (displayStart) {
+        if (!/\$\$[ \t]*$/.test(line.slice(displayStart[0].length))) {
+          inDisplayMath = true;
+        }
+        continue;
+      }
+
+      // Leave indented (4-space) code blocks alone.
+      if (/^(?:\t| {4})/.test(line)) {
+        continue;
+      }
+
+      lines[i] = normalizeMathLine(line);
+    }
+
+    return lines.join('\n');
   }
 
   // http://pandoc.org/README.html#pandocs-markdown
@@ -2586,7 +2680,7 @@
           mangle: false,
           sanitize: false
         });
-        var rawHtml = marked.parse(markdown);
+        var rawHtml = marked.parse(normalizeInlineMath(markdown));
         return sanitizeHtml(rawHtml);
       } catch (error) {
         console.warn('Failed to render markdown to HTML for clipboard.', error);
@@ -2790,7 +2884,7 @@
         });
 
         // Use marked to convert markdown to HTML
-        var html = marked.parse(markdown);
+        var html = marked.parse(normalizeInlineMath(markdown));
 
         // Sanitize the output to prevent XSS
         html = sanitizeHtml(html);

@@ -1206,3 +1206,79 @@ test.describe('MathML with comments', function () {
     expect(markdown).toBe('Sum $x + 1$');
   });
 });
+
+test.describe('Inline math with CJK text and loose delimiters', function () {
+  test.beforeEach(async function ({ page }) {
+    await gotoApp(page);
+  });
+
+  test('renders a lesson-plan line with several tightly packed formulas', async function ({ page }) {
+    await setMarkdown(page,
+      '**數與量**：三位數除以一位數、整十與整百的乘法、認識容量單位「公升 ($L$)」與「毫升 ($mL$)」' +
+      '（$1\\text{ L} = 1000\\text{ mL}$)、時間的計算 (24 小時制與 12 小時制換算)、同分母分數的加減法、' +
+      '**一位小數**的認識 (十分位、0.1 與 $\\frac{1}{10}$ 的關係) 與加減直式、乘除兩步驟應用問題。');
+    await switchTab(page, 'preview');
+
+    await expect(page.locator('#preview .katex')).toHaveCount(4);
+    await expect(page.locator('#preview .katex-error')).toHaveCount(0);
+    const content = await page.locator('#preview').textContent();
+    expect(content).toContain('公升');
+    expect(content).toContain('毫升');
+  });
+
+  test('renders formulas glued to CJK characters on both sides', async function ({ page }) {
+    await setMarkdown(page, '中文$L$中文');
+    await switchTab(page, 'preview');
+
+    await expect(page.locator('#preview .katex')).toHaveCount(1);
+    await expect(page.locator('#preview .katex-error')).toHaveCount(0);
+  });
+
+  test('trims padding inside the delimiters', async function ({ page }) {
+    await setMarkdown(page, '容量是 $ L $ 單位');
+    await switchTab(page, 'preview');
+
+    await expect(page.locator('#preview .katex')).toHaveCount(1);
+    const annotation = await page.locator('#preview annotation').first().textContent();
+    expect(annotation).toBe('L');
+  });
+
+  test('keeps neighbouring formulas as separate tokens', async function ({ page }) {
+    await setMarkdown(page, 'Here $a$ and $b$ are variables.');
+    await switchTab(page, 'preview');
+
+    await expect(page.locator('#preview .katex')).toHaveCount(2);
+    const annotations = await page.locator('#preview annotation').allTextContents();
+    expect(annotations).toEqual(['a', 'b']);
+  });
+
+  test('does not turn prices into math', async function ({ page }) {
+    await setMarkdown(page, '價格 $100 元和 $200 元');
+    await switchTab(page, 'preview');
+
+    await expect(page.locator('#preview .katex')).toHaveCount(0);
+    const content = await page.locator('#preview').textContent();
+    expect(content).toContain('$100 元和 $200 元');
+  });
+
+  test('leaves inline code and fenced code blocks untouched', async function ({ page }) {
+    await setMarkdown(page, '`$ L $` 與 ``$ x $`` 與\n\n```\n中文$L$中文\n```\n\n中文$L$中文');
+    await switchTab(page, 'preview');
+
+    await expect(page.locator('#preview .katex')).toHaveCount(1);
+    const codes = page.locator('#preview code');
+    expect(await codes.nth(0).textContent()).toBe('$ L $');
+    expect(await codes.nth(1).textContent()).toBe('$ x $');
+    const fence = await page.locator('#preview pre code').textContent();
+    expect(fence).toContain('中文$L$中文');
+  });
+
+  test('keeps escaped dollars literal', async function ({ page }) {
+    await setMarkdown(page, 'Price is \\$100 and formula is $x^2$');
+    await switchTab(page, 'preview');
+
+    await expect(page.locator('#preview .katex')).toHaveCount(1);
+    const content = await page.locator('#preview').textContent();
+    expect(content).toContain('$100');
+  });
+});

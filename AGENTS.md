@@ -109,6 +109,7 @@ Conversion is primarily handled by `TurndownService` with the GFM tables plugin.
 - **Marked**: Used to render the Markdown back to HTML in the "Preview" tab.
 - **Math Rendering (KaTeX)**:
   - Custom `marked` extensions (`blockMath` and `inlineMath`) intercept `$$...$$`, `$...$`, and ````math```` code blocks.
+  - `normalizeInlineMath()` runs before `marked.parse()` (preview and clipboard HTML) so badly spaced delimiters are tolerated: `$ L $` is trimmed to `$L$`, and formulas glued to CJK text (`中文$L$中文`) get spaces around the delimiters. It skips fenced code, inline code, indented code, `$$` blocks, and escaped `\$`, and refuses prose-like padded pairs (e.g. `$100 and then $x$`) so prices stay literal.
   - Math is rendered locally offline using KaTeX (`vendor/katex/`).
   - Preprocesses pasted HTML (KaTeX, MathJax, MathML, Wikipedia math, and data attributes) into clean Markdown math syntax.
 - **Mermaid (Ondine)**:
