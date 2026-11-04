@@ -2496,6 +2496,666 @@
     }
   };
 
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+
+  /**
+   * Localized label with an English fallback.
+   * @param {string} key
+   * @param {string} fallback
+   * @returns {string}
+   */
+  function t(key, fallback) {
+    return window.i18n ? i18n.t(key) : fallback;
+  }
+
+  /**
+   * Formats a template like 'a {x} b' with the given values.
+   * @param {string} template
+   * @param {Object.<string, string|number>} values
+   * @returns {string}
+   */
+  function fill(template, values) {
+    return Object.keys(values).reduce(function (text, key) {
+      return text.split('{' + key + '}').join(String(values[key]));
+    }, template);
+  }
+
+  /**
+   * Builds a stroke glyph: copy rectangles, a check mark, or an up arrow.
+   * Built with createElementNS only; never innerHTML.
+   * @param {'copy'|'check'|'up'} kind
+   * @returns {SVGElement}
+   */
+  function buildGlyph(kind) {
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '2');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.classList.add(kind === 'up' ? 'top-glyph' : 'code-copy-glyph');
+    const parts = kind === 'check'
+      ? [['polyline', { points: '20 6 9 17 4 12' }]]
+      : kind === 'up'
+        ? [['polyline', { points: '18 15 12 9 6 15' }]]
+        : [
+          ['rect', { x: 9, y: 9, width: 13, height: 13, rx: 2 }],
+          ['path', { d: 'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1' }]
+        ];
+    parts.forEach(function (pair) {
+      const el = document.createElementNS(SVG_NS, pair[0]);
+      Object.keys(pair[1]).forEach(function (key) { el.setAttribute(key, pair[1][key]); });
+      svg.appendChild(el);
+    });
+    return svg;
+  }
+
+  /**
+   * Copies a code block's text and shows a check glyph for 1.6 seconds.
+   * Falls back to execCommand('copy') when the Clipboard API is missing or fails.
+   * @param {string} text
+   * @param {HTMLElement} btn
+   */
+  function copyCodeBlockText(text, btn) {
+    function setGlyph(kind) {
+      while (btn.firstChild) btn.removeChild(btn.firstChild);
+      btn.appendChild(buildGlyph(kind));
+    }
+
+    function done() {
+      const successLabel = t('codeCopySuccess', 'Copied ✓');
+      setGlyph('check');
+      btn.classList.add('is-copied');
+      btn.setAttribute('aria-label', successLabel);
+      btn.title = successLabel;
+      setTimeout(function () {
+        const idleLabel = t('codeCopyTitle', 'Copy code');
+        setGlyph('copy');
+        btn.classList.remove('is-copied');
+        btn.setAttribute('aria-label', idleLabel);
+        btn.title = idleLabel;
+      }, 1600);
+    }
+
+    function fallback() {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand('copy');
+        ta.remove();
+        if (ok) done();
+      } catch (error) {
+        console.error('Unable to copy code block.', error);
+      }
+    }
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } else {
+      fallback();
+    }
+  }
+
+  /**
+   * Adds a hover-revealed copy icon at the top-right corner of every rendered
+   * code block. Inline code and Mermaid diagrams are left untouched. Called
+   * after every preview render.
+   * @param {HTMLElement} container
+   */
+  function enhanceCodeBlocks(container) {
+    container.querySelectorAll('pre').forEach(function (pre) {
+      if (pre.closest('.mermaid-diagram')) return;
+      if (pre.parentElement && pre.parentElement.classList.contains('code-copy-wrap')) return;
+      const wrap = document.createElement('div');
+      wrap.className = 'code-copy-wrap';
+      pre.parentNode.insertBefore(wrap, pre);
+      wrap.appendChild(pre);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'code-copy';
+      const idleLabel = t('codeCopyTitle', 'Copy code');
+      btn.title = idleLabel;
+      btn.setAttribute('aria-label', idleLabel);
+      btn.appendChild(buildGlyph('copy'));
+      wrap.appendChild(btn);
+      btn.addEventListener('click', function () {
+        copyCodeBlockText(pre.textContent.replace(/\n$/, ''), btn);
+      });
+    });
+  }
+
+  // ===== 自適應呈現：依內容結構裝飾標題、清單、表格並加上互動控制 =====
+
+  const HEADING_ICONS = [
+    ['summary', ['摘要', '結論', '重點', '總結', 'summary', 'overview', 'tl;dr', '結語'], '📌'],
+    ['info', ['文件資訊', '文件用途', '關於', 'about', 'metadata'], '📄'],
+    ['todo', ['待查', '待辦', '待確認', '缺口', '下一步', 'todo', 'next step', 'action', 'known gap', '清單'], '☑️'],
+    ['risk', ['風險', '注意', '限制', '陷阱', 'risk', 'warning', 'caveat', 'pitfall'], '⚠️'],
+    ['tip', ['建議', '技巧', '最佳實務', 'tip', 'best practice', 'recommend'], '💡'],
+    ['perf', ['效能', '調校', '速度', '瓶頸', 'performance', 'tuning', 'latency'], '⚡'],
+    ['trouble', ['疑難', '排錯', '排解', '錯誤', '診斷', 'troubleshoot', 'debug', 'faq', '問題'], '🩺'],
+    ['schedule', ['時程', '排程', '週', '路線', '計畫', '規劃', 'schedule', 'timeline', 'roadmap', 'plan'], '🗓️'],
+    ['video', ['影片', 'video', 'youtube', '頻道'], '🎬'],
+    ['people', ['角色', '權限', '帳號', '組織', 'role', 'permission', 'team'], '👥'],
+    ['security', ['資安', '安全', 'security', '授權', 'license'], '🔒'],
+    ['deploy', ['上線', '部署', '安裝', '環境', 'deploy', 'install', 'setup', 'rollback'], '🚀'],
+    ['test', ['測試', '驗收', '驗證', 'test', 'qa'], '🧪'],
+    ['tool', ['工具', '外掛', 'tool', 'plugin', 'utility'], '🧰'],
+    ['arch', ['架構', '流程', '設計', '整合', 'architecture', 'flow', 'design', 'integration'], '🧭'],
+    ['code', ['api', '程式', '開發', 'built-in', 'trigger', 'sdk', 'code', '語法'], '🧩'],
+    ['history', ['歷史', '版本', '生命週期', '支援', 'history', 'version', 'lifecycle'], '🕰️'],
+    ['goal', ['背景', '目標', '範圍', '需求', 'background', 'goal', 'scope', 'requirement'], '🎯'],
+    ['refs', ['參考', '來源', '資源', '文件', '手冊', '書', '學習', '閱讀順序', 'reference', 'resource', 'source', 'docs', 'learning'], '📚'],
+    ['appendix', ['附錄', '附註', '附件', 'appendix', 'note'], '📎']
+  ];
+
+  const STATUS_BADGES = { '✅': 'ok', '⚠️': 'warn', '❌': 'bad', '※': 'info' };
+
+  /**
+   * First non-empty text node of an element.
+   * @param {HTMLElement} el
+   * @returns {Text|null}
+   */
+  function firstTextNode(el) {
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+    let node = walker.nextNode();
+    while (node) {
+      if (node.data.trim()) return node;
+      node = walker.nextNode();
+    }
+    return null;
+  }
+
+  /**
+   * Content root of a list item: a lone paragraph wrapper is transparent for
+   * key and lead detection (loose lists wrap item content in <p>).
+   * @param {HTMLElement} li
+   * @returns {HTMLElement}
+   */
+  function itemRoot(li) {
+    return (li.children.length === 1 && li.firstElementChild.tagName === 'P') ? li.firstElementChild : li;
+  }
+
+  /**
+   * Classifies the document as prose or reference material.
+   * @param {HTMLElement} container
+   */
+  function classifyDocument(container) {
+    const headings = container.querySelectorAll('h1, h2, h3, h4, h5, h6').length;
+    const tables = container.querySelectorAll('table').length;
+    const paragraphs = container.querySelectorAll('p').length;
+    if (headings === 0 && tables === 0 && paragraphs >= 8) container.classList.add('doc-prose');
+    else if (headings >= 10 || tables >= 6) container.classList.add('doc-reference');
+  }
+
+  /**
+   * Decorates headings: `2.1 Title` number badges, `Main — Sub` splits on the
+   * first H1, and a topic emoji on H2s that do not carry one.
+   * @param {HTMLElement} container
+   */
+  function decorateHeadings(container) {
+    container.querySelectorAll('h1, h2, h3, h4').forEach(function (h) {
+      const node = firstTextNode(h);
+      if (!node) return;
+      const numbered = node.data.match(/^\s*((?:\d+\.)+\d+)\s+/);
+      if (numbered) {
+        const num = document.createElement('span');
+        num.className = 'h-num';
+        num.textContent = numbered[1];
+        node.data = node.data.slice(numbered[0].length);
+        h.insertBefore(num, node);
+      }
+      if (h.tagName === 'H1') {
+        const text = firstTextNode(h);
+        if (text && /^[^<>\n]*\s+[—–]\s+\S/.test(text.data)) {
+          const parts = text.data.split(/\s+[—–]\s+/);
+          const title = document.createElement('span');
+          title.className = 'doc-title';
+          title.textContent = parts.shift();
+          const subtitle = document.createElement('span');
+          subtitle.className = 'doc-subtitle';
+          subtitle.textContent = parts.join(' — ');
+          h.insertBefore(title, text);
+          h.insertBefore(subtitle, text);
+          h.removeChild(text);
+        }
+      }
+      if (h.tagName === 'H2' && !h.querySelector('.h-icon')) {
+        const text = h.textContent || '';
+        if (!/\p{Extended_Pictographic}/u.test(text)) {
+          const lower = text.toLowerCase();
+          const hit = HEADING_ICONS.find(function (entry) {
+            return entry[1].some(function (word) { return lower.indexOf(word) !== -1; });
+          });
+          if (hit) {
+            const icon = document.createElement('span');
+            icon.className = 'h-icon';
+            icon.setAttribute('aria-hidden', 'true');
+            icon.textContent = hit[2];
+            h.insertBefore(icon, h.firstChild);
+          }
+        }
+      }
+    });
+  }
+
+  /**
+   * Adds a reading-time line under the first heading.
+   * @param {HTMLElement} container
+   */
+  function addReadingTime(container) {
+    const source = container.textContent || '';
+    let cjk = 0;
+    for (let i = 0; i < source.length; i += 1) {
+      const c = source.charCodeAt(i);
+      if ((c >= 0x4e00 && c <= 0x9fff) || (c >= 0x3040 && c <= 0x30ff) || (c >= 0xac00 && c <= 0xd7af)) {
+        cjk += 1;
+      }
+    }
+    container.classList.toggle('is-cjk', cjk > source.length * 0.15);
+    // Bare text (for example the sanitizer's escaped-text fallback) gets no
+    // reading-time chrome: only documents with real structure do.
+    if (!container.querySelector('p, h1, h2, h3, h4, h5, h6, li, pre, table')) return;
+    const minutes = Math.max(1, Math.round(cjk > source.length * 0.15 ? cjk / 500 : source.length / 1400));
+    const chars = String(source.length).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    const meta = document.createElement('div');
+    meta.className = 'doc-meta';
+    meta.textContent = fill(t('docMeta', '⏱ About {min} min read · {chars} chars'), { min: minutes, chars: chars });
+    const h1 = container.querySelector('h1');
+    if (h1 && h1.nextSibling) h1.parentNode.insertBefore(meta, h1.nextSibling);
+    else container.insertBefore(meta, container.firstChild);
+  }
+
+  /**
+   * Classifies top-level lists: property grids, cards, step cards and
+   * numbered finding panels.
+   * @param {HTMLElement} container
+   */
+  function classifyLists(container) {
+    Array.prototype.forEach.call(container.children, function (list) {
+      if (list.tagName !== 'UL' && list.tagName !== 'OL') return;
+      const items = Array.prototype.slice.call(list.children);
+      if (items.length < 2 || items.length > 8) return;
+      if (list.querySelector('ul, ol, input, pre, blockquote, table')) return;
+      // Long numbered points with bold leads read as panels.
+      if (list.tagName === 'OL' && items.length >= 3) {
+        const findings = items.every(function (li) {
+          const lead = itemRoot(li).firstElementChild;
+          return lead && lead.tagName === 'STRONG' && (li.textContent || '').trim().length > 40;
+        });
+        if (findings) {
+          list.classList.add('findings');
+          return;
+        }
+      }
+      // `Label: value` (or **Label**: value) items with short values -> grid.
+      const kv = items.every(function (li) {
+        const text = (li.textContent || '').trim();
+        return text.length <= 80 && /^[^：:\n]{1,24}[：:]\s*\S/.test(text);
+      });
+      if (kv) {
+        items.forEach(function (li) {
+          const root = itemRoot(li);
+          const strong = root.firstElementChild;
+          if (strong && strong.tagName === 'STRONG' && strong.nextSibling && strong.nextSibling.nodeType === 3 && /^[：:]/.test(strong.nextSibling.data)) {
+            strong.nextSibling.data = strong.nextSibling.data.replace(/^[：:]\s*/, '');
+            strong.classList.add('kv-key');
+            li.classList.add('kv-item');
+            return;
+          }
+          const node = firstTextNode(root);
+          if (!node) return;
+          const match = node.data.match(/^(\s*[^：:\n]{1,24})[：:](\s*)/);
+          if (!match) return;
+          const key = document.createElement('span');
+          key.className = 'kv-key';
+          key.textContent = match[1].trim();
+          node.data = node.data.slice(match[0].length);
+          root.insertBefore(key, root.firstChild);
+          li.classList.add('kv-item');
+        });
+        list.classList.add('kv');
+        return;
+      }
+      // 3-8 short flat items -> cards; ordered lists keep step numbers.
+      const flat = items.every(function (li) {
+        const text = (li.textContent || '').trim();
+        return text.length > 0 && text.length <= 120 && !li.querySelector('ul, ol, input, pre, blockquote, img');
+      });
+      if (flat && items.length >= 3) {
+        list.classList.add('cards');
+        if (list.tagName === 'OL') list.classList.add('steps');
+      }
+    });
+  }
+
+  /**
+   * Turns leading ✅ ⚠️ ❌ ※ in table cells into colored badges.
+   * @param {HTMLElement} wrap
+   */
+  function badgeStatusCells(wrap) {
+    wrap.querySelectorAll('td').forEach(function (td) {
+      const node = firstTextNode(td);
+      if (!node) return;
+      const trimmed = node.data.trim();
+      const glyph = trimmed.charAt(0) === '⚠' ? '⚠️' : trimmed.charAt(0);
+      const kind = STATUS_BADGES[glyph];
+      if (!kind) return;
+      const badge = document.createElement('span');
+      badge.className = 'badge ' + kind;
+      badge.textContent = glyph;
+      const at = node.data.indexOf(glyph);
+      node.data = node.data.slice(0, at) + node.data.slice(at + glyph.length);
+      node.data = node.data.replace(/^\s+/, '');
+      td.insertBefore(badge, td.firstChild);
+    });
+  }
+
+  /**
+   * Wraps every preview table with controls: sorting, filtering, column
+   * resizing, sticky headers for long tables, stacked cards on narrow
+   * containers, and a reset control. Merged cells, multiple header rows or
+   * nested tables only get the wrapper and the badges.
+   * @param {HTMLElement} container
+   */
+  function setupTables(container) {
+    container.querySelectorAll('table').forEach(function (table) {
+      if (table.closest('.mermaid-diagram, .table-wrap')) return;
+      const wrap = document.createElement('div');
+      wrap.className = 'table-wrap';
+      table.parentNode.insertBefore(wrap, table);
+      wrap.appendChild(table);
+      const head = table.tHead && table.tHead.rows[0];
+      const body = table.tBodies[0];
+      if (!head || !body) return;
+      const rows = Array.prototype.slice.call(body.rows);
+      if (!rows.length) return;
+      const cells = Array.prototype.slice.call(head.cells);
+      const headers = cells.map(function (th) { return (th.textContent || '').replace(/\s+/g, ' ').trim(); });
+      const simple = table.tHead.rows.length === 1 && table.querySelectorAll('tbody').length === 1 &&
+        !table.querySelector('[colspan], [rowspan], table') &&
+        rows.every(function (row) { return row.cells.length === cells.length; });
+      const previous = Array.prototype.slice.call(container.querySelectorAll('h2, h3, h4'))
+        .filter(function (h) { return h.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING; }).pop();
+      const name = (previous && previous.textContent || headers.join(' / ')).trim();
+      if (cells.length >= 6) container.classList.add('doc-wide');
+      if (rows.length >= 15) wrap.classList.add('long');
+      if (rows.length >= 8 || cells.length >= 5) wrap.classList.add('dense');
+      if (/步驟|順序|版本史|timeline|sequence/i.test(name)) wrap.classList.add('sequence');
+      if (simple && cells.length <= 4 && rows.some(function (row) {
+        return Array.prototype.some.call(row.cells, function (td) { return (td.textContent || '').trim().length >= 80; });
+      })) {
+        wrap.classList.add('stackable');
+        rows.forEach(function (row) {
+          Array.prototype.forEach.call(row.cells, function (td, i) {
+            if (headers[i]) td.setAttribute('data-label', headers[i]);
+          });
+        });
+      }
+      badgeStatusCells(wrap);
+      if (!simple) return;
+      if (rows.length >= 5) wrap.classList.add('sortable');
+      if (rows.length >= 12) wrap.classList.add('filterable');
+      if (cells.length >= 3) wrap.classList.add('resizable');
+      rows.forEach(function (row, i) { row.mxIndex = i; });
+
+      const tools = document.createElement('div');
+      tools.className = 'table-tools';
+      wrap.parentNode.insertBefore(tools, wrap);
+      const live = document.createElement('span');
+      live.className = 'visually-hidden';
+      live.setAttribute('aria-live', 'polite');
+      tools.appendChild(live);
+      const announce = function (msg) { live.textContent = msg; };
+      let hint = null;
+      let resetBtn = null;
+      let filterInput = null;
+      let count = null;
+
+      const freeze = function () {
+        if (wrap.classList.contains('is-resized')) return;
+        const widths = cells.map(function (c) { return c.getBoundingClientRect().width; });
+        table.style.width = table.getBoundingClientRect().width + 'px';
+        cells.forEach(function (c, i) { c.style.width = widths[i] + 'px'; });
+        wrap.classList.add('is-resized');
+      };
+      const resetWidths = function () {
+        wrap.classList.remove('is-resized');
+        table.style.width = '';
+        cells.forEach(function (c) { c.style.width = ''; });
+        update();
+      };
+      const sortBy = function (col, dir) {
+        const order = rows.map(function (row, i) { return i; });
+        if (dir) {
+          const keys = rows.map(function (row) {
+            return row.cells[col] ? (row.cells[col].textContent || '').trim() : '';
+          });
+          const filled = keys.filter(Boolean);
+          const numeric = filled.length > 0 && filled.every(function (k) {
+            return /^[~約≈]?-?[\d,.]+%?$/.test(k.replace(/,/g, ''));
+          });
+          order.sort(function (a, b) {
+            const x = keys[a];
+            const y = keys[b];
+            if (!x || !y) return x ? -1 : (y ? 1 : a - b);
+            const cmp = numeric
+              ? parseFloat(x.replace(/[^\d.\-]/g, '')) - parseFloat(y.replace(/[^\d.\-]/g, ''))
+              : x.localeCompare(y, document.documentElement.lang || undefined);
+            return (cmp || a - b) * (dir === 1 ? 1 : -1);
+          });
+        }
+        const frag = document.createDocumentFragment();
+        order.forEach(function (i) { frag.appendChild(rows[i]); });
+        body.appendChild(frag);
+      };
+
+      function update() {
+        const sideways = wrap.scrollWidth > wrap.clientWidth + 1;
+        if (sideways || wrap.scrollHeight > wrap.clientHeight + 1) {
+          wrap.setAttribute('tabindex', '0');
+          wrap.setAttribute('role', 'region');
+          wrap.setAttribute('aria-label', name || t('tableRegion', 'Table'));
+        } else {
+          wrap.removeAttribute('tabindex');
+          wrap.removeAttribute('role');
+          wrap.removeAttribute('aria-label');
+        }
+        if (sideways && !hint) {
+          hint = document.createElement('span');
+          hint.className = 'scroll-hint';
+          hint.textContent = t('tableScrollHint', '← scroll sideways →');
+          tools.appendChild(hint);
+        }
+        if (hint) hint.hidden = !sideways;
+      }
+
+      if (wrap.classList.contains('filterable')) {
+        filterInput = document.createElement('input');
+        filterInput.type = 'search';
+        filterInput.className = 'table-filter';
+        filterInput.placeholder = t('tableFilter', 'Filter rows…');
+        filterInput.setAttribute('aria-label', filterInput.placeholder + (name ? ' — ' + name : ''));
+        count = document.createElement('span');
+        count.className = 'table-count';
+        count.textContent = fill(t('tableRowsAll', '{n} rows'), { n: rows.length });
+        tools.appendChild(filterInput);
+        tools.appendChild(count);
+        filterInput.addEventListener('input', function () {
+          const q = filterInput.value.trim().toLowerCase();
+          let shown = 0;
+          rows.forEach(function (row) {
+            const hit = !q || (row.textContent || '').toLowerCase().indexOf(q) !== -1;
+            row.hidden = !hit;
+            if (hit) shown += 1;
+          });
+          count.textContent = shown === rows.length
+            ? fill(t('tableRowsAll', '{n} rows'), { n: rows.length })
+            : fill(t('tableRowsShown', '{shown} of {total} rows'), { shown: shown, total: rows.length });
+        });
+      }
+
+      if (wrap.classList.contains('sortable')) {
+        cells.forEach(function (th, col) {
+          if (th.querySelector('a, button, input')) return;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'th-sort';
+          btn.title = t('tableSort', 'Sort');
+          while (th.firstChild) btn.appendChild(th.firstChild);
+          th.appendChild(btn);
+          btn.addEventListener('click', function () {
+            const current = th.getAttribute('aria-sort');
+            const dir = current === 'ascending' ? -1 : (current === 'descending' ? 0 : 1);
+            cells.forEach(function (h) { h.removeAttribute('aria-sort'); });
+            if (dir > 0) th.setAttribute('aria-sort', 'ascending');
+            else if (dir < 0) th.setAttribute('aria-sort', 'descending');
+            sortBy(col, dir);
+            announce(dir > 0
+              ? fill(t('tableSortedAsc', 'Sorted by {name}, ascending'), { name: headers[col] })
+              : dir < 0
+                ? fill(t('tableSortedDesc', 'Sorted by {name}, descending'), { name: headers[col] })
+                : t('tableUnsorted', 'Original order restored'));
+          });
+        });
+      }
+
+      if (wrap.classList.contains('resizable')) {
+        cells.slice(0, -1).forEach(function (th, i) {
+          const grip = document.createElement('span');
+          grip.className = 'col-resize';
+          grip.tabIndex = 0;
+          grip.setAttribute('role', 'separator');
+          grip.setAttribute('aria-orientation', 'vertical');
+          const resizeLabel = t('tableResize', 'Drag to resize (double-click to reset)') + ' — ' + (headers[i] || i + 1);
+          grip.setAttribute('aria-label', resizeLabel);
+          grip.title = t('tableResize', 'Drag to resize (double-click to reset)');
+          th.appendChild(grip);
+          grip.addEventListener('click', function (e) { e.stopPropagation(); });
+          grip.addEventListener('pointerdown', function (e) {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            freeze();
+            const startX = e.clientX;
+            const startW = th.offsetWidth;
+            grip.setPointerCapture(e.pointerId);
+            grip.classList.add('is-active');
+            const move = function (ev) {
+              th.style.width = Math.max(64, startW + (ev.clientX - startX)) + 'px';
+              update();
+            };
+            const up = function () {
+              grip.classList.remove('is-active');
+              grip.removeEventListener('pointermove', move);
+              grip.removeEventListener('pointerup', up);
+              grip.removeEventListener('pointercancel', up);
+            };
+            grip.addEventListener('pointermove', move);
+            grip.addEventListener('pointerup', up);
+            grip.addEventListener('pointercancel', up);
+          });
+          grip.addEventListener('keydown', function (e) {
+            const step = e.key === 'ArrowRight' ? 24 : (e.key === 'ArrowLeft' ? -24 : 0);
+            if (!step) return;
+            e.preventDefault();
+            freeze();
+            th.style.width = Math.max(64, th.offsetWidth + step) + 'px';
+            update();
+          });
+          grip.addEventListener('dblclick', function (e) {
+            e.preventDefault();
+            resetWidths();
+          });
+        });
+      }
+
+      if (wrap.classList.contains('sortable') || wrap.classList.contains('resizable')) {
+        resetBtn = document.createElement('button');
+        resetBtn.type = 'button';
+        resetBtn.className = 'table-reset';
+        const resetLabel = t('tableReset', 'Reset order and widths');
+        resetBtn.textContent = resetLabel;
+        resetBtn.title = resetLabel;
+        tools.appendChild(resetBtn);
+        resetBtn.addEventListener('click', function () {
+          if (wrap.classList.contains('sortable')) {
+            sortBy(0, 0);
+            cells.forEach(function (h) { h.removeAttribute('aria-sort'); });
+          }
+          if (wrap.classList.contains('resizable')) resetWidths();
+          announce(t('tableResetDone', 'Original order and widths restored'));
+        });
+      }
+
+      update();
+      if (window.ResizeObserver) new ResizeObserver(update).observe(wrap);
+    });
+  }
+
+  /**
+   * Adds the reading progress bar and the back-to-top button once. Tracks
+   * whichever element actually scrolls: the preview panel on bounded
+   * layouts, the window when the panel grows with its content.
+   */
+  function setupReadingAids() {
+    if (document.body.getAttribute('data-reading-aids')) return;
+    document.body.setAttribute('data-reading-aids', '1');
+    const scroller = document.querySelector('#preview');
+    if (!scroller) return;
+    const bar = document.createElement('div');
+    bar.className = 'reading-progress';
+    bar.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(bar);
+    const topBtn = document.createElement('button');
+    topBtn.type = 'button';
+    topBtn.className = 'back-to-top';
+    const topLabel = t('backToTop', 'Back to top');
+    topBtn.setAttribute('aria-label', topLabel);
+    topBtn.title = topLabel;
+    topBtn.appendChild(buildGlyph('up'));
+    document.body.appendChild(topBtn);
+    const panelScrolls = function () { return scroller.scrollHeight > scroller.clientHeight + 1; };
+    const update = function () {
+      const y = panelScrolls()
+        ? scroller.scrollTop
+        : (window.scrollY || document.documentElement.scrollTop || 0);
+      const max = panelScrolls()
+        ? scroller.scrollHeight - scroller.clientHeight
+        : Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+      bar.style.width = Math.round(Math.min(1, y / max) * 100) + '%';
+      topBtn.classList.toggle('is-visible', y > 300);
+    };
+    scroller.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('scroll', update, { passive: true });
+    topBtn.addEventListener('click', function () {
+      if (panelScrolls()) scroller.scrollTop = 0;
+      else window.scrollTo(0, 0);
+    });
+    update();
+  }
+
+  /**
+   * Runs every adaptive pass over a freshly rendered preview.
+   * @param {HTMLElement} container
+   */
+  function enhancePreview(container) {
+    // Re-rendering resets the inner HTML (no .doc-meta left), so this runs per
+    // render while staying idempotent within one render.
+    if (container.querySelector('.doc-meta')) return;
+    classifyDocument(container);
+    decorateHeadings(container);
+    addReadingTime(container);
+    classifyLists(container);
+    setupTables(container);
+    setupReadingAids();
+  }
+
   // http://stackoverflow.com/questions/2176861/javascript-get-clipboard-data-on-paste-event-cross-browser
   document.addEventListener('DOMContentLoaded', function () {
     var info = document.querySelector('#info');
@@ -2891,6 +3551,8 @@
 
         preview.innerHTML = html;
         renderMermaidDiagrams(preview);
+        enhanceCodeBlocks(preview);
+        enhancePreview(preview);
       } else {
         preview.innerHTML = '<p class="empty-preview">' + (window.i18n ? i18n.t('noPreview') : 'No content to preview') + '</p>';
       }
