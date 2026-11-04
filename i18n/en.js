@@ -46,6 +46,8 @@ window.i18nLocales.en = {
   tableSortedAsc: 'Sorted by {name}, ascending',
   tableSortedDesc: 'Sorted by {name}, descending',
   tableRegion: 'Table',
+  tableMoveCol: 'Drag to move the column (Alt+←/→)',
+  tableColMoved: '{name} column moved to position {n}',
   backToTop: 'Back to top',
   placeholder: 'Paste content here...',
   noPreview: 'No content to preview'

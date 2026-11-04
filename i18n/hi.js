@@ -46,6 +46,8 @@ window.i18nLocales.hi = {
   tableSortedAsc: '{name} के अनुसार आरोही क्रम',
   tableSortedDesc: '{name} के अनुसार अवरोही क्रम',
   tableRegion: 'तालिका',
+  tableMoveCol: 'स्तंभ ले जाने के लिए खींचें (Alt+←/→)',
+  tableColMoved: '{name} स्तंभ स्थान {n} पर ले जाया गया',
   backToTop: 'शीर्ष पर वापस जाएँ',
   placeholder: 'सामग्री यहाँ पेस्ट करें...',
   noPreview: 'पूर्वावलोकन के लिए कोई सामग्री नहीं है'

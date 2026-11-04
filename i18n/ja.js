@@ -46,6 +46,8 @@ window.i18nLocales.ja = {
   tableSortedAsc: '{name} で昇順に並べ替え',
   tableSortedDesc: '{name} で降順に並べ替え',
   tableRegion: '表',
+  tableMoveCol: 'ドラッグで列を移動（Alt+←/→）',
+  tableColMoved: '{name} 列を {n} 番目に移動しました',
   backToTop: 'トップへ戻る',
   placeholder: 'ここにコンテンツを貼り付け...',
   noPreview: 'プレビューする内容がありません'

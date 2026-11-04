@@ -46,6 +46,8 @@ window.i18nLocales.vi = {
   tableSortedAsc: 'Sắp xếp theo {name}, tăng dần',
   tableSortedDesc: 'Sắp xếp theo {name}, giảm dần',
   tableRegion: 'Bảng',
+  tableMoveCol: 'Kéo để di chuyển cột (Alt+←/→)',
+  tableColMoved: 'Đã di chuyển cột {name} đến vị trí {n}',
   backToTop: 'Lên đầu trang',
   placeholder: 'Dán nội dung vào đây...',
   noPreview: 'Không có nội dung để xem trước'

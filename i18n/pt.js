@@ -46,6 +46,8 @@ window.i18nLocales.pt = {
   tableSortedAsc: 'Ordenado por {name}, ascendente',
   tableSortedDesc: 'Ordenado por {name}, descendente',
   tableRegion: 'Tabela',
+  tableMoveCol: 'Arraste para mover a coluna (Alt+←/→)',
+  tableColMoved: 'Coluna {name} movida para a posição {n}',
   backToTop: 'Voltar ao topo',
   placeholder: 'Cole o conteúdo aqui...',
   noPreview: 'Nenhum conteúdo para visualizar'

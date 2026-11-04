@@ -46,6 +46,8 @@ window.i18nLocales.ar = {
   tableSortedAsc: 'مرتب حسب {name} تصاعديًا',
   tableSortedDesc: 'مرتب حسب {name} تنازليًا',
   tableRegion: 'جدول',
+  tableMoveCol: 'اسحب لنقل العمود (Alt+←/→)',
+  tableColMoved: 'تم نقل عمود {name} إلى الموضع {n}',
   backToTop: 'العودة إلى الأعلى',
   placeholder: 'الصق المحتوى هنا...',
   noPreview: 'لا يوجد محتوى للمعاينة'

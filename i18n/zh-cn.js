@@ -46,6 +46,8 @@ window.i18nLocales['zh-cn'] = {
   tableSortedAsc: '已按 {name} 升序排序',
   tableSortedDesc: '已按 {name} 降序排序',
   tableRegion: '表格',
+  tableMoveCol: '拖动以搬移列（Alt+←/→）',
+  tableColMoved: '「{name}」列已移至第 {n} 列',
   backToTop: '回到顶部',
   placeholder: '粘贴内容...',
   noPreview: '没有内容可预览'

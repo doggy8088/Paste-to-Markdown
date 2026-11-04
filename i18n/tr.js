@@ -46,6 +46,8 @@ window.i18nLocales.tr = {
   tableSortedAsc: '{name} sütununa göre artan sıralama',
   tableSortedDesc: '{name} sütununa göre azalan sıralama',
   tableRegion: 'Tablo',
+  tableMoveCol: 'Sütunu taşımak için sürükle (Alt+←/→)',
+  tableColMoved: '{name} sütunu {n}. konuma taşındı',
   backToTop: 'Başa dön',
   placeholder: 'İçeriği buraya yapıştırın...',
   noPreview: 'Önizlenecek içerik yok'

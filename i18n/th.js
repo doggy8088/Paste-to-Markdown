@@ -46,6 +46,8 @@ window.i18nLocales.th = {
   tableSortedAsc: 'เรียงตาม {name} จากน้อยไปมาก',
   tableSortedDesc: 'เรียงตาม {name} จากมากไปน้อย',
   tableRegion: 'ตาราง',
+  tableMoveCol: 'ลากเพื่อย้ายคอลัมน์ (Alt+←/→)',
+  tableColMoved: 'ย้ายคอลัมน์ {name} ไปยังตำแหน่ง {n} แล้ว',
   backToTop: 'กลับขึ้นบน',
   placeholder: 'วางเนื้อหาที่นี่...',
   noPreview: 'ไม่มีเนื้อหาที่จะแสดงตัวอย่าง'

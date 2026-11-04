@@ -2900,10 +2900,16 @@
       }
       badgeStatusCells(wrap);
       if (!simple) return;
-      if (rows.length >= 5) wrap.classList.add('sortable');
+      // Any simple table with at least two rows can be sorted.
+      if (rows.length >= 2) wrap.classList.add('sortable');
       if (rows.length >= 12) wrap.classList.add('filterable');
       if (cells.length >= 3) wrap.classList.add('resizable');
-      rows.forEach(function (row, i) { row.mxIndex = i; });
+      // Snapshots for restore: setup order for rows, setup column order for
+      // every row (cells are reordered in place when columns move).
+      rows.forEach(function (row, i) {
+        row.mxIndex = i;
+        row.mxCells = Array.prototype.slice.call(row.cells);
+      });
 
       const tools = document.createElement('div');
       tools.className = 'table-tools';
@@ -2931,6 +2937,95 @@
         cells.forEach(function (c) { c.style.width = ''; });
         update();
       };
+      // ---- column order: drag a header, or Alt/Ctrl+←/→ on the sort button ----
+      const columnIndexOf = function (th) {
+        return Array.prototype.indexOf.call(head.cells, th);
+      };
+      const placeColumn = function (th, to) {
+        const from = columnIndexOf(th);
+        if (from < 0 || to < 0 || to === from || to >= head.cells.length) return;
+        [head].concat(rows).forEach(function (row) {
+          const list = Array.prototype.slice.call(row.cells);
+          const moving = list.splice(from, 1)[0];
+          list.splice(to, 0, moving);
+          list.forEach(function (cell) { row.appendChild(cell); });
+        });
+        const moved = headers.splice(from, 1)[0];
+        headers.splice(to, 0, moved);
+        update();
+      };
+      const dropIndex = function (clientX) {
+        for (let i = 0; i < head.cells.length; i += 1) {
+          const rect = head.cells[i].getBoundingClientRect();
+          if (clientX < rect.left + rect.width / 2) return i;
+        }
+        return head.cells.length - 1;
+      };
+      const clearDropMarks = function () {
+        Array.prototype.forEach.call(head.cells, function (h) { h.classList.remove('is-drop-before'); });
+      };
+      let draggedColumn = false; // suppresses the click that ends a drag
+      const moveColumnBy = function (th, delta) {
+        const from = columnIndexOf(th);
+        const to = Math.min(head.cells.length - 1, Math.max(0, from + delta));
+        if (to === from) return;
+        placeColumn(th, to);
+        announce(fill(t('tableColMoved', '{name} column moved to position {n}'),
+          { name: headers[to], n: to + 1 }));
+      };
+      const bindColumnDrag = function (th) {
+        th.addEventListener('pointerdown', function (e) {
+          if (e.button !== 0 || (e.target.closest && e.target.closest('.col-resize'))) return;
+          draggedColumn = false;
+          const startX = e.clientX;
+          let dragging = false;
+          let to = -1;
+          const move = function (ev) {
+            // A small horizontal move starts a column drag; a plain click sorts.
+            if (!dragging && Math.abs(ev.clientX - startX) <= 4) return;
+            if (!dragging) {
+              dragging = true;
+              wrap.classList.add('is-reordering');
+              th.classList.add('is-dragging');
+            }
+            const next = dropIndex(ev.clientX);
+            if (next !== to) {
+              clearDropMarks();
+              to = next;
+              head.cells[to].classList.add('is-drop-before');
+            }
+          };
+          const up = function () {
+            document.removeEventListener('pointermove', move);
+            document.removeEventListener('pointerup', up);
+            document.removeEventListener('pointercancel', up);
+            if (!dragging) return;
+            draggedColumn = true;
+            wrap.classList.remove('is-reordering');
+            th.classList.remove('is-dragging');
+            clearDropMarks();
+            placeColumn(th, to);
+            announce(fill(t('tableColMoved', '{name} column moved to position {n}'),
+              { name: headers[columnIndexOf(th)], n: columnIndexOf(th) + 1 }));
+          };
+          document.addEventListener('pointermove', move);
+          document.addEventListener('pointerup', up);
+          document.addEventListener('pointercancel', up);
+        });
+      };
+      const resetColumns = function () {
+        cells.forEach(function (th) { head.appendChild(th); });
+        rows.forEach(function (row) {
+          row.mxCells.forEach(function (cell) { row.appendChild(cell); });
+        });
+        cells.forEach(function (th, i) {
+          headers[i] = (th.textContent || '').replace(/\s+/g, ' ').trim();
+        });
+        update();
+      };
+      const reorderable = cells.length >= 2;
+      if (reorderable) cells.forEach(bindColumnDrag);
+
       const sortBy = function (col, dir) {
         const order = rows.map(function (row, i) { return i; });
         if (dir) {
@@ -3002,18 +3097,22 @@
       }
 
       if (wrap.classList.contains('sortable')) {
-        cells.forEach(function (th, col) {
+        cells.forEach(function (th) {
           if (th.querySelector('a, button, input')) return;
           const btn = document.createElement('button');
           btn.type = 'button';
           btn.className = 'th-sort';
-          btn.title = t('tableSort', 'Sort');
+          const sortLabel = t('tableSort', 'Sort');
+          btn.title = sortLabel + ' · ' + t('tableMoveCol', 'Drag to move the column (Alt+←/→)');
           while (th.firstChild) btn.appendChild(th.firstChild);
           th.appendChild(btn);
           btn.addEventListener('click', function () {
+            if (draggedColumn) { draggedColumn = false; return; }
+            // The column index is resolved live: dragging columns reorders cells.
+            const col = columnIndexOf(th);
             const current = th.getAttribute('aria-sort');
             const dir = current === 'ascending' ? -1 : (current === 'descending' ? 0 : 1);
-            cells.forEach(function (h) { h.removeAttribute('aria-sort'); });
+            Array.prototype.forEach.call(head.cells, function (h) { h.removeAttribute('aria-sort'); });
             if (dir > 0) th.setAttribute('aria-sort', 'ascending');
             else if (dir < 0) th.setAttribute('aria-sort', 'descending');
             sortBy(col, dir);
@@ -3022,6 +3121,13 @@
               : dir < 0
                 ? fill(t('tableSortedDesc', 'Sorted by {name}, descending'), { name: headers[col] })
                 : t('tableUnsorted', 'Original order restored'));
+          });
+          btn.addEventListener('keydown', function (e) {
+            const step = (e.altKey || e.ctrlKey) && e.key === 'ArrowRight' ? 1
+              : ((e.altKey || e.ctrlKey) && e.key === 'ArrowLeft' ? -1 : 0);
+            if (!step) return;
+            e.preventDefault();
+            moveColumnBy(th, step);
           });
         });
       }
@@ -3075,7 +3181,7 @@
         });
       }
 
-      if (wrap.classList.contains('sortable') || wrap.classList.contains('resizable')) {
+      if (wrap.classList.contains('sortable') || wrap.classList.contains('resizable') || reorderable) {
         resetBtn = document.createElement('button');
         resetBtn.type = 'button';
         resetBtn.className = 'table-reset';
@@ -3086,8 +3192,9 @@
         resetBtn.addEventListener('click', function () {
           if (wrap.classList.contains('sortable')) {
             sortBy(0, 0);
-            cells.forEach(function (h) { h.removeAttribute('aria-sort'); });
+            Array.prototype.forEach.call(head.cells, function (h) { h.removeAttribute('aria-sort'); });
           }
+          if (reorderable) resetColumns();
           if (wrap.classList.contains('resizable')) resetWidths();
           announce(t('tableResetDone', 'Original order and widths restored'));
         });

@@ -213,3 +213,64 @@ test.describe('adaptive presentation', function () {
     await expect(page.locator('#preview .table-filter')).toHaveAttribute('placeholder', '篩選表格內容…');
   });
 });
+
+test.describe('adaptive presentation – column order', function () {
+  test('sorts small tables too (two rows, no 5-row gate)', async function ({ page }) {
+    await openPreview(page, '# Doc\n\n| a |\n| --- |\n| 2 |\n| 1 |\n');
+    await expect(page.locator('#preview .table-wrap.sortable')).toHaveCount(1);
+    await page.locator('#preview .th-sort').first().click();
+    const values = await page.locator('#preview tbody td').allTextContents();
+    expect(values.map((v) => v.trim())).toEqual(['1', '2']);
+  });
+
+  test('reorders columns by dragging a header without sorting', async function ({ page }) {
+    await openPreview(page, '# Doc\n\n| a | b | c |\n| --- | --- | --- |\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |\n');
+    const headers = page.locator('#preview thead th');
+    const first = await headers.first().boundingBox();
+    const third = await headers.nth(2).boundingBox();
+    await page.mouse.move(first.x + first.width / 2, first.y + first.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(third.x + third.width - 4, third.y + third.height / 2, { steps: 6 });
+    await page.mouse.up();
+    const texts = await headers.allTextContents();
+    expect(texts.map((v) => v.trim())).toEqual(['b', 'c', 'a']);
+    await expect(page.locator('#preview .visually-hidden')).toHaveText('a column moved to position 3');
+    // The drag's trailing click must not sort: rows keep their original order.
+    const row = await page.locator('#preview tbody tr').first().locator('td').allTextContents();
+    expect(row.map((v) => v.trim())).toEqual(['2', '3', '1']);
+  });
+
+  test('moves columns with Alt+Arrow keys from the sort button', async function ({ page }) {
+    await openPreview(page, '# Doc\n\n| a | b | c |\n| --- | --- | --- |\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |\n');
+    await page.locator('#preview .th-sort').first().focus();
+    await page.keyboard.press('Alt+ArrowRight');
+    const texts = await page.locator('#preview thead th').allTextContents();
+    expect(texts.map((v) => v.trim())).toEqual(['b', 'a', 'c']);
+    await expect(page.locator('#preview .visually-hidden')).toHaveText('a column moved to position 2');
+  });
+
+  test('reset restores column order along with rows and widths', async function ({ page }) {
+    await openPreview(page, '# Doc\n\n| a | b | c |\n| --- | --- | --- |\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |\n');
+    await page.locator('#preview .th-sort').first().focus();
+    await page.keyboard.press('Alt+ArrowRight');
+    await expect(page.locator('#preview thead th').first()).toHaveText('b');
+    await page.click('#preview .table-reset');
+    const texts = await page.locator('#preview thead th').allTextContents();
+    expect(texts.map((v) => v.trim())).toEqual(['a', 'b', 'c']);
+    await expect(page.locator('#preview .visually-hidden')).toHaveText('Original order and widths restored');
+  });
+
+  test('keeps clicking a header to sort after a previous drag', async function ({ page }) {
+    await openPreview(page, '# Doc\n\n| a | b |\n| --- | --- |\n| 2 | x |\n| 1 | y |\n');
+    const headers = page.locator('#preview thead th');
+    const first = await headers.first().boundingBox();
+    const second = await headers.nth(1).boundingBox();
+    await page.mouse.move(first.x + first.width / 2, first.y + first.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(second.x + second.width - 2, second.y + second.height / 2, { steps: 5 });
+    await page.mouse.up();
+    await expect(page.locator('#preview thead th').first()).toHaveText('b');
+    await page.locator('#preview .th-sort').first().click();
+    await expect(page.locator('#preview th[aria-sort="ascending"]')).toHaveCount(1);
+  });
+});

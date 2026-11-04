@@ -46,6 +46,8 @@ window.i18nLocales.ru = {
   tableSortedAsc: 'Сортировка по {name}, по возрастанию',
   tableSortedDesc: 'Сортировка по {name}, по убыванию',
   tableRegion: 'Таблица',
+  tableMoveCol: 'Перетащите, чтобы переместить столбец (Alt+←/→)',
+  tableColMoved: 'Столбец {name} перемещён на позицию {n}',
   backToTop: 'Наверх',
   placeholder: 'Вставьте содержимое сюда...',
   noPreview: 'Нет контента для предпросмотра'

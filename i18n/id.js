@@ -46,6 +46,8 @@ window.i18nLocales.id = {
   tableSortedAsc: 'Diurutkan menurut {name}, menaik',
   tableSortedDesc: 'Diurutkan menurut {name}, menurun',
   tableRegion: 'Tabel',
+  tableMoveCol: 'Seret untuk memindah kolom (Alt+←/→)',
+  tableColMoved: 'Kolom {name} dipindahkan ke posisi {n}',
   backToTop: 'Kembali ke atas',
   placeholder: 'Tempel konten di sini...',
   noPreview: 'Tidak ada konten untuk pratinjau'

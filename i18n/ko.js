@@ -46,6 +46,8 @@ window.i18nLocales.ko = {
   tableSortedAsc: '{name} 기준 오름차순 정렬',
   tableSortedDesc: '{name} 기준 내림차순 정렬',
   tableRegion: '표',
+  tableMoveCol: '드래그로 열 이동(Alt+←/→)',
+  tableColMoved: '{name} 열을 {n}번째로 이동했습니다',
   backToTop: '맨 위로',
   placeholder: '여기에 내용을 붙여넣으세요...',
   noPreview: '미리 볼 내용이 없습니다'

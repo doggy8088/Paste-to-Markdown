@@ -46,6 +46,8 @@ window.i18nLocales.fr = {
   tableSortedAsc: 'Trié par {name}, croissant',
   tableSortedDesc: 'Trié par {name}, décroissant',
   tableRegion: 'Tableau',
+  tableMoveCol: 'Faire glisser pour déplacer la colonne (Alt+←/→)',
+  tableColMoved: 'Colonne {name} déplacée à la position {n}',
   backToTop: 'Retour en haut',
   placeholder: 'Collez le contenu ici...',
   noPreview: 'Pas de contenu à prévisualiser'
