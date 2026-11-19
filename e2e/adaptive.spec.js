@@ -58,6 +58,20 @@ test.describe('adaptive presentation', function () {
     await expect(page.locator('#preview .kv-key')).toHaveCount(4);
   });
 
+  test('keeps reference code inline when a neighboring card wraps', async function ({ page }) {
+    await page.setViewportSize({ width: 960, height: 800 });
+    await openPreview(page, [
+      '## 參考',
+      '',
+      '- **變更日誌**：`CHANGELOG.md` 的 `[Unreleased]` 段落',
+      '- **實作分支**：`feat/agent-skills`（7 commits，28 個檔案，+3248 / -368）'
+    ].join('\n'));
+    const codes = page.locator('#preview ul.kv > li:first-child code');
+    await expect(codes).toHaveCount(2);
+    await expect(codes.first()).toHaveCSS('display', 'inline-block');
+    await expect(codes.last()).toHaveCSS('display', 'inline-block');
+  });
+
   test('turns short lists into cards and ordered lists into steps', async function ({ page }) {
     await openPreview(page, '# Doc\n\n- 快速結論一\n- 快速結論二\n- 快速結論三\n\n' +
       '1. 開啟表單\n2. 選擇客戶\n3. 按下列印\n');
